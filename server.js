@@ -6,6 +6,7 @@ import { qualityScore } from './lib/scoring.js';
 import { buildFrontmatter } from './lib/frontmatter.js';
 import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
+import { bearerAuthMiddleware, registerOAuthRoutes } from './lib/mcp_auth.js';
 
 function stripMarkdown(md) {
   return md
@@ -43,32 +44,14 @@ function detectClient(ua, clientMode) {
   return 'api';
 }
 
-// Exempt paths that never require auth
-const AUTH_EXEMPT = new Set(['/health']);
-
-function bearerAuthMiddleware(req, res, next) {
-  const token = process.env.PULLMD_AUTH_TOKEN;
-  if (!token) return next(); // auth disabled when env var not set
-
-  const path = req.path;
-  if (AUTH_EXEMPT.has(path)) {
-    return next();
-  }
-
-  const authHeader = req.headers['authorization'] || '';
-  if (authHeader.startsWith('Bearer ') && authHeader.slice(7) === token) {
-    return next();
-  }
-
-  res.set('WWW-Authenticate', 'Bearer realm="pullmd"');
-  return res.status(401).json({ error: 'unauthorized', error_description: 'Valid Bearer token required' });
-}
-
 export function createApp(overrides = {}) {
   const app = express();
   const extract = overrides.extractPost || extractPost;
   const extractWebFn = overrides.extractWeb || extractWeb;
   const cache = overrides.cache || null;
+
+  // OAuth2 discovery + token endpoints (no auth required on these routes)
+  registerOAuthRoutes(app);
 
   app.use(bearerAuthMiddleware);
 
