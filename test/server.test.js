@@ -452,7 +452,7 @@ describe('POST /mcp', () => {
     assert.equal(res.status, 200);
     const j = parseSse(res.body);
     assert.ok(j.result.content[0].text.includes('# Test page'));
-    assert.equal(j.result.structuredContent.source, 'readability');
+    assert.equal(j.result.structuredContent, undefined, 'structuredContent must be absent so MCP clients surface content[0].text');
   });
 });
 
