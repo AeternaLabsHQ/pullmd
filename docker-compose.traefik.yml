@@ -12,7 +12,7 @@ services:
       - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-}
       - DISABLE_PUBLIC_HISTORY=${DISABLE_PUBLIC_HISTORY:-false}
     volumes:
-      - ./data:/app/data
+      - ./data:/data
     networks:
       - proxy
       - pullmd-internal
