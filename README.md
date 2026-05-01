@@ -62,7 +62,7 @@ services:
       - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
       - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-}
     volumes:
-      - ./data:/app/data
+      - ./data:/data
     networks:
       - pullmd-internal
     depends_on:
