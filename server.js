@@ -3,7 +3,7 @@ import { extractPost, normalizeRedditUrl } from './lib/reddit.js';
 import { extractWeb } from './lib/web.js';
 import { createCache } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
-import { createOAuth, mountOAuthRoutes } from './lib/oauth/index.js';
+import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
 import { qualityScore } from './lib/scoring.js';
 import { buildFrontmatter } from './lib/frontmatter.js';
 import { mcpHandler } from './lib/mcp.js';
@@ -118,6 +118,8 @@ export function createApp(overrides = {}) {
     buildFrontmatter,
     isRedditUrl,
   });
+  // CORS first so OPTIONS preflight short-circuits before `gate` would 401.
+  app.use('/mcp', oauthCors);
   app.post('/mcp', gate, express.json({ limit: '1mb' }), mcp);
   app.get('/mcp', gate, mcp);
   app.delete('/mcp', gate, mcp);
