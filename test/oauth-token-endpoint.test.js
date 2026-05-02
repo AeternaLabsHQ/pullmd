@@ -181,3 +181,117 @@ describe('POST /oauth/token (authorization_code)', () => {
     });
   });
 });
+
+async function obtainPair(base, oauth, userId, client) {
+  const { verifier, challenge } = makePkce();
+  const { code } = oauth.store.createAuthCode({
+    client_id: client.client_id, user_id: userId,
+    redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+    code_challenge: challenge, code_challenge_method: 'S256', scope: 'mcp:full',
+  });
+  const r = await form(base, {
+    grant_type: 'authorization_code', code,
+    client_id: client.client_id,
+    redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+    code_verifier: verifier,
+  });
+  return await r.json();
+}
+
+describe('POST /oauth/token (refresh_token)', () => {
+  it('happy path: returns NEW access + NEW refresh, old refresh revoked', async () => {
+    const { app, oauth, userId, client } = await setup();
+    await withServer(app, async (base) => {
+      const first = await obtainPair(base, oauth, userId, client);
+      const r = await form(base, {
+        grant_type: 'refresh_token',
+        refresh_token: first.refresh_token,
+        client_id: client.client_id,
+      });
+      assert.equal(r.status, 200);
+      const m = await r.json();
+      assert.ok(m.access_token);
+      assert.ok(m.refresh_token);
+      assert.notEqual(m.refresh_token, first.refresh_token);
+
+      // Old refresh now revoked
+      const oldHash = oauth.tokens.hashRefreshToken(first.refresh_token);
+      const oldRow = oauth.store.findRefreshToken(oldHash);
+      assert.ok(oldRow.revoked_at);
+    });
+  });
+
+  it('REUSE detection: presenting an already-rotated refresh invalidates entire chain', async () => {
+    const { app, oauth, userId, client } = await setup();
+    await withServer(app, async (base) => {
+      const first = await obtainPair(base, oauth, userId, client);
+      // Legitimate rotation -- produces second pair
+      const second = await (await form(base, {
+        grant_type: 'refresh_token', refresh_token: first.refresh_token,
+        client_id: client.client_id,
+      })).json();
+      // Attacker replays the FIRST refresh
+      const r = await form(base, {
+        grant_type: 'refresh_token', refresh_token: first.refresh_token,
+        client_id: client.client_id,
+      });
+      assert.equal(r.status, 400);
+      const m = await r.json();
+      assert.equal(m.error, 'invalid_grant');
+
+      // Both chain members revoked now
+      const secondHash = oauth.tokens.hashRefreshToken(second.refresh_token);
+      const secondRow = oauth.store.findRefreshToken(secondHash);
+      assert.ok(secondRow.revoked_at, 'second refresh should be revoked after reuse detection');
+
+      // Even legitimate-looking second refresh now fails
+      const r2 = await form(base, {
+        grant_type: 'refresh_token', refresh_token: second.refresh_token,
+        client_id: client.client_id,
+      });
+      assert.equal(r2.status, 400);
+    });
+  });
+
+  it('refresh with unknown token → 400 invalid_grant', async () => {
+    const { app, client } = await setup();
+    await withServer(app, async (base) => {
+      const r = await form(base, {
+        grant_type: 'refresh_token',
+        refresh_token: 'pmd_rt_does-not-exist',
+        client_id: client.client_id,
+      });
+      assert.equal(r.status, 400);
+    });
+  });
+
+  it('refresh with mismatched client_id → 400', async () => {
+    const { app, oauth, userId, client } = await setup();
+    const other = oauth.store.registerClient({
+      redirect_uris: ['https://x/cb'], client_name: 'Other', token_endpoint_auth_method: 'none',
+    });
+    await withServer(app, async (base) => {
+      const first = await obtainPair(base, oauth, userId, client);
+      const r = await form(base, {
+        grant_type: 'refresh_token',
+        refresh_token: first.refresh_token,
+        client_id: other.client_id,
+      });
+      assert.equal(r.status, 400);
+    });
+  });
+
+  it('expired refresh → 400 invalid_grant', async () => {
+    const { app, oauth, userId, client, cache } = await setup();
+    await withServer(app, async (base) => {
+      const first = await obtainPair(base, oauth, userId, client);
+      const hash = oauth.tokens.hashRefreshToken(first.refresh_token);
+      cache.db.prepare(`UPDATE oauth_refresh_tokens SET expires_at = datetime('now', '-1 hour') WHERE token_hash = ?`).run(hash);
+      const r = await form(base, {
+        grant_type: 'refresh_token', refresh_token: first.refresh_token,
+        client_id: client.client_id,
+      });
+      assert.equal(r.status, 400);
+    });
+  });
+});
