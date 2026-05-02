@@ -69,3 +69,13 @@ If something goes wrong:
 4. Restart.
 
 The `users`/`sessions`/`api_keys`/`user_fetches` tables and the `user_id` column on `conversions` are unused by v1.x and can stay if you're not restoring; v1.x ignores them.
+
+## Upgrading from 2.0 to 2.1
+
+Additive — no breaking changes. To enable the OAuth flow for claude.ai Web Connector:
+
+1. Set `OAUTH_JWT_SECRET` (32+ chars, generate via `openssl rand -hex 32`).
+2. Ensure `PUBLIC_URL` is set to your public origin.
+3. Restart. Existing API keys, sessions, and the legacy `PULLMD_AUTH_TOKEN` continue working unchanged.
+
+If `OAUTH_JWT_SECRET` is unset, the OAuth endpoints simply aren't mounted and PullMD behaves exactly as in 2.0. Database migrations are idempotent — empty `oauth_*` tables are created on first start regardless.

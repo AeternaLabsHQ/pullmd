@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.1.0] - 2026-05-02
+
+### Added
+- OAuth 2.1 Authorization Code flow with PKCE-S256 for claude.ai Web Connector and other MCP-spec-compliant clients (closes #6, #10).
+  - Dynamic Client Registration (`POST /oauth/register`, RFC 7591).
+  - Authorization endpoint (`GET /oauth/authorize`) with consent screen (DE/EN).
+  - Token endpoint (`POST /oauth/token`) with `authorization_code` and `refresh_token` grants. Refresh tokens are rotated; reuse triggers chain-wide invalidation.
+  - Revocation endpoint (`POST /oauth/revoke`, RFC 7009).
+  - Discovery: `/.well-known/oauth-authorization-server` (RFC 8414) and `/.well-known/oauth-protected-resource` (RFC 9728).
+  - Access tokens are JWTs (HS256), audience-bound, 1h TTL.
+  - `WWW-Authenticate` 401 responses now include `resource_metadata` parameter pointing at the RS metadata document.
+- Rate limiting on `/oauth/token` and `/oauth/authorize` (60 req/min/IP) and `/oauth/register` (10 req/h/IP).
+
+### Changed
+- `lib/auth.js` middleware now accepts a third bearer-token type (OAuth JWT) via an injected verifier. Sessions and API keys (`pmd_*`) work unchanged.
+
+### Configuration
+- New env var `OAUTH_JWT_SECRET` enables OAuth. Must be 32+ chars.
+- `PUBLIC_URL` is required when OAuth is enabled (used as JWT iss/aud and in discovery metadata).
+
 ## v2.0.0 — 2026-XX-XX
 
 **Breaking:** PullMD now supports an authentication system. Existing installs keep working unchanged (default `PULLMD_AUTH_MODE=disabled`); operators who want auth must follow [`MIGRATION.md`](./MIGRATION.md).
