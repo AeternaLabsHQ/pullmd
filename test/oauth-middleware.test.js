@@ -13,6 +13,7 @@ async function setup() {
     db: cache.db, mode: 'multi-user',
     env: { PULLMD_ADMIN_EMAIL: 'a@b.c', PULLMD_ADMIN_PASSWORD: 'pw1234567' },
     argon2Opts: fastOpts,
+    publicUrl: 'https://pullmd.test',
   });
   await auth.runMigration();
   const oauth = createOAuth({
@@ -124,6 +125,21 @@ describe('auth middleware: JWT bearer (OAuth)', () => {
       });
       const m = await r.json();
       assert.equal(m.user.email, 'a@b.c');
+    });
+  });
+});
+
+describe('WWW-Authenticate: resource_metadata parameter', () => {
+  it('401 response includes resource_metadata pointing at /.well-known/oauth-protected-resource', async () => {
+    const { app, auth } = await setup();
+    // Mount a protected route that triggers requireAuth
+    app.get('/protected', auth.requireAuth(), (req, res) => res.json({ ok: true }));
+    await withServer(app, async (base) => {
+      const r = await fetch(`${base}/protected`);
+      assert.equal(r.status, 401);
+      const wwwAuth = r.headers.get('www-authenticate') || '';
+      assert.match(wwwAuth, /Bearer/);
+      assert.match(wwwAuth, /resource_metadata="[^"]*\/\.well-known\/oauth-protected-resource"/);
     });
   });
 });
