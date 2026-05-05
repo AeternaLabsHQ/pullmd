@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.1.0 — 2026-05-05
+
+### Added
+- PWA: persist frontmatter toggle, comments toggle and comment depth across reloads via `localStorage` (keys `pullmd-frontmatter`, `pullmd-comments`, `pullmd-comment-depth`). Closes #20.
+
 ## v2.0.0 — 2026-XX-XX
 
 **Breaking:** PullMD now supports an authentication system. Existing installs keep working unchanged (default `PULLMD_AUTH_MODE=disabled`); operators who want auth must follow [`MIGRATION.md`](./MIGRATION.md).

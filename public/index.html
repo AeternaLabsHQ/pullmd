@@ -1455,6 +1455,29 @@
         }
       }
 
+      (function restorePwaControls() {
+        try {
+          var v = localStorage.getItem('pullmd-comments');
+          if (v !== null) commentsToggle.checked = v === 'true';
+          v = localStorage.getItem('pullmd-frontmatter');
+          if (v !== null) frontmatterToggle.checked = v === 'true';
+          v = localStorage.getItem('pullmd-comment-depth');
+          if (v !== null) {
+            var n = parseInt(v, 10);
+            if (n >= 1 && n <= 10) depthInput.value = String(n);
+          }
+        } catch (e) {}
+      })();
+      commentsToggle.addEventListener('change', function () {
+        try { localStorage.setItem('pullmd-comments', String(commentsToggle.checked)); } catch (e) {}
+      });
+      frontmatterToggle.addEventListener('change', function () {
+        try { localStorage.setItem('pullmd-frontmatter', String(frontmatterToggle.checked)); } catch (e) {}
+      });
+      depthInput.addEventListener('change', function () {
+        try { localStorage.setItem('pullmd-comment-depth', depthInput.value); } catch (e) {}
+      });
+
       function updateDepthVisibility() {
         depthLabel.style.display = commentsToggle.checked ? '' : 'none';
       }
