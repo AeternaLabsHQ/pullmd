@@ -7,7 +7,9 @@ import { qualityScore } from './lib/scoring.js';
 import { buildFrontmatter } from './lib/frontmatter.js';
 import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
-import { getRecipeStatus } from './lib/recipes.js';
+import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
+import path from 'node:path';
+import fs from 'node:fs';
 
 function stripMarkdown(md) {
   return md
@@ -597,6 +599,20 @@ if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
     }
     throw err;
   }
+  // Load site recipes (default + optional user overlay)
+  const defaultRecipesPath = path.resolve(process.cwd(), 'site-recipes.default.json');
+  const userRecipesPath = process.env.PULLMD_SITE_RECIPES
+    || (fs.existsSync(path.resolve(process.cwd(), 'data/site-recipes.json'))
+          ? path.resolve(process.cwd(), 'data/site-recipes.json')
+          : null);
+  loadRecipes({ defaultPath: defaultRecipesPath, userPath: userRecipesPath });
+
+  // Hash recipe content; if changed since last boot, invalidate cache.
+  const recipesHash = computeRecipesHash([defaultRecipesPath, userRecipesPath].filter(Boolean));
+  applyRecipesInvalidation(cache, recipesHash);
+  const invalidationStamp = cache.getMeta('recipes_invalidated_at');
+  if (invalidationStamp) cache.setRecipesInvalidatedAt(invalidationStamp);
+
   const app = createApp({ cache, auth });
   app.listen(port, () => {
     console.log(`PullMD running on http://localhost:${port} (auth: ${mode})`);
