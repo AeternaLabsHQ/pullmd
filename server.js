@@ -7,6 +7,7 @@ import { qualityScore } from './lib/scoring.js';
 import { buildFrontmatter } from './lib/frontmatter.js';
 import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
+import { getRecipeStatus } from './lib/recipes.js';
 
 function stripMarkdown(md) {
   return md
@@ -496,6 +497,17 @@ export function createApp(overrides = {}) {
       send('error', { message: String(err?.message ?? err) || 'Internal error' });
       res.end();
     }
+  });
+
+  app.get('/api/recipes/status', (req, res) => {
+    const status = getRecipeStatus();
+    const ok = status.rejected === 0;
+    res.json({
+      ok,
+      loaded:   status.loaded,
+      rejected: status.rejected,
+      sources:  status.sources,
+    });
   });
 
   app.get('/api/stats', (req, res) => {
