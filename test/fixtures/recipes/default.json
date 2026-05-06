@@ -1,0 +1,14 @@
+[
+  {
+    "name": "fixture-paywall",
+    "host": "*.example.com",
+    "preprocess": [
+      { "action": "remove-attr", "selector": "p[aria-hidden=\"true\"]", "attr": "aria-hidden" }
+    ]
+  },
+  {
+    "name": "fixture-extractor",
+    "host": "blog.example.com",
+    "extractor": "trafilatura"
+  }
+]
