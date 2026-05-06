@@ -35,7 +35,7 @@
   {
     "name": "github-issues",
     "host": "github.com",
-    "path": "/*/issues/*",
+    "path": "/*/*/issues/*",
     "fetch": {
       "render": "force",
       "wait_for": ".js-comment-body",

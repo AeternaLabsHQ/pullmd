@@ -125,4 +125,13 @@ describe('matchRecipesAgainst', () => {
     assert.deepEqual(merged.preprocess, []);
     assert.equal(merged.extractor, undefined);
   });
+
+  it('matches real GitHub issue URLs (org/repo/issues/N)', () => {
+    const ghRecipes = [
+      { name: 'gh', host: 'github.com', path: '/*/*/issues/*',
+        preprocess: [], select: { remove: [] }, fetch: { render: 'force' } },
+    ];
+    const merged = matchRecipesAgainst(ghRecipes, new URL('https://github.com/AeternaLabsHQ/pullmd/issues/10'));
+    assert.equal(merged.fetch.render, 'force', 'three-segment github path must match /*/*/issues/*');
+  });
 });
