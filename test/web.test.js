@@ -606,13 +606,14 @@ describe('extractWeb — recipe integration (Hook 2 preprocess + select)', () =>
   it('applies recipe preprocess actions before extraction', async () => {
     const recipes = [{
       name: 'r', host: 'example.com', path: '/**',
-      preprocess: [{ action: 'remove-class', selector: 'p.paywall', class: 'paywall' }],
+      preprocess: [{ action: 'remove-element', selector: 'div.ads-noise' }],
       select: { remove: [] }, fetch: {},
     }];
-    const html = '<html><head><title>T</title></head><body><article><p class="paywall foo">' +
-      'A substantial paragraph with enough body text to clear extraction-quality thresholds, ' +
-      'this is filler content for the test, more filler content for the test, and even more.' +
-      '</p></article></body></html>';
+    const html = '<html><head><title>T</title></head><body><article>' +
+      '<div class="ads-noise">PREPROCESS-SHOULD-REMOVE-ME</div>' +
+      '<p>A substantial paragraph with enough body text to clear extraction-quality thresholds, ' +
+      'this is filler content for the test, more filler content for the test, and even more.</p>' +
+      '</article></body></html>';
     const fetcher = mockFetch({
       ok: true,
       headers: { get: (h) => h === 'content-type' ? 'text/html' : null },
@@ -621,17 +622,18 @@ describe('extractWeb — recipe integration (Hook 2 preprocess + select)', () =>
       status: 200,
     });
     const result = await extractWeb('https://example.com/', { fetch: fetcher, recipes });
-    // The paragraph survives; the paywall class was stripped pre-extraction
-    assert.ok(result.markdown.includes('substantial paragraph'));
+    assert.ok(result.markdown.includes('substantial paragraph'), 'body paragraph survives');
+    assert.equal(result.markdown.includes('PREPROCESS-SHOULD-REMOVE-ME'), false,
+      'recipe preprocess remove-element must strip the noise div');
   });
 
   it('extends cleanDom REMOVE_SELECTORS via recipe select.remove', async () => {
     const recipes = [{
       name: 'r', host: 'example.com', path: '/**',
-      preprocess: [], select: { remove: ['aside.recipe-only-strip'] }, fetch: {},
+      preprocess: [], select: { remove: ['div.recipe-only-strip'] }, fetch: {},
     }];
     const html = '<html><head><title>T</title></head><body><article>' +
-      '<aside class="recipe-only-strip">SHOULD-NOT-APPEAR</aside>' +
+      '<div class="recipe-only-strip">SELECT-SHOULD-NOT-APPEAR</div>' +
       '<p>A substantial paragraph with enough body text to clear extraction-quality thresholds for the article container.</p>' +
       '</article></body></html>';
     const fetcher = mockFetch({
@@ -642,6 +644,7 @@ describe('extractWeb — recipe integration (Hook 2 preprocess + select)', () =>
       status: 200,
     });
     const result = await extractWeb('https://example.com/', { fetch: fetcher, recipes });
-    assert.equal(result.markdown.includes('SHOULD-NOT-APPEAR'), false);
+    assert.equal(result.markdown.includes('SELECT-SHOULD-NOT-APPEAR'), false,
+      'recipe select.remove must strip the targeted div');
   });
 });
