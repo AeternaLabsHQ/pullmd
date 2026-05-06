@@ -601,3 +601,47 @@ describe('extractWeb — recipe integration (Hook 0+1)', () => {
     assert.equal(renderCalled, false);
   });
 });
+
+describe('extractWeb — recipe integration (Hook 2 preprocess + select)', () => {
+  it('applies recipe preprocess actions before extraction', async () => {
+    const recipes = [{
+      name: 'r', host: 'example.com', path: '/**',
+      preprocess: [{ action: 'remove-class', selector: 'p.paywall', class: 'paywall' }],
+      select: { remove: [] }, fetch: {},
+    }];
+    const html = '<html><head><title>T</title></head><body><article><p class="paywall foo">' +
+      'A substantial paragraph with enough body text to clear extraction-quality thresholds, ' +
+      'this is filler content for the test, more filler content for the test, and even more.' +
+      '</p></article></body></html>';
+    const fetcher = mockFetch({
+      ok: true,
+      headers: { get: (h) => h === 'content-type' ? 'text/html' : null },
+      text: async () => html,
+      arrayBuffer: async () => new TextEncoder().encode(html).buffer,
+      status: 200,
+    });
+    const result = await extractWeb('https://example.com/', { fetch: fetcher, recipes });
+    // The paragraph survives; the paywall class was stripped pre-extraction
+    assert.ok(result.markdown.includes('substantial paragraph'));
+  });
+
+  it('extends cleanDom REMOVE_SELECTORS via recipe select.remove', async () => {
+    const recipes = [{
+      name: 'r', host: 'example.com', path: '/**',
+      preprocess: [], select: { remove: ['aside.recipe-only-strip'] }, fetch: {},
+    }];
+    const html = '<html><head><title>T</title></head><body><article>' +
+      '<aside class="recipe-only-strip">SHOULD-NOT-APPEAR</aside>' +
+      '<p>A substantial paragraph with enough body text to clear extraction-quality thresholds for the article container.</p>' +
+      '</article></body></html>';
+    const fetcher = mockFetch({
+      ok: true,
+      headers: { get: (h) => h === 'content-type' ? 'text/html' : null },
+      text: async () => html,
+      arrayBuffer: async () => new TextEncoder().encode(html).buffer,
+      status: 200,
+    });
+    const result = await extractWeb('https://example.com/', { fetch: fetcher, recipes });
+    assert.equal(result.markdown.includes('SHOULD-NOT-APPEAR'), false);
+  });
+});
