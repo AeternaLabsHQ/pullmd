@@ -199,6 +199,33 @@ describe('cache', () => {
   });
 });
 
+describe('cache — recipes invalidation in get()', () => {
+  it('returns null when row created_at < recipes_invalidated_at', () => {
+    const c = createCache(':memory:');
+    c.put({ url: 'https://x.com', title: 'T', markdown: '# T', source: 'readability' });
+    // Set invalidation timestamp AFTER the row was inserted
+    const future = new Date(Date.now() + 1000).toISOString().replace('T', ' ').slice(0, 19);
+    c.setRecipesInvalidatedAt(future);
+    assert.equal(c.get('https://x.com'), null);
+  });
+
+  it('still returns the row when invalidation timestamp is in the past', () => {
+    const c = createCache(':memory:');
+    c.setRecipesInvalidatedAt('1970-01-01 00:00:00');
+    c.put({ url: 'https://x.com', title: 'T', markdown: '# T', source: 'readability' });
+    const hit = c.get('https://x.com');
+    assert.ok(hit);
+    assert.equal(hit.title, 'T');
+  });
+
+  it('default (no setRecipesInvalidatedAt called) treats all rows as fresh re: recipes', () => {
+    const c = createCache(':memory:');
+    c.put({ url: 'https://x.com', title: 'T', markdown: '# T', source: 'readability' });
+    const hit = c.get('https://x.com');
+    assert.ok(hit);
+  });
+});
+
 describe('cache — meta table', () => {
   it('creates the meta table on init', () => {
     const c = createCache(':memory:');
