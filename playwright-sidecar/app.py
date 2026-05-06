@@ -63,6 +63,7 @@ class RenderRequest(BaseModel):
     waitFor: str | None = None
     waitTimeoutMs: int | None = None
     mobileUa: bool = False
+    userAgent: str | None = None
 
 
 @app.get("/health")
@@ -75,7 +76,7 @@ def health():
     }
 
 
-async def _render(url: str, wait_for: str | None = None, wait_timeout_ms: int | None = None, mobile_ua: bool = False) -> str:
+async def _render(url: str, wait_for: str | None = None, wait_timeout_ms: int | None = None, mobile_ua: bool = False, user_agent: str | None = None) -> str:
     if mobile_ua:
         device = state["pw"].devices.get("iPhone 13")
         if device is None:
@@ -93,7 +94,7 @@ async def _render(url: str, wait_for: str | None = None, wait_timeout_ms: int | 
         else:
             context = await state["browser"].new_context(**device)
     else:
-        context = await state["browser"].new_context(user_agent=USER_AGENT)
+        context = await state["browser"].new_context(user_agent=user_agent or USER_AGENT)
 
     try:
         page = await context.new_page()
@@ -134,7 +135,7 @@ async def render(req: RenderRequest):
     async with sem:
         try:
             return await asyncio.wait_for(
-                _render(req.url, wait_for=req.waitFor, wait_timeout_ms=req.waitTimeoutMs, mobile_ua=req.mobileUa),
+                _render(req.url, wait_for=req.waitFor, wait_timeout_ms=req.waitTimeoutMs, mobile_ua=req.mobileUa, user_agent=req.userAgent),
                 timeout=HARD_TIMEOUT_S,
             )
         except asyncio.TimeoutError:
