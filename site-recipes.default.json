@@ -1,0 +1,45 @@
+[
+  {
+    "name": "future-plc-paywall-aria",
+    "host": [
+      "*.windowscentral.com",
+      "*.gamesradar.com",
+      "*.techradar.com",
+      "*.tomshardware.com",
+      "*.pcgamer.com",
+      "*.t3.com"
+    ],
+    "preprocess": [
+      { "action": "remove-attr",  "selector": "p[aria-hidden=\"true\"]", "attr": "aria-hidden" },
+      { "action": "remove-class", "selector": "p.paywall", "class": "paywall" }
+    ]
+  },
+  {
+    "name": "future-plc-recommendations",
+    "host": [
+      "*.windowscentral.com",
+      "*.gamesradar.com",
+      "*.techradar.com",
+      "*.tomshardware.com",
+      "*.pcgamer.com",
+      "*.t3.com"
+    ],
+    "select": {
+      "remove": [
+        "aside[class*=\"you-may-like\" i]",
+        "div.related-articles",
+        "[data-component=\"recommendations\"]"
+      ]
+    }
+  },
+  {
+    "name": "github-issues",
+    "host": "github.com",
+    "path": "/*/issues/*",
+    "fetch": {
+      "render": "force",
+      "wait_for": ".js-comment-body",
+      "wait_timeout_ms": 5000
+    }
+  }
+]
