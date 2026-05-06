@@ -648,3 +648,29 @@ describe('extractWeb — recipe integration (Hook 2 preprocess + select)', () =>
       'recipe select.remove must strip the targeted div');
   });
 });
+
+describe('extractWeb — Hook 3 (playwright fetch options)', () => {
+  it('passes recipe.fetch.wait_for and mobile_ua to renderClient', async () => {
+    const recipes = [{
+      name: 'r', host: 'example.com', path: '/**',
+      preprocess: [], select: { remove: [] },
+      fetch: { render: 'force', wait_for: '.gate', wait_timeout_ms: 3000, mobile_ua: true },
+    }];
+    let renderOpts;
+    const fetcher = mockFetch({
+      ok: true,
+      headers: { get: (h) => h === 'content-type' ? 'text/html' : null },
+      text: async () => '<html><body><article><p>x</p></article></body></html>',
+      arrayBuffer: async () => new TextEncoder().encode('<html><body><article><p>x</p></article></body></html>').buffer,
+      status: 200,
+    });
+    const renderClient = async (url, opts) => {
+      renderOpts = opts;
+      return '<html><body><article><h1>R</h1><p>rendered substantial body content paragraph for testing pipeline.</p></article></body></html>';
+    };
+    await extractWeb('https://example.com/', { fetch: fetcher, renderClient, recipes });
+    assert.equal(renderOpts.waitFor, '.gate');
+    assert.equal(renderOpts.waitTimeoutMs, 3000);
+    assert.equal(renderOpts.mobileUa, true);
+  });
+});

@@ -54,3 +54,37 @@ describe('renderViaSidecar', () => {
     );
   });
 });
+
+describe('renderViaSidecar — recipe-driven options', () => {
+  it('forwards waitFor, waitTimeoutMs, mobileUa in POST body', async () => {
+    let captured;
+    const mockFetch = async (url, opts) => {
+      captured = JSON.parse(opts.body);
+      return { ok: true, text: async () => '<html></html>' };
+    };
+    process.env.PLAYWRIGHT_URL = 'http://sidecar.test/';
+    const { renderViaSidecar } = await import('../lib/playwright-client.js');
+    await renderViaSidecar('https://example.com/', {
+      fetch: mockFetch,
+      waitFor: '.x',
+      waitTimeoutMs: 2500,
+      mobileUa: true,
+    });
+    assert.equal(captured.url, 'https://example.com/');
+    assert.equal(captured.waitFor, '.x');
+    assert.equal(captured.waitTimeoutMs, 2500);
+    assert.equal(captured.mobileUa, true);
+  });
+
+  it('emits only url when no recipe options set (backwards compat)', async () => {
+    let captured;
+    const mockFetch = async (url, opts) => {
+      captured = JSON.parse(opts.body);
+      return { ok: true, text: async () => '<html></html>' };
+    };
+    process.env.PLAYWRIGHT_URL = 'http://sidecar.test/';
+    const { renderViaSidecar } = await import('../lib/playwright-client.js');
+    await renderViaSidecar('https://example.com/', { fetch: mockFetch });
+    assert.deepEqual(Object.keys(captured), ['url']);
+  });
+});
