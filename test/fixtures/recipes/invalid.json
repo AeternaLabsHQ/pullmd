@@ -1,0 +1,4 @@
+[
+  { "name": "valid-one", "host": "ok.example.com" },
+  { "name": "invalid-one", "host": "bad.example.com", "preprocess": [{ "action": "acton", "selector": "p", "attr": "x" }] }
+]

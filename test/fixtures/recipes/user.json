@@ -1,0 +1,12 @@
+[
+  {
+    "name": "fixture-extractor",
+    "host": "blog.example.com",
+    "extractor": "playwright"
+  },
+  {
+    "name": "fixture-user-only",
+    "host": "user-only.example.com",
+    "select": { "remove": ["aside.ads"] }
+  }
+]

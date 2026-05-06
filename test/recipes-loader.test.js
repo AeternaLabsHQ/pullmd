@@ -110,3 +110,46 @@ describe('loadRecipes — default file only', () => {
     assert.equal(status.sources.length, 1);
   });
 });
+
+describe('loadRecipes — user overlay', () => {
+  it('loads default + user, concatenates in order', () => {
+    const { recipes } = loadRecipes({
+      defaultPath: fix('default.json'),
+      userPath: fix('user.json'),
+    });
+    assert.equal(recipes.length, 4);
+    assert.equal(recipes[0].name, 'fixture-paywall');
+    assert.equal(recipes[1].name, 'fixture-extractor');
+    assert.equal(recipes[2].name, 'fixture-extractor');  // user override (same name)
+    assert.equal(recipes[3].name, 'fixture-user-only');
+  });
+
+  it('reports per-source counts in status', () => {
+    const { status } = loadRecipes({
+      defaultPath: fix('default.json'),
+      userPath: fix('user.json'),
+    });
+    assert.equal(status.sources.length, 2);
+    assert.equal(status.sources[0].loaded, 2);
+    assert.equal(status.sources[1].loaded, 2);
+    assert.equal(status.rejected, 0);
+  });
+
+  it('skips user file silently when absent', () => {
+    const { status } = loadRecipes({
+      defaultPath: fix('default.json'),
+      userPath: fix('does-not-exist.json'),
+    });
+    assert.equal(status.sources.length, 1);
+  });
+
+  it('rejects malformed recipe per-recipe, loads the rest', () => {
+    const { recipes, status } = loadRecipes({
+      defaultPath: fix('default.json'),
+      userPath: fix('invalid.json'),
+    });
+    assert.equal(recipes.length, 3);  // 2 default + 1 valid from invalid.json
+    assert.equal(status.rejected, 1);
+    assert.equal(status.sources[1].rejected, 1);
+  });
+});
