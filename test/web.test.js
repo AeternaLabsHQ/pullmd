@@ -673,4 +673,27 @@ describe('extractWeb — Hook 3 (playwright fetch options)', () => {
     assert.equal(renderOpts.waitTimeoutMs, 3000);
     assert.equal(renderOpts.mobileUa, true);
   });
+
+  it('passes a User-Agent string to renderClient (from the rotation pool)', async () => {
+    const recipes = [{
+      name: 'r', host: 'example.com', path: '/**',
+      preprocess: [], select: { remove: [] },
+      fetch: { render: 'force' },  // force render to exercise the renderClient path
+    }];
+    let renderOpts;
+    const fetcher = mockFetch({
+      ok: true,
+      headers: { get: (h) => h === 'content-type' ? 'text/html' : null },
+      text: async () => '<html><body><article><p>x</p></article></body></html>',
+      arrayBuffer: async () => new TextEncoder().encode('<html><body><article><p>x</p></article></body></html>').buffer,
+      status: 200,
+    });
+    const renderClient = async (url, opts) => {
+      renderOpts = opts;
+      return '<html><body><article><h1>R</h1><p>rendered substantial body content paragraph for testing pipeline.</p></article></body></html>';
+    };
+    await extractWeb('https://example.com/', { fetch: fetcher, renderClient, recipes });
+    assert.ok(typeof renderOpts.userAgent === 'string', 'userAgent should be a string');
+    assert.match(renderOpts.userAgent, /Mozilla\//, 'userAgent should look like a real UA string');
+  });
 });

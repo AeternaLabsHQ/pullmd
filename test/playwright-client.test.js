@@ -87,4 +87,19 @@ describe('renderViaSidecar — recipe-driven options', () => {
     await renderViaSidecar('https://example.com/', { fetch: mockFetch });
     assert.deepEqual(Object.keys(captured), ['url']);
   });
+
+  it('forwards userAgent in POST body when set', async () => {
+    let captured;
+    const mockFetch = async (url, opts) => {
+      captured = JSON.parse(opts.body);
+      return { ok: true, text: async () => '<html></html>' };
+    };
+    process.env.PLAYWRIGHT_URL = 'http://sidecar.test/';
+    const { renderViaSidecar } = await import('../lib/playwright-client.js');
+    await renderViaSidecar('https://example.com/', {
+      fetch: mockFetch,
+      userAgent: 'Mozilla/5.0 (Test) Test/1.0',
+    });
+    assert.equal(captured.userAgent, 'Mozilla/5.0 (Test) Test/1.0');
+  });
 });
