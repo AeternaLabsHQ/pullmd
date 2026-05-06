@@ -563,19 +563,24 @@ describe('cleanDom CMS-pattern preprocessing', () => {
 });
 
 describe('extractWeb — recipe integration (Hook 0+1)', () => {
+  // HTML substantial enough that renderDecision returns no on its own
+  // (sufficient length, multiple paragraphs, no fallback). Ensures the recipe
+  // render=force flag is the SOLE reason renderClient gets invoked.
+  const substantialHtml = `<html><head><title>Substantial Article</title></head><body><article><h1>Substantial Article</h1>${'<p>This is a long paragraph with meaningful content and enough words to clear the eighty-character substantial threshold easily, so multiple of these will produce strong static extraction.</p>'.repeat(20)}</article></body></html>`;
+
   it('uses recipe.fetch.render when no query render param', async () => {
     const recipes = [{ name: 'r', host: 'example.com', path: '/**', preprocess: [], select: { remove: [] }, fetch: { render: 'force' } }];
     let renderCalled = false;
     const fetcher = mockFetch({
       ok: true,
       headers: { get: (h) => h === 'content-type' ? 'text/html' : null },
-      text: async () => '<html><body><article><p>x</p></article></body></html>',
-      arrayBuffer: async () => new TextEncoder().encode('<html><body><article><p>x</p></article></body></html>').buffer,
+      text: async () => substantialHtml,
+      arrayBuffer: async () => new TextEncoder().encode(substantialHtml).buffer,
       status: 200,
     });
     const renderClient = async (url, opts) => {
       renderCalled = true;
-      return '<html><body><article><h1>R</h1><p>rendered content with sufficient length to not trigger fallback heuristics whatsoever</p></article></body></html>';
+      return substantialHtml;
     };
     await extractWeb('https://example.com/', { fetch: fetcher, renderClient, recipes });
     assert.equal(renderCalled, true, 'recipe render=force should trigger renderClient');
