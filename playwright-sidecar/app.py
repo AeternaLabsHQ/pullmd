@@ -26,6 +26,22 @@ HARD_TIMEOUT_S = 20.0
 log = logging.getLogger("playwright-sidecar")
 state: dict = {"browser": None, "pw": None, "sem": asyncio.Semaphore(MAX_CONCURRENCY)}
 
+# Stealth: defeat navigator.webdriver and other headless markers.
+# API has changed across versions; try the current modern entrypoint with a fallback.
+try:
+    from playwright_stealth import Stealth as _Stealth
+    _stealth = _Stealth()
+    async def _apply_stealth(page):
+        # Modern API (>= 2.x): instance method on Stealth
+        await _stealth.apply_stealth_async(page)
+except (ImportError, AttributeError):
+    try:
+        from playwright_stealth import stealth_async as _apply_stealth  # legacy 1.x
+    except ImportError:
+        async def _apply_stealth(page):
+            pass
+        log.warning("playwright-stealth not installed; running without bot-detection mitigation")
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
@@ -81,6 +97,10 @@ async def _render(url: str, wait_for: str | None = None, wait_timeout_ms: int | 
 
     try:
         page = await context.new_page()
+        try:
+            await _apply_stealth(page)
+        except Exception as e:
+            log.warning("stealth apply failed (non-fatal): %s", e)
         await page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
 
         if wait_for:
