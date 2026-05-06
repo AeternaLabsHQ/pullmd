@@ -69,3 +69,68 @@ If something goes wrong:
 4. Restart.
 
 The `users`/`sessions`/`api_keys`/`user_fetches` tables and the `user_id` column on `conversions` are unused by v1.x and can stay if you're not restoring; v1.x ignores them.
+
+# Migrating from v2.1.x to v2.2.0
+
+v2.2.0 ships the Site Recipe Engine (#18). Pure additive change — existing instances keep working unchanged. This section covers what to know if you want to use recipes.
+
+## Pin v2 tags explicitly
+
+`:latest` stays on v1.x until 2026-05-16. Update your compose / k8s manifests:
+
+```yaml
+# Before
+image: aeternalabshq/pullmd:latest
+# After
+image: aeternalabshq/pullmd:2.2.0
+# Also bump the playwright sidecar — wait_for and mobile_ua need the new sidecar:
+image: aeternalabshq/pullmd-playwright:2.2.0
+```
+
+## Optional: mount user recipes
+
+The default recipes in `site-recipes.default.json` cover Future PLC sites and GitHub Issues out of the box. To add your own:
+
+```yaml
+services:
+  pullmd:
+    image: aeternalabshq/pullmd:2.2.0
+    volumes:
+      - ./data:/app/data
+    # Drop your custom recipes at ./data/site-recipes.json on the host
+    # PullMD auto-discovers it. Or set PULLMD_SITE_RECIPES to a different path:
+    environment:
+      - PULLMD_SITE_RECIPES=/path/to/your/recipes.json
+```
+
+User recipes are concatenated with the defaults. On scalar conflicts (e.g. both define `extractor` for the same host), the user file wins via ordering.
+
+## Schema migrations
+
+The `meta` table is created automatically on first boot — no manual SQL. Existing cache rows remain valid until the first recipe content change is detected (the SHA256 of recipe file content is hashed at boot; on change, `recipes_invalidated_at` is bumped and old cache rows lazy-refresh on next access).
+
+## Monitoring
+
+`GET /api/recipes/status` returns `{ ok, loaded, rejected, sources }` — public, no auth. Add it to UptimeKuma / Healthchecks / equivalent to be alerted when a recipe fails to parse:
+
+```json
+{
+  "ok": true,
+  "loaded": 5,
+  "rejected": 0,
+  "sources": [
+    { "path": "site-recipes.default.json", "loaded": 4, "rejected": 0 },
+    { "path": "/app/data/site-recipes.json", "loaded": 1, "rejected": 0 }
+  ]
+}
+```
+
+`ok = (rejected === 0)`. HTTP always returns 200; use the `ok` field for monitoring decisions. Rejection details are in stderr at server start (`docker logs pullmd | grep recipes`).
+
+## Rolling back to v2.1.x
+
+The schema change is additive (new `meta` table, no column changes on existing tables). To roll back:
+
+1. Stop v2.2.0 container.
+2. Pin to `aeternalabshq/pullmd:2.1.0`.
+3. Restart. The `meta` table stays — v2.1.x ignores it.
