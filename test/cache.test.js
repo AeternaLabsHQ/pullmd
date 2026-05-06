@@ -198,3 +198,25 @@ describe('cache', () => {
     });
   });
 });
+
+describe('cache — meta table', () => {
+  it('creates the meta table on init', () => {
+    const c = createCache(':memory:');
+    assert.equal(c.getMeta('any-missing-key'), null);
+    c.setMeta('foo', 'bar');
+    assert.equal(c.getMeta('foo'), 'bar');
+  });
+
+  it('overwrites existing key on setMeta', () => {
+    const c = createCache(':memory:');
+    c.setMeta('foo', 'one');
+    c.setMeta('foo', 'two');
+    assert.equal(c.getMeta('foo'), 'two');
+  });
+
+  it('exposes setRecipesInvalidatedAt + reads it back via meta', () => {
+    const c = createCache(':memory:');
+    c.setRecipesInvalidatedAt('2026-05-06 12:00:00');
+    assert.equal(c.getMeta('recipes_invalidated_at'), '2026-05-06 12:00:00');
+  });
+});
