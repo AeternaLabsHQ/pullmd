@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractWeb } from '../lib/web.js';
+import { matchRecipesAgainst } from '../lib/recipes.js';
 
 // Single-fetch: extractWeb makes exactly ONE request per call.
 // The Accept header includes text/markdown preference.
@@ -558,5 +559,40 @@ describe('cleanDom CMS-pattern preprocessing', () => {
     </article></body></html>`;
     const result = await extractWeb('https://example.com/photos', { fetch: fetchHtml(html) });
     assert.match(result.markdown, /A red sunset over mountains/);
+  });
+});
+
+describe('extractWeb — recipe integration (Hook 0+1)', () => {
+  it('uses recipe.fetch.render when no query render param', async () => {
+    const recipes = [{ name: 'r', host: 'example.com', path: '/**', preprocess: [], select: { remove: [] }, fetch: { render: 'force' } }];
+    let renderCalled = false;
+    const fetcher = mockFetch({
+      ok: true,
+      headers: { get: (h) => h === 'content-type' ? 'text/html' : null },
+      text: async () => '<html><body><article><p>x</p></article></body></html>',
+      arrayBuffer: async () => new TextEncoder().encode('<html><body><article><p>x</p></article></body></html>').buffer,
+      status: 200,
+    });
+    const renderClient = async (url, opts) => {
+      renderCalled = true;
+      return '<html><body><article><h1>R</h1><p>rendered content with sufficient length to not trigger fallback heuristics whatsoever</p></article></body></html>';
+    };
+    await extractWeb('https://example.com/', { fetch: fetcher, renderClient, recipes });
+    assert.equal(renderCalled, true, 'recipe render=force should trigger renderClient');
+  });
+
+  it('query render=skip wins over recipe render=force', async () => {
+    const recipes = [{ name: 'r', host: 'example.com', path: '/**', preprocess: [], select: { remove: [] }, fetch: { render: 'force' } }];
+    let renderCalled = false;
+    const fetcher = mockFetch({
+      ok: true,
+      headers: { get: (h) => h === 'content-type' ? 'text/html' : null },
+      text: async () => '<html><body><article><p>x</p></article></body></html>',
+      arrayBuffer: async () => new TextEncoder().encode('<html><body><article><p>x</p></article></body></html>').buffer,
+      status: 200,
+    });
+    const renderClient = async () => { renderCalled = true; return ''; };
+    await extractWeb('https://example.com/', { fetch: fetcher, renderClient, recipes, render: 'skip' });
+    assert.equal(renderCalled, false);
   });
 });
