@@ -3,6 +3,7 @@ import { extractPost, normalizeRedditUrl } from './lib/reddit.js';
 import { extractWeb } from './lib/web.js';
 import { createCache } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
+import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
 import { qualityScore } from './lib/scoring.js';
 import { buildFrontmatter } from './lib/frontmatter.js';
 import { mcpHandler } from './lib/mcp.js';
@@ -60,6 +61,7 @@ export function createApp(overrides = {}) {
   const extractWebFn = overrides.extractWeb || extractWeb;
   const cache = overrides.cache || null;
   const auth = overrides.auth || null;
+  const oauth = overrides.oauth || null;
   const disablePublicHistory = overrides.disablePublicHistory ?? readDisablePublicHistoryEnv();
 
   const gate = auth ? auth.requireAuth() : (req, res, next) => next();
@@ -105,6 +107,9 @@ export function createApp(overrides = {}) {
     app.use(auth.middleware());
     auth.mountAuthRoutes(app);
   }
+  if (oauth) {
+    mountOAuthRoutes(app, oauth);
+  }
 
   // MCP endpoint (stateless Streamable-HTTP transport).
   // Each request gets a fresh MCP server + transport bound to the same deps.
@@ -116,6 +121,8 @@ export function createApp(overrides = {}) {
     buildFrontmatter,
     isRedditUrl,
   });
+  // CORS first so OPTIONS preflight short-circuits before `gate` would 401.
+  app.use('/mcp', oauthCors);
   app.post('/mcp', gate, express.json({ limit: '1mb' }), mcp);
   app.get('/mcp', gate, mcp);
   app.delete('/mcp', gate, mcp);
@@ -589,7 +596,7 @@ if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
   const port = process.env.PORT || 3000;
   const cache = createCache(process.env.CACHE_DB || './data/cache.db');
   const mode = process.env.PULLMD_AUTH_MODE || 'disabled';
-  const auth = createAuth({ db: cache.db, mode, env: process.env });
+  const auth = createAuth({ db: cache.db, mode, env: process.env, publicUrl: process.env.PUBLIC_URL });
   try {
     await auth.runMigration();
   } catch (err) {
@@ -613,7 +620,32 @@ if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
   const invalidationStamp = cache.getMeta('recipes_invalidated_at');
   if (invalidationStamp) cache.setRecipesInvalidatedAt(invalidationStamp);
 
-  const app = createApp({ cache, auth });
+  let oauth = null;
+  if (process.env.OAUTH_JWT_SECRET) {
+    try {
+      oauth = createOAuth({
+        db: cache.db,
+        auth,
+        env: process.env,
+      });
+      auth.setAccessTokenVerifier(async (token) => {
+        try {
+          const payload = await oauth.tokens.verifyAccessToken(token);
+          const userId = parseInt(payload.sub, 10);
+          if (!userId) return null;
+          const u = cache.db.prepare("SELECT id, email, is_admin FROM users WHERE id = ?").get(userId);
+          return u ? { id: u.id, email: u.email, is_admin: !!u.is_admin } : null;
+        } catch { return null; }
+      });
+    } catch (err) {
+      console.error('OAuth setup failed:', err.message);
+      process.exit(1);
+    }
+  } else {
+    console.log('OAuth disabled (set OAUTH_JWT_SECRET to enable claude.ai web connector flow)');
+  }
+
+  const app = createApp({ cache, auth, oauth });
   app.listen(port, () => {
     console.log(`PullMD running on http://localhost:${port} (auth: ${mode})`);
   });

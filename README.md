@@ -213,6 +213,32 @@ docker compose exec pullmd node scripts/admin.js reset-password you@example.com
 
 See `MIGRATION.md` for the full upgrade checklist. The TL;DR: leave `PULLMD_AUTH_MODE` unset and v2.0 behaves exactly like v1.x.
 
+### OAuth 2.1 (claude.ai Web Connector)
+
+PullMD ships with a full OAuth 2.1 Authorization Code flow so the **claude.ai
+web app's Custom Connector** feature can authenticate users against your
+PullMD instance. All endpoints needed by the spec are implemented: Dynamic
+Client Registration (RFC 7591), PKCE-S256 (RFC 7636), Authorization Server
+Metadata (RFC 8414), Protected Resource Metadata (RFC 9728), and Token
+Revocation (RFC 7009).
+
+**Setup:**
+
+1. Set `PULLMD_AUTH_MODE` to `single-admin` or `multi-user` (OAuth requires Phase-1 auth).
+2. Set `OAUTH_JWT_SECRET` to a 32+ character random string (`openssl rand -hex 32`).
+3. Set `PUBLIC_URL` to your instance's public origin (e.g. `https://pullmd.example.com`).
+4. In claude.ai → Settings → Connectors → Add custom connector, point it at `https://pullmd.example.com/mcp` — claude.ai discovers everything else automatically via the well-known endpoints.
+5. The first time the user clicks the connector, they'll be redirected to PullMD's `/login`, then to a consent screen, then back to claude.ai.
+
+**Tokens:**
+- Access tokens are JWTs (HS256), TTL 1 hour, audience-bound to your `/mcp` URL.
+- Refresh tokens are opaque (`pmd_rt_…`), TTL 30 days, rotated on every refresh, with reuse-detection that invalidates the entire refresh chain on replay.
+- Revoke a token via `POST /oauth/revoke` (RFC 7009).
+
+**Scope:** Currently a single `mcp:full` scope (URL conversion + history read). Granular scopes are tracked for a future minor release.
+
+**Issues #6 and #10** track this work and close on the v2.1.0 release.
+
 ---
 
 ## AI-agent integration

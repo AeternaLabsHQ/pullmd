@@ -1,5 +1,46 @@
 # Changelog
 
+## v2.3.0 — 2026-05-11
+
+### Added
+
+- **OAuth 2.1 Authorization Code flow** with PKCE-S256 for the claude.ai web custom connector, Claude Desktop's custom-connector dialog, and other MCP-spec-compliant clients (closes #6, #10).
+  - Dynamic Client Registration (`POST /oauth/register`, RFC 7591).
+  - Authorization endpoint (`GET /oauth/authorize`) with server-rendered consent screen (DE/EN).
+  - Token endpoint (`POST /oauth/token`) with `authorization_code` and `refresh_token` grants. Refresh tokens are rotated on every refresh; reuse triggers chain-wide invalidation.
+  - Revocation endpoint (`POST /oauth/revoke`, RFC 7009).
+  - Discovery: `/.well-known/oauth-authorization-server` (RFC 8414) and `/.well-known/oauth-protected-resource` (RFC 9728).
+  - Access tokens are HS256 JWTs (`typ: at+jwt`, RFC 9068), audience-bound to `<PUBLIC_URL>/mcp`, 1h TTL. Refresh tokens are opaque, sha256-hashed in storage, 30d TTL.
+  - Hardcoded redirect-URI allowlist: `https://claude.ai/api/mcp/auth_callback` and `https://claude.com/api/mcp/auth_callback`.
+  - `WWW-Authenticate` 401 responses include the `resource_metadata` parameter pointing at the protected-resource metadata document.
+- Rate limiting on `/oauth/token` and `/oauth/authorize` (60 req/min/IP) and `/oauth/register` (10 req/h/IP).
+- CORS on `/oauth/token`, `/oauth/register`, `/oauth/revoke`, `/.well-known/*`, and `/mcp` (wildcard origin, no credentials — Bearer header travels independently).
+
+### Changed
+
+- `lib/auth.js` middleware accepts a third bearer-token type (OAuth JWT) via an injected verifier. Sessions and API keys (`pmd_*`) continue working unchanged.
+
+### Configuration
+
+- New env var `OAUTH_JWT_SECRET` enables OAuth. Must be 32+ chars. Generate via `openssl rand -hex 32`.
+- `PUBLIC_URL` is required when OAuth is enabled (used as JWT `iss`/`aud` and in discovery metadata).
+
+### Important — `:latest` tag stays on v1.x
+
+Same policy as v2.2.0. The `:latest` tag in Docker Hub and GHCR remains pinned to v1.2.x. Self-hosters wanting OAuth **must pin `:v2.3.0`** (or `:2.3`) explicitly:
+
+```yaml
+services:
+  pullmd:
+    image: aeternalabshq/pullmd:2.3.0
+```
+
+### Migration
+
+- New tables `oauth_clients`, `oauth_auth_codes`, `oauth_refresh_tokens` are created automatically on first boot. No manual SQL.
+- OAuth is **opt-in** — without `OAUTH_JWT_SECRET`, behavior is unchanged from v2.2.x.
+- See `MIGRATION.md` for the full upgrade path.
+
 ## v2.2.0 — 2026-05-06
 
 ### Added
