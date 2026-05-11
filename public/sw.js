@@ -1,5 +1,11 @@
-const CACHE_NAME = 'pullmd-v19';
-const SHELL_URLS = ['/', '/index.html', '/manifest.json'];
+const CACHE_NAME = 'pullmd-v20';
+const SHELL_URLS = [
+  '/',
+  '/index.html',
+  '/manifest.json',
+  '/vendor/marked.min.js',
+  '/vendor/purify.min.js',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

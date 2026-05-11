@@ -582,6 +582,199 @@
     }
 
     /* =========================================================
+       View toggle (Raw | Rendered)
+       ========================================================= */
+    .view-toggle {
+      display: inline-flex;
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg-elev);
+    }
+    .view-toggle button {
+      padding: 0.4375rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      letter-spacing: 0.04em;
+      color: var(--fg-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .view-toggle button + button {
+      border-left: 1px solid var(--border-strong);
+    }
+    .view-toggle button:hover { color: var(--fg); }
+    .view-toggle button.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .hidden { display: none !important; }
+
+    /* =========================================================
+       Rendered markdown view
+       ========================================================= */
+    #result-rendered {
+      width: 100%;
+      min-height: 240px;
+      padding: 1.5rem 1.625rem;
+      background: var(--bg-result);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      color: var(--fg);
+      font-size: 0.9375rem;
+      line-height: 1.65;
+      overflow-x: auto;
+    }
+    #result-rendered > :first-child { margin-top: 0; }
+    #result-rendered > :last-child  { margin-bottom: 0; }
+
+    #result-rendered h1,
+    #result-rendered h2,
+    #result-rendered h3,
+    #result-rendered h4,
+    #result-rendered h5,
+    #result-rendered h6 {
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      line-height: 1.25;
+      margin: 1.5rem 0 0.625rem;
+      color: var(--fg);
+    }
+    #result-rendered h1 { font-size: 1.625rem; }
+    #result-rendered h2 {
+      font-size: 1.3125rem;
+      padding-bottom: 0.3125rem;
+      border-bottom: 1px solid var(--border);
+    }
+    #result-rendered h3 { font-size: 1.125rem; }
+    #result-rendered h4 { font-size: 1rem; }
+    #result-rendered h5 { font-size: 0.9375rem; color: var(--fg-muted); }
+    #result-rendered h6 {
+      font-size: 0.8125rem;
+      color: var(--fg-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    #result-rendered p { margin: 0 0 0.875rem; }
+
+    #result-rendered a {
+      color: var(--link);
+      text-decoration: underline;
+      text-decoration-color: color-mix(in srgb, var(--link) 35%, transparent);
+      text-underline-offset: 2px;
+      word-break: break-word;
+    }
+    #result-rendered a:hover { text-decoration-color: var(--link); }
+
+    #result-rendered img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 6px;
+      margin: 0.5rem 0;
+      display: block;
+    }
+
+    #result-rendered strong { font-weight: 700; color: var(--fg); }
+    #result-rendered em     { font-style: italic; }
+    #result-rendered del    { color: var(--fg-muted); }
+
+    #result-rendered code {
+      font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.85em;
+      padding: 0.1em 0.375em;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--fg);
+      word-break: break-word;
+    }
+    #result-rendered pre {
+      margin: 0.75rem 0 1rem;
+      padding: 0.875rem 1rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow-x: auto;
+      font-size: 0.8125rem;
+      line-height: 1.55;
+    }
+    #result-rendered pre code {
+      padding: 0;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      font-size: inherit;
+      color: var(--fg);
+      word-break: normal;
+      white-space: pre;
+    }
+
+    #result-rendered blockquote {
+      margin: 0.75rem 0;
+      padding: 0.125rem 0 0.125rem 0.875rem;
+      border-left: 3px solid var(--border-strong);
+      color: var(--fg-muted);
+      font-style: normal;
+    }
+    #result-rendered blockquote > :last-child { margin-bottom: 0; }
+
+    #result-rendered ul,
+    #result-rendered ol {
+      margin: 0 0 0.875rem 1.5rem;
+      padding: 0;
+    }
+    #result-rendered li { margin: 0.125rem 0; }
+    #result-rendered li > ul,
+    #result-rendered li > ol { margin-bottom: 0; }
+
+    #result-rendered hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 1.5rem 0;
+    }
+
+    #result-rendered table {
+      width: auto;
+      max-width: 100%;
+      border-collapse: collapse;
+      margin: 0.75rem 0 1rem;
+      font-size: 0.875rem;
+    }
+    #result-rendered th,
+    #result-rendered td {
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+    }
+    #result-rendered th {
+      background: var(--bg-input);
+      font-weight: 600;
+    }
+    #result-rendered tbody tr:nth-child(even) td {
+      background: color-mix(in srgb, var(--bg-input) 50%, transparent);
+    }
+
+    #result-rendered details {
+      margin: 0.5rem 0 0.875rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    #result-rendered summary {
+      cursor: pointer;
+      font-weight: 600;
+      color: var(--fg);
+    }
+
+    /* =========================================================
        Hint
        ========================================================= */
     .hint {
@@ -1014,12 +1207,17 @@
           <span id="chars-badge" class="badge neutral" style="display:none;"></span>
           <span id="comments-badge" class="badge neutral" style="display:none;"></span>
         </span>
+        <div class="view-toggle" id="view-toggle" role="tablist" aria-label="View mode">
+          <button type="button" data-mode="raw" class="active" role="tab" aria-selected="true">Raw</button>
+          <button type="button" data-mode="rendered" role="tab" aria-selected="false">Rendered</button>
+        </div>
         <button id="copy-btn">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
           <span class="label" data-i18n="copy">Kopieren</span>
         </button>
       </div>
       <pre id="result"></pre>
+      <div id="result-rendered" class="hidden"></div>
     </div>
 
     <p class="hint">
@@ -1314,6 +1512,9 @@
     })();
   </script>
 
+  <script src="vendor/marked.min.js"></script>
+  <script src="vendor/purify.min.js"></script>
+
   <script>
     (function () {
       'use strict';
@@ -1338,6 +1539,8 @@
       const errorEl = document.getElementById('error');
       const resultContainer = document.getElementById('result-container');
       const resultEl = document.getElementById('result');
+      const resultRenderedEl = document.getElementById('result-rendered');
+      const viewToggleEl = document.getElementById('view-toggle');
       const copyBtn = document.getElementById('copy-btn');
       const shareBar = document.getElementById('share-bar');
       const shareUrlEl = document.getElementById('share-url');
@@ -1345,6 +1548,84 @@
 
       var SHARE_BASE = window.location.origin + '/s/';
       var rawMarkdown = '';
+
+      var VIEW_MODE_KEY = 'pullmd-view-mode';
+      var viewMode = 'raw';
+      try {
+        var stored = localStorage.getItem(VIEW_MODE_KEY);
+        if (stored === 'rendered') viewMode = 'rendered';
+      } catch (e) {}
+      var renderedStale = true;
+
+      var PURIFY_CONFIG = {
+        ALLOWED_TAGS: [
+          'h1','h2','h3','h4','h5','h6','p','br','hr',
+          'strong','em','del','code','pre','blockquote',
+          'ul','ol','li',
+          'a','img',
+          'table','thead','tbody','tr','th','td',
+          'details','summary',
+          'span','div',
+        ],
+        ALLOWED_ATTR: ['href','src','alt','title','class','colspan','rowspan','align','target','rel'],
+        FORBID_ATTR: ['style'],
+        ADD_ATTR: ['target','rel'],
+      };
+
+      if (window.marked && typeof window.marked.setOptions === 'function') {
+        window.marked.setOptions({ gfm: true, breaks: false, pedantic: false });
+      }
+
+      function renderRenderedView() {
+        if (!window.marked || !window.DOMPurify) {
+          resultRenderedEl.textContent = rawMarkdown;
+          renderedStale = false;
+          return;
+        }
+        var html = window.marked.parse(rawMarkdown || '');
+        var clean = window.DOMPurify.sanitize(html, PURIFY_CONFIG);
+        resultRenderedEl.innerHTML = clean;
+        var links = resultRenderedEl.querySelectorAll('a');
+        for (var i = 0; i < links.length; i++) {
+          links[i].setAttribute('target', '_blank');
+          links[i].setAttribute('rel', 'noopener noreferrer');
+        }
+        var imgs = resultRenderedEl.querySelectorAll('img');
+        for (var j = 0; j < imgs.length; j++) {
+          imgs[j].setAttribute('loading', 'lazy');
+        }
+        renderedStale = false;
+      }
+
+      function applyViewMode() {
+        var buttons = viewToggleEl ? viewToggleEl.querySelectorAll('button[data-mode]') : [];
+        for (var i = 0; i < buttons.length; i++) {
+          var isActive = buttons[i].dataset.mode === viewMode;
+          buttons[i].classList.toggle('active', isActive);
+          buttons[i].setAttribute('aria-selected', isActive ? 'true' : 'false');
+        }
+        if (viewMode === 'rendered') {
+          if (renderedStale) renderRenderedView();
+          resultEl.classList.add('hidden');
+          resultRenderedEl.classList.remove('hidden');
+        } else {
+          resultRenderedEl.classList.add('hidden');
+          resultEl.classList.remove('hidden');
+        }
+      }
+
+      if (viewToggleEl) {
+        viewToggleEl.addEventListener('click', function (e) {
+          var btn = e.target.closest('button[data-mode]');
+          if (!btn) return;
+          var mode = btn.dataset.mode === 'rendered' ? 'rendered' : 'raw';
+          if (mode === viewMode) return;
+          viewMode = mode;
+          try { localStorage.setItem(VIEW_MODE_KEY, viewMode); } catch (err) {}
+          applyViewMode();
+        });
+      }
+      applyViewMode();
 
       function pushOpenState() {
         if (history.state && history.state.pullmd === 'open') return;
@@ -1413,6 +1694,8 @@
         errorEl.classList.remove('visible');
         rawMarkdown = text;
         renderMarkdownWithImages(resultEl, text);
+        renderedStale = true;
+        applyViewMode();
         resultContainer.classList.add('visible');
         // Bring the result into view when triggered from a list entry deeper
         // down the page (history / archive). No-op when already scrolled top.

@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.4.0 — 2026-05-11
+
+### Added
+
+- **Rendered Markdown view in the PWA** (closes #23). New `Raw | Rendered` segmented toggle in the result header lets users see the fetched output as actual formatted HTML (headings, lists, links, images, tables, blockquotes, code blocks) instead of the raw source. Raw remains the default; the chosen mode is persisted in `localStorage` (`pullmd-view-mode`).
+  - GFM rendering via self-hosted [marked](https://github.com/markedjs/marked) v12.0.2 (~30KB).
+  - HTML sanitization via self-hosted [DOMPurify](https://github.com/cure53/DOMPurify) v3.4.2 (~20KB). Strips scripts, inline styles, event handlers, `javascript:` URLs.
+  - Rendered links open in a new tab with `rel="noopener noreferrer"`.
+  - Lazy first-render: the rendered DOM is only built when the user first switches to Rendered for a given result, so users who only ever copy raw Markdown pay no rendering cost.
+  - Copy button still copies the raw Markdown source regardless of active view.
+  - Both themes (dark + paper) styled via existing CSS variables — no new tokens.
+- Service Worker precaches the new vendor files (`vendor/marked.min.js`, `vendor/purify.min.js`) so the rendered view also works offline in the installed PWA. `CACHE_NAME` bumped to `pullmd-v20`.
+
+### Notes
+
+- Out of scope for v2.4.0: syntax highlighting, math/diagrams, Reddit-style spoiler syntax, side-by-side view, rendered view for `/s/:id` share links (still pure `text/markdown`).
+- `:latest` policy unchanged from v2.3.0 — `:latest` still points at v1.2.x; self-hosters wanting v2.4 must pin `:2.4` or `:2.4.0`.
+
 ## v2.3.0 — 2026-05-11
 
 ### Added
