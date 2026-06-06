@@ -98,6 +98,8 @@ describe('auth middleware', () => {
       const r = await fetch(base + '/whoami', {
         headers: { Cookie: `pullmd_session=${token}` },
       });
+      // The session was just created, so < SESSION_SLIDE_MIN_MS (1 min) has
+      // elapsed — the bump condition is not met and no refresh cookie is issued.
       assert.equal(r.headers.get('set-cookie'), null);
     });
   });
