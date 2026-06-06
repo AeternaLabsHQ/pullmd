@@ -9,6 +9,18 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Sessions no longer die a hard 7 days after login regardless of activity** ([#26](https://github.com/AeternaLabsHQ/pullmd/issues/26)). The session cookie is now re-issued with a fresh `Max-Age` whenever the DB-side sliding expiry bumps (existing once-per-minute throttle), so browser cookie and DB session finally slide together.
+
+### Changed
+- **Session TTL raised from 7 to 90 days** (sliding). Anyone active at least once every 90 days stays logged in.
+- **Expired session in the PWA now redirects to the login page** instead of showing a bare "Authentication required" error; the requested URL is carried through `/login?next=` and the conversion resumes automatically after login ([#26](https://github.com/AeternaLabsHQ/pullmd/issues/26)).
+- **`GET /share` is now auth-gated.** Share intents from a logged-out device go straight to the login page and return to the shared URL after login — no more lost share-target URLs. Instances with `PULLMD_AUTH_MODE=disabled` are unaffected ([#26](https://github.com/AeternaLabsHQ/pullmd/issues/26)).
+
+---
+
 ## [2.4.1] - 2026-05-13
 
 ### Fixed
