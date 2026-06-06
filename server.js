@@ -665,6 +665,15 @@ export function createApp(overrides = {}) {
     res.json({ ok: true });
   });
 
+  // Friendly JSON for body-parser limit violations (POST /api/html, 10 MB).
+  // Mounted last; non-413 errors fall through to Express' default handler.
+  app.use((err, req, res, next) => {
+    if (err?.type === 'entity.too.large') {
+      return res.status(413).json({ error: 'File too large (max 10 MB). / Datei zu groß (max. 10 MB).' });
+    }
+    next(err);
+  });
+
   return app;
 }
 

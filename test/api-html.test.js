@@ -135,6 +135,17 @@ describe('POST /api/html - errors', () => {
   });
 });
 
+describe('POST /api/html - size limit', () => {
+  it('413 with a friendly bilingual JSON error for bodies over 10 MB', async () => {
+    const app = createApp({ extractHtml: async () => FAKE_RESULT });
+    const big = '<p>' + 'x'.repeat(11 * 1024 * 1024) + '</p>';
+    const res = await post(app, '/api/html', big);
+    assert.equal(res.status, 413);
+    const json = JSON.parse(res.body);
+    assert.ok(json.error.includes('10 MB'));
+  });
+});
+
 describe('POST /api/html - privacy', () => {
   it('never writes a cache entry: history stays empty, log uses placeholder', async () => {
     const cache = createCache(':memory:');
