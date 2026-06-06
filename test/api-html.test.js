@@ -93,6 +93,17 @@ describe('POST /api/html - happy paths', () => {
     assert.ok(res.body.includes('Main content paragraph'));
     assert.ok(res.body.includes('**e2e.html**'));
   });
+
+  it('prefers the X-Filename header (URI-encoded) over the query param', async () => {
+    let received;
+    const app = createApp({
+      extractHtml: async (html, opts) => { received = opts; return FAKE_RESULT; },
+    });
+    await post(app, '/api/html?filename=query.html', '<p>x</p>', {
+      'X-Filename': encodeURIComponent('über alles.html'),
+    });
+    assert.equal(received.filename, 'über alles.html');
+  });
 });
 
 describe('POST /api/html - errors', () => {

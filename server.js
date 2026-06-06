@@ -400,7 +400,14 @@ export function createApp(overrides = {}) {
   // in a server-side browser.
   const MIN_LOCAL_HTML_CONTENT_CHARS = 200;
   app.post('/api/html', gate, express.text({ type: ['text/html', 'application/xhtml+xml'], limit: '10mb' }), async (req, res) => {
-    const { url, filename, format, frontmatter, extractor } = req.query;
+    const { url, format, frontmatter, extractor } = req.query;
+    // Prefer the X-Filename header (PWA) over ?filename= — header values stay
+    // out of reverse-proxy access logs, query strings don't. Sent URI-encoded.
+    let filename = req.query.filename;
+    const filenameHeader = req.headers['x-filename'];
+    if (filenameHeader) {
+      try { filename = decodeURIComponent(filenameHeader); } catch { filename = filenameHeader; }
+    }
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura') ? extractor : undefined;
 

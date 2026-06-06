@@ -1953,14 +1953,15 @@
       });
       window.addEventListener('dragleave', function (e) {
         if (!dragHasFiles(e)) return;
-        dragDepth = Math.max(0, dragDepth - 1);
+        dragDepth = e.relatedTarget ? Math.max(0, dragDepth - 1) : 0;
         if (dragDepth === 0) dropOverlay.classList.remove('visible');
       });
       window.addEventListener('drop', function (e) {
-        e.preventDefault();
         dragDepth = 0;
         dropOverlay.classList.remove('visible');
-        if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+        if (!dragHasFiles(e)) return;   // let native text/URL drops (e.g. into the url input) proceed
+        e.preventDefault();
+        if (!e.dataTransfer.files || !e.dataTransfer.files.length) return;
         var file = e.dataTransfer.files[0];
         if (!isHtmlFile(file)) { showError(t('err.notHtml')); return; }
         if (file.size > 10 * 1024 * 1024) { showError(t('err.fileTooLarge')); return; }
@@ -1968,17 +1969,18 @@
       });
 
       function convertHtmlFile(file) {
+        if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
         pushOpenState();
         showLoading();
         var reader = new FileReader();
         reader.onerror = function () { showError(t('err.network')); };
         reader.onload = async function () {
           try {
-            var params = new URLSearchParams({ filename: file.name, format: 'json' });
+            var params = new URLSearchParams({ format: 'json' });
             if (frontmatterToggle.checked) params.set('frontmatter', 'true');
             var res = await fetch('/api/html?' + params.toString(), {
               method: 'POST',
-              headers: { 'Content-Type': 'text/html', 'X-Client-Mode': clientMode },
+              headers: { 'Content-Type': 'text/html', 'X-Client-Mode': clientMode, 'X-Filename': encodeURIComponent(file.name) },
               body: reader.result,
             });
             if (!res.ok) {
