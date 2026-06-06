@@ -18,6 +18,7 @@ describe('extractHtml - basic conversion (no URL)', () => {
     let fetchCalls = 0;
     const result = await extractHtml(ARTICLE_HTML, {
       filename: 'saved-article.html',
+      extractor: 'readability',
       fetch: async () => { fetchCalls++; throw new Error('must not fetch'); },
     });
     assert.ok(result.markdown.includes('Main content paragraph'));
