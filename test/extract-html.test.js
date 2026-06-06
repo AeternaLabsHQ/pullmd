@@ -70,3 +70,19 @@ describe('extractHtml - with original URL', () => {
     assert.ok(withoutUrl.markdown.includes('SUBSCRIBE NOW BANNER'), 'no url → recipes must not apply');
   });
 });
+
+describe('extractHtml - data: URI images (SingleFile exports)', () => {
+  it('replaces inlined images with their alt text and drops alt-less ones', async () => {
+    const html = `
+      <html><head><title>Pics</title></head>
+      <body><article>
+        <p>${LONG_PARAGRAPH}</p>
+        <p><img src="data:image/png;base64,iVBORw0KGgo${'A'.repeat(500)}" alt="Chart of results"></p>
+        <p><img src="data:image/gif;base64,R0lGODlh${'B'.repeat(300)}"></p>
+      </article></body></html>
+    `;
+    const result = await extractHtml(html, { filename: 'pics.html' });
+    assert.ok(!result.markdown.includes('data:image'), 'no data: URIs in output');
+    assert.ok(result.markdown.includes('Chart of results'), 'alt text survives');
+  });
+});
