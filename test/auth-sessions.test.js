@@ -49,15 +49,21 @@ describe('sessions', () => {
     assert.equal(auth.lookupSession(token), null);
   });
 
+  it('createSession sets expiry ~90 days out', () => {
+    const { expiresAt } = auth.createSession(userId);
+    const diffDays = (new Date(expiresAt + 'Z').getTime() - Date.now()) / 86400000;
+    assert.ok(diffDays > 89 && diffDays < 91, `expected ~90 days; got ${diffDays}`);
+  });
+
   it('lookupSession slides expiry on active sessions', () => {
     const { token } = auth.createSession(userId);
     cache.db
-      .prepare("UPDATE sessions SET expires_at = datetime('now', '+6 days') WHERE token = ?")
+      .prepare("UPDATE sessions SET expires_at = datetime('now', '+30 days') WHERE token = ?")
       .run(token);
     auth.lookupSession(token);
     const row = cache.db.prepare("SELECT expires_at FROM sessions WHERE token = ?").get(token);
     const diffSeconds = (new Date(row.expires_at + 'Z').getTime() - Date.now()) / 1000;
-    assert.ok(diffSeconds > 6.5 * 86400, `expected slide past 6.5 days; got ${diffSeconds}s`);
+    assert.ok(diffSeconds > 85 * 86400, `expected slide past 85 days; got ${diffSeconds}s`);
   });
 
   it('createAuth throws on unknown mode', () => {

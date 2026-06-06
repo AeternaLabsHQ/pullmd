@@ -69,6 +69,39 @@ describe('auth middleware', () => {
     });
   });
 
+  it('multi-user: refreshes the session cookie once past the slide threshold', async () => {
+    const { app, auth, cache } = makeApp('multi-user');
+    await auth.runMigration();
+    const adminId = cache.db.prepare("SELECT id FROM users").get().id;
+    const { token } = auth.createSession(adminId);
+    // Age the session: only 30 of 90 days remain, well past the 1-min slide throttle.
+    cache.db
+      .prepare("UPDATE sessions SET expires_at = datetime('now', '+30 days') WHERE token = ?")
+      .run(token);
+    await withServer(app, async (base) => {
+      const r = await fetch(base + '/whoami', {
+        headers: { Cookie: `pullmd_session=${token}` },
+      });
+      const setCookie = r.headers.get('set-cookie');
+      assert.ok(setCookie, 'expected a refreshed Set-Cookie header');
+      assert.ok(setCookie.includes(`pullmd_session=${token}`), 'must re-issue the same token');
+      assert.match(setCookie, /Max-Age=7776000/); // 90 days in seconds
+    });
+  });
+
+  it('multi-user: does not re-set the cookie for a fresh session', async () => {
+    const { app, auth, cache } = makeApp('multi-user');
+    await auth.runMigration();
+    const adminId = cache.db.prepare("SELECT id FROM users").get().id;
+    const { token } = auth.createSession(adminId);
+    await withServer(app, async (base) => {
+      const r = await fetch(base + '/whoami', {
+        headers: { Cookie: `pullmd_session=${token}` },
+      });
+      assert.equal(r.headers.get('set-cookie'), null);
+    });
+  });
+
   it('multi-user: invalid session cookie leaves req.user null', async () => {
     const { app, auth } = makeApp('multi-user');
     await auth.runMigration();
