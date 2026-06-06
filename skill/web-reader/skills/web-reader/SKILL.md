@@ -48,7 +48,7 @@ The response is `text/markdown` — ready to use as-is.
 
 - `X-Source` — `reddit` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright`
 - `X-Quality` — `0.0–1.0` extraction confidence (low values mean the static extraction was thin or noisy)
-- `X-Share-Id` — 8-hex permalink, openable as `__PULLMD_URL__/s/<id>`
+- `X-Share-Id` — 8-hex permalink, openable as `__PULLMD_URL__/s/<id>` (absent for `/api/html` — local conversions are never cached or shared)
 
 **Example calls:**
 
@@ -66,8 +66,8 @@ curl -s "__PULLMD_URL__/api?url=https://example.com/news&nocache=true"
 # the auto-detection (or where you want to be sure)
 curl -s "__PULLMD_URL__/api?url=https://mistral.ai/pricing&render=force"
 
-# Convert a local HTML file you already have (never cached, no share link)
-curl -s -X POST --data-binary @page.html -H 'Content-Type: text/html' "__PULLMD_URL__/api/html?filename=page.html"
+# Convert a local HTML file you already have (never cached, no share link; X-Filename keeps the name out of access logs)
+curl -s -X POST --data-binary @page.html -H 'Content-Type: text/html' -H 'X-Filename: page.html' "__PULLMD_URL__/api/html"
 ```
 
 ### Step 2: Check if it worked

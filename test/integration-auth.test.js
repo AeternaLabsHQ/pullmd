@@ -70,6 +70,16 @@ describe('integration: auth gating in createApp', () => {
     });
   });
 
+  it('multi-user: POST /api/html returns 401 without auth', async () => {
+    await withApp('multi-user', async (base) => {
+      const r = await fetch(base + '/api/html', {
+        method: 'POST', body: '<h1>test</h1>',
+        headers: { 'Content-Type': 'text/html' },
+      });
+      assert.equal(r.status, 401);
+    });
+  });
+
   it('multi-user: /mcp returns 401 without auth', async () => {
     await withApp('multi-user', async (base) => {
       const r = await fetch(base + '/mcp', {
