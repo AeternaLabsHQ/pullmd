@@ -1860,6 +1860,14 @@
             headers: { 'X-Client-Mode': clientMode },
           });
           if (!res.ok) {
+            if (res.status === 401) {
+              // Session expired (or never logged in): bounce through /login and
+              // carry the URL in `next` so the conversion auto-resumes after
+              // login via checkHash(). Also the landing path for mobile share
+              // intents whose session died.
+              location.href = '/login?next=' + encodeURIComponent('/#url=' + encodeURIComponent(url));
+              return;
+            }
             let msg = t('err.unknown', { code: res.status });
             try {
               const body = await res.json();
