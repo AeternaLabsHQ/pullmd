@@ -144,6 +144,20 @@ describe('POST /api/html - size limit', () => {
     const json = JSON.parse(res.body);
     assert.ok(json.error.includes('10 MB'));
   });
+
+  it('413 generic message (no misleading 10 MB) for oversized /mcp JSON bodies', async () => {
+    const app = createApp({ extractHtml: async () => FAKE_RESULT });
+    const big = JSON.stringify({ jsonrpc: '2.0', method: 'x', params: { blob: 'y'.repeat(2 * 1024 * 1024) } });
+    const res = await request(app, '/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: big,
+    });
+    assert.equal(res.status, 413);
+    const json = JSON.parse(res.body);
+    assert.ok(!json.error.includes('10 MB'), 'must not claim a 10 MB limit on /mcp');
+    assert.ok(json.error.includes('too large'));
+  });
 });
 
 describe('POST /api/html - privacy', () => {
