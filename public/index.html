@@ -1092,9 +1092,29 @@
        ========================================================= */
     body[data-lang="de"] .auth-warning [lang="en"] { display: none; }
     body[data-lang="en"] .auth-warning [lang="de"] { display: none; }
+
+    /* Drag-and-drop overlay (local HTML file conversion, #28) */
+    #drop-overlay {
+      position: fixed; inset: 0; z-index: 300; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(14, 16, 22, 0.7);
+      background: color-mix(in srgb, var(--bg) 80%, transparent);
+    }
+    #drop-overlay.visible { display: flex; }
+    #drop-overlay .drop-box {
+      padding: 2.5rem 3.5rem;
+      border: 2px dashed var(--accent);
+      border-radius: 14px;
+      background: var(--bg-elev);
+      color: var(--fg);
+      font-size: 1.15rem;
+      font-weight: 600;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body data-theme="dark" data-lang="de">
+  <div id="drop-overlay" aria-hidden="true"><div class="drop-box" data-i18n="drop.hint">HTML-Datei hier ablegen</div></div>
   <script>
     // Inline pre-paint: apply persisted/system theme + lang before first render
     (function () {
@@ -1356,6 +1376,9 @@
           'err.unknown':       'Unbekannter Fehler ({code})',
           'err.empty':         'Leere Antwort vom Server.',
           'err.network':       'Netzwerkfehler: Server nicht erreichbar.',
+          'drop.hint':         'HTML-Datei hier ablegen',
+          'err.notHtml':       'Nur HTML-Dateien (.html, .htm) werden unterstützt.',
+          'err.fileTooLarge':  'Datei zu groß (max. 10 MB).',
           'badge.chars':       '{n} chars',
           'badge.charsK':      '{n}k chars',
           'badge.comments':    '{shown}/{total} comments',
@@ -1402,6 +1425,9 @@
           'err.unknown':       'Unknown error ({code})',
           'err.empty':         'Empty response from server.',
           'err.network':       'Network error: server unreachable.',
+          'drop.hint':         'Drop HTML file here',
+          'err.notHtml':       'Only HTML files (.html, .htm) are supported.',
+          'err.fileTooLarge':  'File too large (max 10 MB).',
           'badge.chars':       '{n} chars',
           'badge.charsK':      '{n}k chars',
           'badge.comments':    '{shown}/{total} comments',
@@ -1900,6 +1926,85 @@
       urlInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') { e.preventDefault(); handleGo(); }
       });
+
+      // --- Drag-and-drop: convert a local HTML file (hidden desktop feature, #28) ---
+      var dropOverlay = document.getElementById('drop-overlay');
+      var dragDepth = 0;
+
+      function dragHasFiles(e) {
+        var types = e.dataTransfer && e.dataTransfer.types;
+        if (!types) return false;
+        return Array.prototype.indexOf.call(types, 'Files') !== -1;
+      }
+
+      function isHtmlFile(file) {
+        if (file.type === 'text/html' || file.type === 'application/xhtml+xml') return true;
+        return /\.html?$/i.test(file.name || '');
+      }
+
+      window.addEventListener('dragenter', function (e) {
+        if (!dragHasFiles(e)) return;
+        e.preventDefault();
+        dragDepth++;
+        dropOverlay.classList.add('visible');
+      });
+      window.addEventListener('dragover', function (e) {
+        if (dragHasFiles(e)) e.preventDefault();
+      });
+      window.addEventListener('dragleave', function (e) {
+        if (!dragHasFiles(e)) return;
+        dragDepth = Math.max(0, dragDepth - 1);
+        if (dragDepth === 0) dropOverlay.classList.remove('visible');
+      });
+      window.addEventListener('drop', function (e) {
+        e.preventDefault();
+        dragDepth = 0;
+        dropOverlay.classList.remove('visible');
+        if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+        var file = e.dataTransfer.files[0];
+        if (!isHtmlFile(file)) { showError(t('err.notHtml')); return; }
+        if (file.size > 10 * 1024 * 1024) { showError(t('err.fileTooLarge')); return; }
+        convertHtmlFile(file);
+      });
+
+      function convertHtmlFile(file) {
+        pushOpenState();
+        showLoading();
+        var reader = new FileReader();
+        reader.onerror = function () { showError(t('err.network')); };
+        reader.onload = async function () {
+          try {
+            var params = new URLSearchParams({ filename: file.name, format: 'json' });
+            if (frontmatterToggle.checked) params.set('frontmatter', 'true');
+            var res = await fetch('/api/html?' + params.toString(), {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/html', 'X-Client-Mode': clientMode },
+              body: reader.result,
+            });
+            if (!res.ok) {
+              if (res.status === 401) {
+                // A dropped file can't survive a login round-trip - bounce to
+                // login; the user re-drops afterwards.
+                location.href = '/login?next=' + encodeURIComponent('/');
+                return;
+              }
+              var msg = t('err.unknown', { code: res.status });
+              try {
+                var body = await res.json();
+                if (body.error) msg = body.error;
+              } catch (_) {}
+              showError(msg);
+              return;
+            }
+            var d = await res.json();
+            if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
+            showResult(d.markdown, d.source || '', '');
+          } catch (err) {
+            showError(t('err.network'));
+          }
+        };
+        reader.readAsText(file);
+      }
 
       copyBtn.addEventListener('click', function () {
         if (!rawMarkdown) return;
