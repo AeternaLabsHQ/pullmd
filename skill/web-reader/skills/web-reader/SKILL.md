@@ -65,6 +65,9 @@ curl -s "__PULLMD_URL__/api?url=https://example.com/news&nocache=true"
 # Force the Playwright fallback for a JS-rendered page that didn't trigger
 # the auto-detection (or where you want to be sure)
 curl -s "__PULLMD_URL__/api?url=https://mistral.ai/pricing&render=force"
+
+# Convert a local HTML file you already have (never cached, no share link)
+curl -s -X POST --data-binary @page.html -H 'Content-Type: text/html' "__PULLMD_URL__/api/html?filename=page.html"
 ```
 
 ### Step 2: Check if it worked

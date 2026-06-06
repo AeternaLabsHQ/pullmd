@@ -21,7 +21,7 @@ Chromium (Playwright sidecar) before extracting.
 
 It ships as:
 
-- a **PWA frontend** with raw/rendered view toggle, dark/paper themes, history, archive, share links
+- a **PWA frontend** with raw/rendered view toggle, dark/paper themes, history, archive, share links, and drag-and-drop conversion of local HTML files
 - a **REST API** at `GET /api?url=…`
 - an **MCP server** at `POST /mcp` (Streamable-HTTP transport, stateless)
 - a **Claude Code skill** as a downloadable zip
@@ -375,6 +375,7 @@ for it.
 | ---------------------- | -------------------------------------------------------------------------------- |
 | `GET /api?url=…`       | Markdown (or JSON / plain text via `format=`).                                   |
 | `GET /api/stream?url=…`| Server-Sent Events stream of extraction-stage status, ending in a `result` event. Used by the PWA. |
+| `POST /api/html`       | Convert a local/raw HTML document (body = HTML, max 10 MB). Never cached — no history entry, no share link. |
 | `GET /s/:id`           | Cached Markdown by share id; refreshes from source if > 1 h old.                 |
 | `GET /api/history`     | Recent conversions (JSON).                                                       |
 | `GET /api/archive`     | Paginated full archive.                                                          |

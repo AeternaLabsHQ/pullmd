@@ -9,6 +9,14 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [Unreleased]
+
+### Added
+- **Convert local HTML files** ([#28](https://github.com/AeternaLabsHQ/pullmd/issues/28)). New `POST /api/html` endpoint accepts a raw HTML body (max 10 MB) and runs it through the existing Readability + Trafilatura extraction pipeline — `curl --data-binary @page.html -H 'Content-Type: text/html' …/api/html`. Optional `url=` re-enables site recipes and the linked header; the file name can be passed via `?filename=` or the `X-Filename` header (URI-encoded; keeps names out of access logs); `data:`-URI images (SingleFile exports) are replaced by their alt text. Privacy by design: local files are never cached — no history entry, no share link, and telemetry logs a constant placeholder instead of the file name. Playwright is deliberately unavailable for uploaded HTML (user-supplied markup must never run in a server-side browser).
+- **PWA: drag-and-drop a local `.html` file** onto the page to convert it (hidden desktop feature). Friendly errors for non-HTML files, oversized files (413), and JavaScript app shells (422).
+
+---
+
 ## [2.5.0] - 2026-06-06
 
 ### Fixed

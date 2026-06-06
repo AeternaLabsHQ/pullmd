@@ -529,6 +529,18 @@ Then: claude mcp list to verify.</pre>
     </section>
 
     <!-- ===================================================== -->
+    <section id="local-html">
+      <h2><span lang="de">Lokale HTML-Dateien</span><span lang="en">Local HTML files</span><span class="kicker">POST /api/html</span></h2>
+      <p lang="de">Bereits gespeicherte Seiten ("Seite speichern unter", SingleFile-Exports) lassen sich direkt konvertieren: einfach die <code>.html</code>-Datei per Drag-and-Drop auf die PullMD-Oberfläche ziehen - oder per API:</p>
+      <p lang="en">Already-saved pages ("Save Page As", SingleFile exports) can be converted directly: just drag-and-drop the <code>.html</code> file onto the PullMD UI - or via the API:</p>
+      <pre>curl -s -X POST --data-binary @page.html \
+  -H 'Content-Type: text/html' \
+  "__PULLMD_URL__/api/html?filename=page.html"</pre>
+      <p lang="de">Optionale Parameter: <code>url=…</code> (Original-URL - aktiviert Site-Recipes und den verlinkten Header), <code>format=json|text</code>, <code>frontmatter=true</code>, <code>extractor=readability|trafilatura</code>. Statt <code>?filename=</code> geht auch der Header <code>X-Filename</code> (URI-encodiert) - so bleibt der Dateiname aus Access-Logs heraus. Maximal 10 MB. Aus Datenschutzgründen landen lokale Dateien <strong>nicht</strong> im Cache - kein History-Eintrag, kein Share-Link.</p>
+      <p lang="en">Optional parameters: <code>url=…</code> (original URL - enables site recipes and the linked header), <code>format=json|text</code>, <code>frontmatter=true</code>, <code>extractor=readability|trafilatura</code>. Instead of <code>?filename=</code> you can send the <code>X-Filename</code> header (URI-encoded) - keeping the file name out of access logs. Max 10 MB. For privacy, local files are <strong>never</strong> cached - no history entry, no share link.</p>
+    </section>
+
+    <!-- ===================================================== -->
     <section id="share">
       <h2><span lang="de">Share-Links</span><span lang="en">Share links</span><span class="kicker">/s/:id</span></h2>
       <p lang="de">Jeder Pull bekommt eine 8-stellige Hex-ID als Share-Link, der den exakten Markdown-Stand zurückliefert. Die ID erscheint im Response-Header <code>X-Share-Id</code> und in der Share-Bar unter dem URL-Feld.</p>
