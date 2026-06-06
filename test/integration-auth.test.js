@@ -140,6 +140,44 @@ describe('integration: auth gating in createApp', () => {
       assert.equal(body.authMisconfigured, true);
     }, { PULLMD_AUTH_TOKEN: 'leftover-v1-token' });
   });
+
+  it('multi-user: /share redirects logged-out browser navigations to /login with next', async () => {
+    await withApp('multi-user', async (base) => {
+      const r = await fetch(base + '/share?link=' + encodeURIComponent('https://ex.com/a'), {
+        redirect: 'manual',
+        headers: { Accept: 'text/html' },
+      });
+      assert.equal(r.status, 302);
+      const loc = r.headers.get('location');
+      assert.ok(loc.startsWith('/login?next='), `unexpected location: ${loc}`);
+      const next = decodeURIComponent(loc.slice('/login?next='.length));
+      assert.equal(next, '/share?link=' + encodeURIComponent('https://ex.com/a'));
+    });
+  });
+
+  it('multi-user: /share with a valid session redirects to /#url=', async () => {
+    await withApp('multi-user', async (base, { auth, cache }) => {
+      const adminId = cache.db.prepare("SELECT id FROM users").get().id;
+      const { token } = auth.createSession(adminId);
+      const r = await fetch(base + '/share?link=' + encodeURIComponent('https://ex.com/a'), {
+        redirect: 'manual',
+        headers: { Accept: 'text/html', Cookie: `pullmd_session=${token}` },
+      });
+      assert.equal(r.status, 302);
+      assert.equal(r.headers.get('location'), '/#url=' + encodeURIComponent('https://ex.com/a'));
+    });
+  });
+
+  it('disabled mode: /share stays open', async () => {
+    await withApp('disabled', async (base) => {
+      const r = await fetch(base + '/share?link=' + encodeURIComponent('https://ex.com/a'), {
+        redirect: 'manual',
+        headers: { Accept: 'text/html' },
+      });
+      assert.equal(r.status, 302);
+      assert.equal(r.headers.get('location'), '/#url=' + encodeURIComponent('https://ex.com/a'));
+    });
+  });
 });
 
 describe('integration: admin-only cache deletion', () => {

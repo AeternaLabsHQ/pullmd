@@ -82,6 +82,20 @@ describe('auth routes — multi-user', () => {
     });
   });
 
+  it('POST /login honours next=/#url=... (share-restore flow)', async () => {
+    await withApp('multi-user', async (base) => {
+      const next = '/#url=' + encodeURIComponent('https://ex.com/a');
+      const r = await fetch(base + '/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'email=admin@x.y&password=adminpass1&next=' + encodeURIComponent(next),
+        redirect: 'manual',
+      });
+      assert.equal(r.status, 302);
+      assert.equal(r.headers.get('location'), next);
+    });
+  });
+
   it('POST /login refuses next=//evil.com (protocol-relative)', async () => {
     await withApp('multi-user', async (base) => {
       const r = await fetch(base + '/login', {

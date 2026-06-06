@@ -134,7 +134,7 @@ export function createApp(overrides = {}) {
   app.get('/mcp', gate, mcp);
   app.delete('/mcp', gate, mcp);
 
-  app.get('/share', (req, res) => {
+  app.get('/share', gate, (req, res) => {
     let link = req.query.link || req.query.url || '';
     if (!link && req.query.text) {
       const urlMatch = req.query.text.match(/https?:\/\/\S+/);
