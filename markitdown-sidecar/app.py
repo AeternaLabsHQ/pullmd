@@ -95,8 +95,6 @@ def _yt_video_id(url):
 def _yt_api():
     from youtube_transcript_api import YouTubeTranscriptApi
     if YT_PROXY:
-        # NOTE: confirm the proxy class against the installed youtube-transcript-api
-        # version (v1.x exposes GenericProxyConfig under .proxies).
         from youtube_transcript_api.proxies import GenericProxyConfig
         return YouTubeTranscriptApi(proxy_config=GenericProxyConfig(http_url=YT_PROXY, https_url=YT_PROXY))
     return YouTubeTranscriptApi()
