@@ -151,6 +151,10 @@ All variables go in `.env` (copy from `.env.example`):
 | `TRAFILATURA_URL`      | no       | URL of the Trafilatura sidecar's `/extract` endpoint. Unset → skip Trafilatura, Readability only.    |
 | `PLAYWRIGHT_URL`       | no       | URL of the Playwright sidecar's `/render` endpoint. Unset → skip Playwright fallback for JS pages.   |
 | `MARKITDOWN_URL`       | no       | URL of the MarkItDown sidecar's `/convert` endpoint. Unset → document-conversion path disabled; `POST /api/file` returns `502`. |
+| `MARKITDOWN_MEDIA`     | no       | Set to `true` to enable image captioning and audio transcription in the markitdown sidecar. Opt-in — requires API credentials on the sidecar (see "Document conversion" below). Default: off. |
+| `MARKITDOWN_LLM_API_KEY` / `…_BASE_URL` / `…_MODEL` | no (sidecar) | Shared fallback credentials for vision + STT when `MARKITDOWN_MEDIA=true`. Point `_BASE_URL` at a local OpenAI-compatible server to keep everything on-host. |
+| `MARKITDOWN_VISION_API_KEY` / `…_BASE_URL` / `…_MODEL` | no (sidecar) | Per-modality override for image captioning. Takes precedence over the shared `LLM_*` vars when set. |
+| `MARKITDOWN_STT_API_KEY` / `…_BASE_URL` / `…_MODEL` / `MARKITDOWN_TRANSCRIBE_MODEL` | no (sidecar) | Per-modality override for audio transcription (STT). `TRANSCRIBE_MODEL` defaults to `whisper-1`. |
 | `REDDIT_CLIENT_ID`     | no       | OAuth credentials for Reddit. Without them, PullMD uses the public JSON API (lower rate limit).     |
 | `REDDIT_CLIENT_SECRET` | no       |                                                                                                      |
 | `REDDIT_USER_AGENT`    | no       | Reddit requires a unique UA. Default: `PullMD/1.0 (URL-to-Markdown service)`.                       |
@@ -457,6 +461,27 @@ When the markitdown sidecar is running (set `MARKITDOWN_URL=http://markitdown:80
 If `MARKITDOWN_URL` is unset, document conversion is unavailable: a document URL (`GET /api?url=…`) and `POST /api/file` both return `502`. Regular HTML pages are unaffected, and the PWA hides the document-upload affordance (it reads the `markitdown` flag from `/api/config`).
 
 The default `docker-compose.yml` includes the `markitdown` sidecar with `MARKITDOWN_URL` pre-wired. To opt out, remove the `markitdown` service block and unset the env var.
+
+### Media tier (image captions + audio transcription)
+
+By default the sidecar processes images with EXIF metadata only and audio files with track metadata only — no model calls, no external traffic. Set `MARKITDOWN_MEDIA=true` on the **pullmd** service and supply credentials on the **markitdown sidecar** to unlock richer extraction:
+
+- **Images** — a vision-capable model generates a text caption for each image, embedded in the Markdown output.
+- **Audio** — a speech-to-text model transcribes the audio; the transcript replaces the bare metadata block.
+
+Both modalities are independently configurable. The sidecar picks up credentials from environment variables:
+
+| Scope | Variables |
+| ----- | --------- |
+| Shared fallback | `MARKITDOWN_LLM_API_KEY`, `MARKITDOWN_LLM_BASE_URL`, `MARKITDOWN_LLM_MODEL` (vision); `MARKITDOWN_TRANSCRIBE_MODEL` (STT) |
+| Vision override | `MARKITDOWN_VISION_API_KEY`, `MARKITDOWN_VISION_BASE_URL`, `MARKITDOWN_VISION_MODEL` |
+| STT override | `MARKITDOWN_STT_API_KEY`, `MARKITDOWN_STT_BASE_URL`, `MARKITDOWN_STT_MODEL` |
+
+Per-modality vars override the shared `LLM_*` fallback when set. Any OpenAI-compatible endpoint works — point `*_BASE_URL` at a local server (e.g. Ollama, LM Studio) to keep everything on-host and avoid per-call cloud costs.
+
+> **Note:** cloud endpoints send image and audio content to a third-party API. Use a local model server if data-residency matters.
+
+The `docker-compose.yml` in this repo passes all `MARKITDOWN_*` variables through to the sidecar automatically; they default to empty and are inert until configured.
 
 ---
 
