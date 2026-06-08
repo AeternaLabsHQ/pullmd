@@ -784,3 +784,36 @@ describe('extractFile - local document upload', () => {
     assert.equal(result.title, 'empty.pdf');
   });
 });
+
+describe('extractWeb - gated media routing', () => {
+  function imgFetch() {
+    return async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
+      arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
+    });
+  }
+
+  it('does NOT route images when MARKITDOWN_MEDIA is unset', async () => {
+    const prev = process.env.MARKITDOWN_MEDIA;
+    delete process.env.MARKITDOWN_MEDIA;
+    let called = false;
+    const result = await extractWeb('https://example.com/photo.jpg', {
+      fetch: imgFetch(), markitdownClient: async () => { called = true; return { markdown: 'x', title: 'x' }; },
+    });
+    assert.equal(called, false);
+    assert.notEqual(result.source, 'markitdown');
+    if (prev !== undefined) process.env.MARKITDOWN_MEDIA = prev;
+  });
+
+  it('routes images to markitdown when MARKITDOWN_MEDIA=true', async () => {
+    const prev = process.env.MARKITDOWN_MEDIA;
+    process.env.MARKITDOWN_MEDIA = 'true';
+    const result = await extractWeb('https://example.com/photo.jpg', {
+      fetch: imgFetch(), markitdownClient: async () => ({ markdown: 'A caption of the photo.', title: 'photo.jpg' }),
+    });
+    assert.equal(result.source, 'markitdown');
+    assert.ok(result.markdown.includes('A caption of the photo.'));
+    if (prev === undefined) delete process.env.MARKITDOWN_MEDIA; else process.env.MARKITDOWN_MEDIA = prev;
+  });
+});
