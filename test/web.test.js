@@ -697,3 +697,57 @@ describe('extractWeb — Hook 3 (playwright fetch options)', () => {
     assert.match(renderOpts.userAgent, /Mozilla\//, 'userAgent should look like a real UA string');
   });
 });
+
+describe('extractWeb - markitdown document routing', () => {
+  function pdfFetch(bytes = Buffer.from('%PDF-1.4 fake')) {
+    return async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'application/pdf' : null) },
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    });
+  }
+
+  it('routes application/pdf to the markitdown client and tags source=markitdown', async () => {
+    let received;
+    const markitdownClient = async (buf, o) => { received = { len: buf.length, ...o }; return { markdown: 'PDF body text here, long enough.', title: 'My PDF' }; };
+    const result = await extractWeb('https://example.com/doc.pdf', { fetch: pdfFetch(), markitdownClient });
+    assert.equal(result.source, 'markitdown');
+    assert.ok(result.markdown.includes('# My PDF'));
+    assert.ok(result.markdown.includes('PDF body text here'));
+    assert.ok(result.markdown.includes('example.com'));
+    assert.equal(received.contentType, 'application/pdf');
+  });
+
+  it('routes by URL extension when content-type is octet-stream', async () => {
+    const octetFetch = async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'application/octet-stream' : null) },
+      arrayBuffer: async () => Buffer.from('DOCX').buffer,
+    });
+    let called = false;
+    const markitdownClient = async () => { called = true; return { markdown: 'docx text content', title: 'D' }; };
+    const result = await extractWeb('https://example.com/report.docx', { fetch: octetFetch, markitdownClient });
+    assert.equal(called, true);
+    assert.equal(result.source, 'markitdown');
+  });
+
+  it('throws when markitdown is the target but the sidecar is unavailable', async () => {
+    await assert.rejects(
+      () => extractWeb('https://example.com/doc.pdf', { fetch: pdfFetch(), markitdownClient: async () => null }),
+      /markitdown/i,
+    );
+  });
+
+  it('does NOT route text/html to markitdown', async () => {
+    const htmlFetch = async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
+      arrayBuffer: async () => Buffer.from('<html><head><title>T</title></head><body><article><p>Plenty of real article body text that is well over the two hundred character minimum so Readability keeps it as the main content of the page for sure.</p></article></body></html>').buffer,
+    });
+    let called = false;
+    const result = await extractWeb('https://example.com/page', { fetch: htmlFetch, markitdownClient: async () => { called = true; return { markdown: 'x', title: 'x' }; } });
+    assert.equal(called, false);
+    assert.notEqual(result.source, 'markitdown');
+  });
+});
