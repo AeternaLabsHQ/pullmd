@@ -80,7 +80,14 @@ def _is_audio(mimetype, filename):
 
 def _yt_video_id(url):
     try:
-        return parse_qs(urlparse(url).query).get("v", [None])[0]
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+        if host == "youtu.be":
+            return parsed.path.lstrip("/").split("/")[0] or None
+        parts = parsed.path.split("/")
+        if parsed.path.startswith("/shorts/") and len(parts) > 2:
+            return parts[2] or None
+        return parse_qs(parsed.query).get("v", [None])[0]
     except Exception:
         return None
 
@@ -134,12 +141,12 @@ def _format_transcript(snippets, video_id, timecodes, chunk):
     else:
         start, texts = None, []
         for st, tx in snippets:
+            if start is not None and st - start >= chunk:
+                blocks.append((start, " ".join(texts)))
+                start, texts = None, []
             if start is None:
                 start = st
             texts.append(tx)
-            if st - start >= chunk:
-                blocks.append((start, " ".join(texts)))
-                start, texts = None, []
         if texts:
             blocks.append((start or 0, " ".join(texts)))
 
@@ -271,13 +278,13 @@ async def youtube(request: Request):
     snippets = _fetch_snippets(video_id)
     transcript = _format_transcript(snippets, video_id, timecodes, chunk)
 
-    md = ""
+    markdown_body = ""
     if meta["description"]:
-        md += f"## Description\n\n{meta['description']}\n\n"
-    md += f"## Transcript\n\n{transcript}\n" if transcript else "## Transcript\n\n_No transcript available._\n"
+        markdown_body += f"## Description\n\n{meta['description']}\n\n"
+    markdown_body += f"## Transcript\n\n{transcript}\n" if transcript else "## Transcript\n\n_No transcript available._\n"
 
     return {
-        "markdown": md.strip(),
+        "markdown": markdown_body.strip(),
         "title": meta["title"] or "YouTube video",
         "fields": {
             "channel": meta["channel"],
