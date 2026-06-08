@@ -40,3 +40,17 @@ Shared fallback (used when the modality-specific vars are unset):
 Point a `*_BASE_URL` at a local server (faster-whisper-server, LocalAI, Ollama)
 to keep all data on-host. Without an API key: images → EXIF only, audio →
 metadata only, no third-party calls. `GET /health` reports `vision`/`stt` booleans.
+
+## YouTube (opt-in, no API key)
+
+`POST /youtube` — page HTML in the body, watch URL in `X-Source-Url`. Returns
+`{markdown, title, fields}` (channel/duration/views/published). Transcript via
+`youtube-transcript-api`; degrades to metadata-only when unavailable.
+
+Per-request headers (override env defaults):
+- `X-YT-Timecodes` — `links` (clickable, default) | `plain` | `none`
+- `X-YT-Chunk` — block size in seconds; `0` = per original snippet
+
+Env defaults: `MARKITDOWN_YT_TIMECODES`, `MARKITDOWN_YT_CHUNK`,
+`MARKITDOWN_YT_LANGS` (e.g. `de,en`; falls back to first available),
+`MARKITDOWN_YT_PROXY` (datacenter IPs are often blocked).
