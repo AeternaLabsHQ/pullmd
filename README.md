@@ -454,7 +454,7 @@ When the markitdown sidecar is running (set `MARKITDOWN_URL=http://markitdown:80
   ```
   The PWA supports both drag-and-drop and a file picker (desktop and mobile) for the same path.
 
-If `MARKITDOWN_URL` is unset, document links fall back to the standard HTML extraction pipeline and `POST /api/file` returns `502`.
+If `MARKITDOWN_URL` is unset, document conversion is unavailable: a document URL (`GET /api?url=…`) and `POST /api/file` both return `502`. Regular HTML pages are unaffected, and the PWA hides the document-upload affordance (it reads the `markitdown` flag from `/api/config`).
 
 The default `docker-compose.yml` includes the `markitdown` sidecar with `MARKITDOWN_URL` pre-wired. To opt out, remove the `markitdown` service block and unset the env var.
 
