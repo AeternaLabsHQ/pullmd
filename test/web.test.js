@@ -758,7 +758,7 @@ describe('extractFile - local document upload', () => {
     const result = await extractFile(Buffer.from('PDFBYTES'), {
       filename: 'report.pdf',
       contentType: 'application/pdf',
-      markitdownClient: async () => ({ markdown: 'Converted body text.', title: 'Report' }),
+      markitdownClient: async (buf, o) => { assert.equal(o.contentType, 'application/pdf'); return { markdown: 'Converted body text.', title: 'Report' }; },
     });
     assert.equal(result.source, 'markitdown');
     assert.ok(result.markdown.includes('# Report'));
@@ -773,5 +773,14 @@ describe('extractFile - local document upload', () => {
       () => extractFile(Buffer.from('x'), { filename: 'a.pdf', markitdownClient: async () => null }),
       /markitdown/i,
     );
+  });
+
+  it('returns empty markdown and falls back to the filename when the sidecar yields only whitespace', async () => {
+    const result = await extractFile(Buffer.from('x'), {
+      filename: 'empty.pdf',
+      markitdownClient: async () => ({ markdown: '   \n  ', title: null }),
+    });
+    assert.equal(result.metadata.contentLength, 0);
+    assert.equal(result.title, 'empty.pdf');
   });
 });
