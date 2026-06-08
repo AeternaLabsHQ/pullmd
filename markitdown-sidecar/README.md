@@ -33,8 +33,9 @@ Vision (image captions):
 Speech-to-text (audio):
 - `MARKITDOWN_STT_API_KEY`, `MARKITDOWN_STT_BASE_URL`, `MARKITDOWN_STT_MODEL` (default `whisper-1`)
 
-Shared fallback:
-- `MARKITDOWN_LLM_API_KEY`, `MARKITDOWN_LLM_BASE_URL`, `MARKITDOWN_LLM_MODEL`, `MARKITDOWN_TRANSCRIBE_MODEL`
+Shared fallback (used when the modality-specific vars are unset):
+- `MARKITDOWN_LLM_API_KEY`, `MARKITDOWN_LLM_BASE_URL` — used by both vision and STT
+- `MARKITDOWN_LLM_MODEL` — vision model fallback only (STT uses `MARKITDOWN_TRANSCRIBE_MODEL`, default `whisper-1`)
 
 Point a `*_BASE_URL` at a local server (faster-whisper-server, LocalAI, Ollama)
 to keep all data on-host. Without an API key: images → EXIF only, audio →

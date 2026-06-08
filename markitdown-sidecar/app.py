@@ -19,6 +19,7 @@ from fastapi import FastAPI, Request, HTTPException
 from markitdown import MarkItDown, StreamInfo
 
 MAX_BODY_BYTES = 50 * 1024 * 1024  # 50 MB
+WHISPER_MAX_BYTES = 25 * 1024 * 1024  # OpenAI transcription hard limit
 
 
 def _env(*names, default=None):
@@ -92,6 +93,8 @@ async def convert(request: Request):
 
     # Audio → OpenAI-compatible transcription (only when STT is configured).
     if _is_audio(mimetype, filename) and _stt_client:
+        if len(body) > WHISPER_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="audio too large for transcription (max 25 MB)")
         try:
             audio_name = filename or "audio.mp3"
             tr = _stt_client.audio.transcriptions.create(
@@ -100,7 +103,7 @@ async def convert(request: Request):
             )
             text = (getattr(tr, "text", "") or "").strip()
         except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=422, detail=f"transcription failed: {e}") from e
+            raise HTTPException(status_code=422, detail="transcription failed") from e
         return {
             "markdown": f"### Audio Transcript\n\n{text}" if text else "",
             "title": filename or "Audio",
