@@ -1111,6 +1111,39 @@
       font-weight: 600;
       pointer-events: none;
     }
+    /* Discoverability box: URL hint + clickable/droppable local-HTML affordance (#28) */
+    .hint-box {
+      max-width: 26rem;
+      margin: 1.5rem auto 0;
+      padding: 0.85rem 1.1rem;
+      border: 1.5px dashed color-mix(in srgb, var(--accent) 40%, transparent);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+      transition: border-color 0.15s ease;
+    }
+    .hint-box:hover { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+    .hint-box .hint { margin-top: 0; }
+    .drop-open {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.75rem;
+      color: var(--fg-dim);
+      cursor: pointer;
+      transition: color 0.15s ease;
+    }
+    .drop-open:hover { color: var(--fg); }
+    .drop-open svg { flex: 0 0 auto; opacity: 0.8; }
+    .aff-drag { display: none; }
+    @media (hover: hover) and (pointer: fine) {
+      .aff-drag { display: inline; }
+      .aff-open { display: none; }
+    }
   </style>
 </head>
 <body data-theme="dark" data-lang="de">
@@ -1240,10 +1273,18 @@
       <div id="result-rendered" class="hidden"></div>
     </div>
 
-    <p class="hint">
-      <span data-i18n="hint">URL einfügen, dann</span>
-      <kbd>Enter</kbd>
-    </p>
+    <div class="hint-box">
+      <p class="hint">
+        <span data-i18n="hint">URL einfügen, dann</span>
+        <kbd>Enter</kbd>
+      </p>
+      <label class="drop-open">
+        <input type="file" id="html-file-input" accept=".html,.htm,text/html" hidden>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
+        <span class="aff-drag" data-i18n="drop.affordance">… oder HTML-Datei ziehen oder öffnen</span>
+        <span class="aff-open" data-i18n="drop.affordanceOpen">… oder HTML-Datei öffnen</span>
+      </label>
+    </div>
 
     <div id="history-section" style="display:none;">
       <div class="section-head">
@@ -1377,6 +1418,8 @@
           'err.empty':         'Leere Antwort vom Server.',
           'err.network':       'Netzwerkfehler: Server nicht erreichbar.',
           'drop.hint':         'HTML-Datei hier ablegen',
+          'drop.affordance':   '… oder HTML-Datei ziehen oder öffnen',
+          'drop.affordanceOpen': '… oder HTML-Datei öffnen',
           'err.notHtml':       'Nur HTML-Dateien (.html, .htm) werden unterstützt.',
           'err.fileTooLarge':  'Datei zu groß (max. 10 MB).',
           'badge.chars':       '{n} chars',
@@ -1426,6 +1469,8 @@
           'err.empty':         'Empty response from server.',
           'err.network':       'Network error: server unreachable.',
           'drop.hint':         'Drop HTML file here',
+          'drop.affordance':   '… or drag or open an HTML file',
+          'drop.affordanceOpen': '… or open an HTML file',
           'err.notHtml':       'Only HTML files (.html, .htm) are supported.',
           'err.fileTooLarge':  'File too large (max 10 MB).',
           'badge.chars':       '{n} chars',
@@ -2008,6 +2053,19 @@
         reader.readAsText(file);
       }
 
+      // --- File picker: same conversion path as drop, works on mobile + desktop (#28) ---
+      var htmlFileInput = document.getElementById('html-file-input');
+      if (htmlFileInput) {
+        htmlFileInput.addEventListener('change', function () {
+          var file = htmlFileInput.files && htmlFileInput.files[0];
+          htmlFileInput.value = '';   // reset so re-picking the same file fires change
+          if (!file) return;
+          if (!isHtmlFile(file)) { showError(t('err.notHtml')); return; }
+          if (file.size > 10 * 1024 * 1024) { showError(t('err.fileTooLarge')); return; }
+          convertHtmlFile(file);
+        });
+      }
+
       copyBtn.addEventListener('click', function () {
         if (!rawMarkdown) return;
         navigator.clipboard.writeText(rawMarkdown).then(function () {
@@ -2274,7 +2332,7 @@
       // ---- Archive ----
       var mainView = document.querySelector('.card');
       var heroView = document.querySelector('.hero');
-      var resultViews = [loadingEl, errorEl, resultContainer, document.querySelector('.hint'), historySection];
+      var resultViews = [loadingEl, errorEl, resultContainer, document.querySelector('.hint-box'), historySection];
       var archiveView = document.getElementById('archive-view');
       var archiveList = document.getElementById('archive-list');
       var archiveCount = document.getElementById('archive-count');
