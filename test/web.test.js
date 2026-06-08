@@ -711,12 +711,13 @@ describe('extractWeb - markitdown document routing', () => {
   it('routes application/pdf to the markitdown client and tags source=markitdown', async () => {
     let received;
     const markitdownClient = async (buf, o) => { received = { len: buf.length, ...o }; return { markdown: 'PDF body text here, long enough.', title: 'My PDF' }; };
-    const result = await extractWeb('https://example.com/doc.pdf', { fetch: pdfFetch(), markitdownClient });
+    const result = await extractWeb('https://example.com/doc.pdf?token=abc', { fetch: pdfFetch(), markitdownClient });
     assert.equal(result.source, 'markitdown');
     assert.ok(result.markdown.includes('# My PDF'));
     assert.ok(result.markdown.includes('PDF body text here'));
     assert.ok(result.markdown.includes('example.com'));
     assert.equal(received.contentType, 'application/pdf');
+    assert.equal(received.filename, 'doc.pdf');
   });
 
   it('routes by URL extension when content-type is octet-stream', async () => {
