@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWeb } from '../lib/web.js';
+import { extractWeb, extractFile } from '../lib/web.js';
 import { matchRecipesAgainst } from '../lib/recipes.js';
 
 // Single-fetch: extractWeb makes exactly ONE request per call.
@@ -750,5 +750,28 @@ describe('extractWeb - markitdown document routing', () => {
     const result = await extractWeb('https://example.com/page', { fetch: htmlFetch, markitdownClient: async () => { called = true; return { markdown: 'x', title: 'x' }; } });
     assert.equal(called, false);
     assert.notEqual(result.source, 'markitdown');
+  });
+});
+
+describe('extractFile - local document upload', () => {
+  it('converts bytes via markitdown and shows the filename in the header', async () => {
+    const result = await extractFile(Buffer.from('PDFBYTES'), {
+      filename: 'report.pdf',
+      contentType: 'application/pdf',
+      markitdownClient: async () => ({ markdown: 'Converted body text.', title: 'Report' }),
+    });
+    assert.equal(result.source, 'markitdown');
+    assert.ok(result.markdown.includes('# Report'));
+    assert.ok(result.markdown.includes('**report.pdf**'));
+    assert.ok(!result.markdown.includes('http'));   // no source URL for local files
+    assert.equal(result.metadata.sourceUrl, null);
+    assert.ok(result.metadata.contentLength > 0);
+  });
+
+  it('throws when the sidecar is unavailable', async () => {
+    await assert.rejects(
+      () => extractFile(Buffer.from('x'), { filename: 'a.pdf', markitdownClient: async () => null }),
+      /markitdown/i,
+    );
   });
 });
