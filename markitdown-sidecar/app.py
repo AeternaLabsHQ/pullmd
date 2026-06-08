@@ -97,17 +97,17 @@ def _yt_api():
 
 def _fetch_snippets(video_id):
     """List of (start_seconds, text). [] on any failure (never raises)."""
-    api = _yt_api()
-
-    def to_list(ft):
-        return [(float(s.start), s.text) for s in ft]
-
-    if YT_LANGS:
-        try:
-            return to_list(api.fetch(video_id, languages=YT_LANGS))
-        except Exception:
-            pass
     try:
+        api = _yt_api()
+
+        def to_list(ft):
+            return [(float(s.start), s.text) for s in ft]
+
+        if YT_LANGS:
+            try:
+                return to_list(api.fetch(video_id, languages=YT_LANGS))
+            except Exception:
+                pass
         for t in api.list(video_id):
             try:
                 return to_list(t.fetch())
