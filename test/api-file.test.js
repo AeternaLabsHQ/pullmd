@@ -59,6 +59,27 @@ describe('POST /api/file - happy paths', () => {
     assert.equal(json.source, 'markitdown');
     assert.equal(json.shareId, null);
   });
+
+  it('sets X-Quality from the result metadata', async () => {
+    const app = createApp({ extractFile: async () => FAKE });
+    const res = await postFile(app, '/api/file', Buffer.from('%PDF'));
+    assert.equal(res.headers['x-quality'], '0.8');
+  });
+
+  it('strips markdown when format=text', async () => {
+    const app = createApp({ extractFile: async () => FAKE });
+    const res = await postFile(app, '/api/file?format=text', Buffer.from('%PDF'));
+    assert.equal(res.status, 200);
+    assert.ok(res.headers['content-type'].includes('text/plain'));
+    assert.ok(!res.body.includes('# '));
+  });
+
+  it('prepends frontmatter when frontmatter=true', async () => {
+    const app = createApp({ extractFile: async () => FAKE });
+    const res = await postFile(app, '/api/file?frontmatter=true', Buffer.from('%PDF'));
+    assert.ok(res.body.startsWith('---\n'));
+    assert.ok(res.body.includes('source: markitdown'));
+  });
 });
 
 describe('POST /api/file - errors', () => {
@@ -87,5 +108,15 @@ describe('POST /api/file - privacy', () => {
     const logged = cache.db.prepare('SELECT url FROM extraction_log').all();
     assert.equal(logged[0].url, 'local-file');
     assert.ok(!JSON.stringify(logged).includes('secret-tax'));
+  });
+});
+
+describe('POST /api/file - size limit', () => {
+  it('413 with a 25 MB message for bodies over the limit', async () => {
+    const app = createApp({ extractFile: async () => FAKE });
+    const big = Buffer.alloc(26 * 1024 * 1024, 0x41);
+    const res = await postFile(app, '/api/file', big);
+    assert.equal(res.status, 413);
+    assert.ok(JSON.parse(res.body).error.includes('25 MB'));
   });
 });

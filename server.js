@@ -523,6 +523,7 @@ export function createApp(overrides = {}) {
       return res.send(finalMd);
     } catch (err) {
       console.error('File conversion error:', err);
+      // 502: the markitdown sidecar is an upstream dependency (same as the web /api path).
       return res.status(502).json({ error: `Failed to convert file: ${err.message}` });
     }
   });
@@ -732,7 +733,7 @@ export function createApp(overrides = {}) {
 
   // Friendly JSON for body-parser limit violations. Mounted last; non-413
   // errors fall through to Express' default handler. /api/html names its
-  // 10 MB cap; other routes (e.g. /mcp at 1 MB) get the generic message.
+  // 10 MB cap and /api/file its 25 MB cap; other routes (e.g. /mcp at 1 MB) get the generic message.
   app.use((err, req, res, next) => {
     if (err?.type === 'entity.too.large') {
       let error = 'Request body too large. / Anfrage zu groß.';
