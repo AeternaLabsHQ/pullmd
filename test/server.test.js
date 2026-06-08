@@ -1010,3 +1010,14 @@ describe('GET /api/config - markitdown flag', () => {
     if (prev === undefined) delete process.env.MARKITDOWN_URL; else process.env.MARKITDOWN_URL = prev;
   });
 });
+
+describe('GET /api/config - markitdownMedia flag', () => {
+  it('reflects MARKITDOWN_MEDIA', async () => {
+    const prev = process.env.MARKITDOWN_MEDIA;
+    process.env.MARKITDOWN_MEDIA = 'true';
+    const app = createApp({});
+    const res = await request(app, '/api/config');
+    assert.equal(JSON.parse(res.body).markitdownMedia, true);
+    if (prev === undefined) delete process.env.MARKITDOWN_MEDIA; else process.env.MARKITDOWN_MEDIA = prev;
+  });
+});

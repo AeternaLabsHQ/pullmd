@@ -679,6 +679,7 @@ export function createApp(overrides = {}) {
       authMode: auth ? auth.mode : 'disabled',
       authMisconfigured: !!auth?.isMisconfigured,
       markitdown: !!process.env.MARKITDOWN_URL,
+      markitdownMedia: !!process.env.MARKITDOWN_MEDIA,
     });
   });
 
