@@ -1065,6 +1065,15 @@ describe('GET /api/config - markitdownMedia flag', () => {
   });
 });
 
+describe('GET /api/config - markitdownYoutube flag', () => {
+  it('reflects MARKITDOWN_YOUTUBE', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'true';
+    const res = await request(createApp({}), '/api/config');
+    assert.equal(JSON.parse(res.body).markitdownYoutube, true);
+    if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
+  });
+});
+
 describe('GET /api - YouTube format params', () => {
   it('forwards yt_timecodes/yt_chunk to extractWeb and bypasses cache', async () => {
     let opts;

@@ -706,6 +706,7 @@ export function createApp(overrides = {}) {
       authMisconfigured: !!auth?.isMisconfigured,
       markitdown: !!process.env.MARKITDOWN_URL,
       markitdownMedia: !!process.env.MARKITDOWN_MEDIA,
+      markitdownYoutube: !!process.env.MARKITDOWN_YOUTUBE,
     });
   });
 

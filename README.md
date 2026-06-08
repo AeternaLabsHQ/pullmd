@@ -155,6 +155,11 @@ All variables go in `.env` (copy from `.env.example`):
 | `MARKITDOWN_LLM_API_KEY` / `…_BASE_URL` / `…_MODEL` | no (sidecar) | Shared fallback credentials for vision + STT when `MARKITDOWN_MEDIA=true`. Point `_BASE_URL` at a local OpenAI-compatible server to keep everything on-host. |
 | `MARKITDOWN_VISION_API_KEY` / `…_BASE_URL` / `…_MODEL` | no (sidecar) | Per-modality override for image captioning. Takes precedence over the shared `LLM_*` vars when set. |
 | `MARKITDOWN_STT_API_KEY` / `…_BASE_URL` / `…_MODEL` / `MARKITDOWN_TRANSCRIBE_MODEL` | no (sidecar) | Per-modality override for audio transcription (STT). `TRANSCRIBE_MODEL` defaults to `whisper-1`. |
+| `MARKITDOWN_YOUTUBE`   | no       | Set to `true` to route YouTube URLs through the markitdown sidecar (returns title + description + transcript). No API key required. Default: off. |
+| `MARKITDOWN_YT_TIMECODES` | no (sidecar) | Default timecode format in transcripts: `links` (YouTube timestamp links, default), `plain` (bare `[MM:SS]` labels), `none` (transcript text only). Overridable per-request via `?yt_timecodes=`. |
+| `MARKITDOWN_YT_CHUNK`  | no (sidecar) | Transcript block size in seconds (default `30`). `0` keeps the original per-snippet granularity. Overridable per-request via `?yt_chunk=`. |
+| `MARKITDOWN_YT_LANGS`  | no (sidecar) | Comma-separated preferred transcript languages (e.g. `de,en`). Falls back to the first available language if none of the preferred ones exist. |
+| `MARKITDOWN_YT_PROXY`  | no (sidecar) | HTTP(S) proxy URL for YouTube requests. Datacenter IP addresses are often rate-limited by YouTube's transcript API; a residential or ISP proxy can help. |
 | `REDDIT_CLIENT_ID`     | no       | OAuth credentials for Reddit. Without them, PullMD uses the public JSON API (lower rate limit).     |
 | `REDDIT_CLIENT_SECRET` | no       |                                                                                                      |
 | `REDDIT_USER_AGENT`    | no       | Reddit requires a unique UA. Default: `PullMD/1.0 (URL-to-Markdown service)`.                       |
@@ -482,6 +487,29 @@ Per-modality vars override the shared `LLM_*` fallback when set. Any OpenAI-comp
 > **Note:** cloud endpoints send image and audio content to a third-party API. Use a local model server if data-residency matters.
 
 The `docker-compose.yml` in this repo passes all `MARKITDOWN_*` variables through to the sidecar automatically; they default to empty and are inert until configured.
+
+### YouTube transcripts
+
+When `MARKITDOWN_YOUTUBE=true` is set on the **pullmd** service, YouTube video URLs are routed through the markitdown sidecar instead of the regular web-extraction pipeline. The sidecar fetches the video's title, description, and auto-generated or community transcript, and returns them as clean Markdown. No API key is required.
+
+```
+GET /api?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ
+```
+
+The transcript format is configurable via environment defaults on the sidecar, and can also be overridden per request:
+
+| Query param     | Values                      | Default  | Effect                                                           |
+| --------------- | --------------------------- | -------- | ---------------------------------------------------------------- |
+| `?yt_timecodes` | `links` / `plain` / `none`  | `links`  | `links` = clickable YouTube timestamp URLs; `plain` = `[MM:SS]` labels; `none` = transcript text only |
+| `?yt_chunk`     | integer seconds             | `30`     | Groups transcript snippets into blocks of this many seconds. `0` keeps the original per-snippet granularity. |
+
+Both params are also available on the MCP `read_url` tool.
+
+**Language preference:** set `MARKITDOWN_YT_LANGS=de,en` on the sidecar to prefer German transcripts, falling back to English if no German track exists. If none of the preferred languages are available, the sidecar falls back to the first available track.
+
+**Rate-limit caveat:** YouTube's transcript API aggressively rate-limits requests from datacenter IP ranges. If you run PullMD on a cloud VPS and see frequent failures, set `MARKITDOWN_YT_PROXY` on the sidecar to route requests through a residential or ISP proxy.
+
+> **Note:** YouTube extraction requires the markitdown sidecar (`MARKITDOWN_URL`) to be configured. If `MARKITDOWN_URL` is unset, YouTube URLs are processed by the regular web pipeline (HTML extraction via Readability/Trafilatura), which does not include a transcript.
 
 ---
 
