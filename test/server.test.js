@@ -655,6 +655,49 @@ describe('POST /mcp', () => {
     assert.ok(errored, 'invalid extractor enum value must be rejected');
   });
 
+  it('read_url forwards yt_timecodes and yt_chunk to extractWeb', async () => {
+    let receivedOpts = {};
+    const app = createApp({
+      cache: createCache(':memory:'),
+      extractWeb: async (url, opts) => {
+        receivedOpts = opts;
+        return { markdown: '# YT', title: 'YT', source: 'youtube', metadata: { quality: 0.9 } };
+      },
+    });
+    const res = await request(app, '/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'tools/call',
+        params: { name: 'read_url', arguments: { url: 'https://www.youtube.com/watch?v=abc', yt_timecodes: 'plain', yt_chunk: 0 } },
+      }),
+    });
+    parseSse(res.body); // assert no MCP-level error
+    assert.equal(receivedOpts.ytTimecodes, 'plain');
+    assert.equal(receivedOpts.ytChunk, 0, 'yt_chunk: 0 must be forwarded (not dropped by falsy check)');
+  });
+
+  it('read_url does not forward yt_timecodes/yt_chunk when omitted', async () => {
+    let receivedOpts = {};
+    const app = createApp({
+      cache: createCache(':memory:'),
+      extractWeb: async (url, opts) => {
+        receivedOpts = opts;
+        return { markdown: '# YT', title: 'YT', source: 'readability', metadata: { quality: 0.9 } };
+      },
+    });
+    await request(app, '/mcp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' },
+      body: JSON.stringify({
+        jsonrpc: '2.0', id: 1, method: 'tools/call',
+        params: { name: 'read_url', arguments: { url: 'https://example.com/no-yt' } },
+      }),
+    });
+    assert.equal(receivedOpts.ytTimecodes, undefined);
+    assert.equal(receivedOpts.ytChunk, undefined);
+  });
+
   it('get_share embeds url, source, share_id, share_url, refreshed, age_ms in frontmatter', async () => {
     const cache = createCache(':memory:');
     const shareId = cache.put({ url: 'https://example.com/z', title: 'Z', markdown: '# Z\n\nBody', source: 'readability', client: 'api' });
