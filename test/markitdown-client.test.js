@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { convertViaMarkitdown } from '../lib/markitdown-client.js';
+import { convertViaMarkitdown, convertYoutubeViaSidecar } from '../lib/markitdown-client.js';
 
 const okResp = (json) => ({ ok: true, json: async () => json });
 
@@ -56,5 +56,37 @@ describe('convertViaMarkitdown', () => {
       fetch: async () => { throw new Error('should not hang'); },
     });
     assert.equal(out, null);
+  });
+});
+
+describe('convertYoutubeViaSidecar', () => {
+  it('returns null without a sourceUrl', async () => {
+    assert.equal(await convertYoutubeViaSidecar('<html>', { url: 'http://m/convert', fetch: async () => okResp({}) }), null);
+  });
+
+  it('POSTs to /youtube with X-Source-Url + format headers', async () => {
+    let cap;
+    const out = await convertYoutubeViaSidecar('<html>p</html>', {
+      url: 'http://markitdown:8003/convert',
+      sourceUrl: 'https://www.youtube.com/watch?v=abc123',
+      timecodes: 'plain', chunk: 0,
+      fetch: async (u, o) => { cap = { u, o }; return okResp({ markdown: '## Transcript\n\nhi', title: 'V', fields: { channel: 'C' } }); },
+    });
+    assert.equal(out.title, 'V');
+    assert.equal(out.fields.channel, 'C');
+    assert.equal(cap.u, 'http://markitdown:8003/youtube');
+    assert.equal(cap.o.headers['X-Source-Url'], 'https://www.youtube.com/watch?v=abc123');
+    assert.equal(cap.o.headers['X-YT-Timecodes'], 'plain');
+    assert.equal(cap.o.headers['X-YT-Chunk'], '0');
+  });
+
+  it('omits format headers when not given', async () => {
+    let cap;
+    await convertYoutubeViaSidecar('<html>', {
+      url: 'http://m/convert', sourceUrl: 'https://www.youtube.com/watch?v=x',
+      fetch: async (u, o) => { cap = o; return okResp({ markdown: 'x', title: 't' }); },
+    });
+    assert.equal(cap.headers['X-YT-Timecodes'], undefined);
+    assert.equal(cap.headers['X-YT-Chunk'], undefined);
   });
 });
