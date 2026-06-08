@@ -5,7 +5,7 @@ import { createCache } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
 import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
 import { qualityScore } from './lib/scoring.js';
-import { buildFrontmatter } from './lib/frontmatter.js';
+import { buildFrontmatter, mergeFrontmatter } from './lib/frontmatter.js';
 import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
@@ -215,11 +215,14 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api', gate, async (req, res) => {
-    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor } = req.query;
+    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor, yt_timecodes, yt_chunk } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const reqLang = lang === 'en' ? 'en' : 'de';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura' || extractor === 'playwright')
       ? extractor : undefined;
+    const validYtTimecodes = (yt_timecodes === 'links' || yt_timecodes === 'plain' || yt_timecodes === 'none') ? yt_timecodes : undefined;
+    const validYtChunk = (yt_chunk !== undefined && /^\d+$/.test(yt_chunk)) ? parseInt(yt_chunk, 10) : undefined;
+    const explicitYtParams = validYtTimecodes !== undefined || validYtChunk !== undefined;
 
     if (!url) {
       return res.status(400).json({ error: 'Missing required parameter: url' });
@@ -231,7 +234,7 @@ export function createApp(overrides = {}) {
     // values actually take effect (the fresh response then overwrites the row).
     const explicitCommentParams = comment_depth !== undefined || comment_limit !== undefined;
     const explicitRenderParam = render === 'force' || render === 'skip';
-    const useCache = cache && nocache !== 'true' && nocache !== '1' && !explicitCommentParams && !explicitRenderParam && !validExtractor;
+    const useCache = cache && nocache !== 'true' && nocache !== '1' && !explicitCommentParams && !explicitRenderParam && !validExtractor && !explicitYtParams;
 
     const wantComments = comments !== 'false' && comments !== '0';
     const t0 = Date.now();
@@ -349,6 +352,8 @@ export function createApp(overrides = {}) {
         comments: false,
         render: explicitRenderParam ? render : undefined,
         extractor: validExtractor,
+        ytTimecodes: validYtTimecodes,
+        ytChunk: validYtChunk,
       });
 
       let shareId = null;
@@ -360,6 +365,14 @@ export function createApp(overrides = {}) {
         ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId })
         : '';
       const finalMd = fm + result.markdown;
+
+      let outMd = finalMd;
+      if (wantFrontmatter && result.source === 'youtube') {
+        outMd = mergeFrontmatter(outMd, [
+          ['duration', result.metadata?.ytDuration],
+          ['views', result.metadata?.ytViews],
+        ]);
+      }
 
       res.set('X-Source', result.source);
       if (result.metadata?.quality !== undefined) {
@@ -376,7 +389,7 @@ export function createApp(overrides = {}) {
       });
       if (format === 'json') {
         return res.json({
-          markdown: finalMd,
+          markdown: outMd,
           metadata: result.metadata || null,
           source: result.source,
           shareId: shareId || null,
@@ -384,10 +397,10 @@ export function createApp(overrides = {}) {
       }
       if (format === 'text') {
         res.set('Content-Type', 'text/plain; charset=utf-8');
-        return res.send(stripMarkdown(finalMd));
+        return res.send(stripMarkdown(outMd));
       }
       res.set('Content-Type', 'text/markdown; charset=utf-8');
-      return res.send(finalMd);
+      return res.send(outMd);
     } catch (err) {
       console.error('Web extraction error:', err);
       return res.status(502).json({ error: `Failed to extract page: ${err.message}` });
@@ -529,11 +542,14 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api/stream', gate, async (req, res) => {
-    const { url, comments, comment_depth, comment_limit, frontmatter, lang, nocache, render, extractor } = req.query;
+    const { url, comments, comment_depth, comment_limit, frontmatter, lang, nocache, render, extractor, yt_timecodes, yt_chunk } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const reqLang = lang === 'en' ? 'en' : 'de';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura' || extractor === 'playwright')
       ? extractor : undefined;
+    const validYtTimecodes = (yt_timecodes === 'links' || yt_timecodes === 'plain' || yt_timecodes === 'none') ? yt_timecodes : undefined;
+    const validYtChunk = (yt_chunk !== undefined && /^\d+$/.test(yt_chunk)) ? parseInt(yt_chunk, 10) : undefined;
+    const explicitYtParams = validYtTimecodes !== undefined || validYtChunk !== undefined;
 
     if (!url) {
       return res.status(400).json({ error: 'Missing required parameter: url' });
@@ -557,7 +573,7 @@ export function createApp(overrides = {}) {
     const wantComments = comments !== 'false' && comments !== '0';
     const explicitRenderParam = render === 'force' || render === 'skip';
     const explicitCommentParams = comment_depth !== undefined || comment_limit !== undefined;
-    const useCache = cache && nocache !== 'true' && nocache !== '1' && !explicitRenderParam && !explicitCommentParams && !validExtractor;
+    const useCache = cache && nocache !== 'true' && nocache !== '1' && !explicitRenderParam && !explicitCommentParams && !validExtractor && !explicitYtParams;
     const t0 = Date.now();
 
     try {
@@ -620,6 +636,8 @@ export function createApp(overrides = {}) {
         comments: false,
         render: explicitRenderParam ? render : undefined,
         extractor: validExtractor,
+        ytTimecodes: validYtTimecodes,
+        ytChunk: validYtChunk,
         emit,
         signal: ac.signal,
       });
@@ -634,7 +652,15 @@ export function createApp(overrides = {}) {
         : '';
       const finalMd = fm + result.markdown;
 
-      send('result', { markdown: finalMd, source: result.source, shareId: shareId || null });
+      let outMd = finalMd;
+      if (wantFrontmatter && result.source === 'youtube') {
+        outMd = mergeFrontmatter(outMd, [
+          ['duration', result.metadata?.ytDuration],
+          ['views', result.metadata?.ytViews],
+        ]);
+      }
+
+      send('result', { markdown: outMd, source: result.source, shareId: shareId || null });
       if (cache) cache.logExtraction({
         url, source: result.source,
         quality: result.metadata?.quality,

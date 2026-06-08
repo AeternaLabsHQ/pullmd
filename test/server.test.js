@@ -1021,3 +1021,23 @@ describe('GET /api/config - markitdownMedia flag', () => {
     if (prev === undefined) delete process.env.MARKITDOWN_MEDIA; else process.env.MARKITDOWN_MEDIA = prev;
   });
 });
+
+describe('GET /api - YouTube format params', () => {
+  it('forwards yt_timecodes/yt_chunk to extractWeb and bypasses cache', async () => {
+    let opts;
+    const cache = createCache(':memory:');
+    const app = createApp({ cache, extractWeb: async (u, o) => { opts = o; return { markdown: '# V\n\nbody', title: 'V', source: 'youtube', metadata: { quality: 0.9, ytDuration: '12:34', ytViews: '1000' } }; } });
+    await request(app, '/api?url=https://youtu.be/abc123&yt_timecodes=plain&yt_chunk=0');
+    assert.equal(opts.ytTimecodes, 'plain');
+    assert.equal(opts.ytChunk, 0);
+  });
+
+  it('merges duration/views into frontmatter for youtube source', async () => {
+    const app = createApp({ extractWeb: async () => ({ markdown: '# V\n\nbody', title: 'V', source: 'youtube', metadata: { quality: 0.9, sourceUrl: 'https://www.youtube.com/watch?v=abc123', author: 'Chan', ytDuration: '12:34', ytViews: '1000' } }) });
+    const res = await request(app, '/api?url=https://youtu.be/abc123&frontmatter=true');
+    assert.ok(res.body.startsWith('---\n'));
+    assert.ok(res.body.includes('source: youtube'));
+    assert.ok(res.body.includes('duration: 12:34'));
+    assert.ok(res.body.includes('views: 1000'));
+  });
+});
