@@ -1279,7 +1279,7 @@
         <kbd>Enter</kbd>
       </p>
       <label class="drop-open">
-        <input type="file" id="html-file-input" accept=".html,.htm,.pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.epub,.csv,.json,.xml,text/html,application/pdf" hidden>
+        <input type="file" id="html-file-input" accept=".html,.htm,.pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.epub,.zip,.csv,.json,.xml,text/html,application/pdf" hidden>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
         <span class="aff-drag" data-i18n="drop.affordance">… oder HTML-Datei ziehen oder öffnen</span>
         <span class="aff-open" data-i18n="drop.affordanceOpen">… oder HTML-Datei öffnen</span>
@@ -1420,6 +1420,9 @@
           'drop.hint':         'HTML-Datei hier ablegen',
           'drop.affordance':   '… oder HTML-Datei ziehen oder öffnen',
           'drop.affordanceOpen': '… oder HTML-Datei öffnen',
+          'drop.hintDoc':          'Datei hier ablegen',
+          'drop.affordanceDoc':    '… oder Datei ziehen oder öffnen',
+          'drop.affordanceOpenDoc': '… oder Datei öffnen',
           'err.notHtml':       'Nur HTML-Dateien (.html, .htm) werden unterstützt.',
           'err.fileTooLarge':  'Datei zu groß (max. 10 MB).',
           'err.fileTooLargeDoc': 'Datei zu groß (max. 25 MB).',
@@ -1472,6 +1475,9 @@
           'drop.hint':         'Drop HTML file here',
           'drop.affordance':   '… or drag or open an HTML file',
           'drop.affordanceOpen': '… or open an HTML file',
+          'drop.hintDoc':          'Drop file here',
+          'drop.affordanceDoc':    '… or drag or open a file',
+          'drop.affordanceOpenDoc': '… or open a file',
           'err.notHtml':       'Only HTML files (.html, .htm) are supported.',
           'err.fileTooLarge':  'File too large (max 10 MB).',
           'err.fileTooLargeDoc': 'File too large (max 25 MB).',
@@ -1982,7 +1988,18 @@
       var DOC_EXT_RE = /\.(pdf|docx?|pptx?|xlsx?|epub|zip|csv|json|xml)$/i;
       var markitdownEnabled = false;
       fetch('/api/config').then(function (r) { return r.json(); })
-        .then(function (c) { markitdownEnabled = !!c.markitdown; })
+        .then(function (c) {
+          markitdownEnabled = !!c.markitdown;
+          if (markitdownEnabled) {
+            var hint = document.querySelector('#drop-overlay .drop-box');
+            if (hint) hint.setAttribute('data-i18n', 'drop.hintDoc');
+            var affDrag = document.querySelector('.aff-drag');
+            if (affDrag) affDrag.setAttribute('data-i18n', 'drop.affordanceDoc');
+            var affOpen = document.querySelector('.aff-open');
+            if (affOpen) affOpen.setAttribute('data-i18n', 'drop.affordanceOpenDoc');
+            window.PullMD.setLang(window.PullMD.getLang());
+          }
+        })
         .catch(function () {});
 
       function dragHasFiles(e) {
