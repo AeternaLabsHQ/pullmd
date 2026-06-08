@@ -46,4 +46,15 @@ describe('convertViaMarkitdown', () => {
     });
     assert.equal(out, null);
   });
+
+  it('returns null immediately when the signal is already aborted', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const out = await convertViaMarkitdown(Buffer.from('x'), {
+      url: 'http://m/convert',
+      signal: ctrl.signal,
+      fetch: async () => { throw new Error('should not hang'); },
+    });
+    assert.equal(out, null);
+  });
 });
