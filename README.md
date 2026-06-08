@@ -150,7 +150,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `PUBLIC_URL`           | no       | Full public origin embedded in `/help` and the skill zip. Defaults to `https://${HOST_DOMAIN}`.     |
 | `TRAFILATURA_URL`      | no       | URL of the Trafilatura sidecar's `/extract` endpoint. Unset → skip Trafilatura, Readability only.    |
 | `PLAYWRIGHT_URL`       | no       | URL of the Playwright sidecar's `/render` endpoint. Unset → skip Playwright fallback for JS pages.   |
-| `MARKITDOWN_URL`       | no       | URL of the MarkItDown sidecar's `/convert` endpoint. Unset → document-conversion path disabled; `POST /api/file` returns `503`. |
+| `MARKITDOWN_URL`       | no       | URL of the MarkItDown sidecar's `/convert` endpoint. Unset → document-conversion path disabled; `POST /api/file` returns `502`. |
 | `REDDIT_CLIENT_ID`     | no       | OAuth credentials for Reddit. Without them, PullMD uses the public JSON API (lower rate limit).     |
 | `REDDIT_CLIENT_SECRET` | no       |                                                                                                      |
 | `REDDIT_USER_AGENT`    | no       | Reddit requires a unique UA. Default: `PullMD/1.0 (URL-to-Markdown service)`.                       |
@@ -390,7 +390,7 @@ for it.
 | `GET /api?url=…`       | Markdown (or JSON / plain text via `format=`). Also handles direct links to documents (PDF, Office, EPUB, …) when the markitdown sidecar is configured. |
 | `GET /api/stream?url=…`| Server-Sent Events stream of extraction-stage status, ending in a `result` event. Used by the PWA. |
 | `POST /api/html`       | Convert a local/raw HTML document (body = HTML, max 10 MB). Never cached — no history entry, no share link. |
-| `POST /api/file`       | Convert an uploaded document (multipart `file` field, max 50 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`). |
+| `POST /api/file`       | Convert an uploaded document (raw file bytes in body; set `Content-Type` to the file's MIME type; filename via `X-Filename` header or `?filename=`; max 25 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`). |
 | `GET /s/:id`           | Cached Markdown by share id; refreshes from source if > 1 h old.                 |
 | `GET /api/history`     | Recent conversions (JSON).                                                       |
 | `GET /api/archive`     | Paginated full archive.                                                          |
@@ -445,15 +445,16 @@ When the markitdown sidecar is running (set `MARKITDOWN_URL=http://markitdown:80
   ```
   PullMD detects the document content type and routes it through the sidecar automatically.
 
-- **By upload** — POST a file directly (multipart/form-data, max 50 MB):
+- **By upload** — POST the raw file bytes as the request body (max 25 MB):
   ```
   POST /api/file
-  Content-Type: multipart/form-data
-  # field name: file
+  Content-Type: application/pdf        # the file's MIME type
+  X-Filename: report.pdf               # URI-encoded; or use ?filename=
+  # body: raw file bytes
   ```
   The PWA supports both drag-and-drop and a file picker (desktop and mobile) for the same path.
 
-If `MARKITDOWN_URL` is unset, document links fall back to the standard HTML extraction pipeline and `POST /api/file` returns `503`.
+If `MARKITDOWN_URL` is unset, document links fall back to the standard HTML extraction pipeline and `POST /api/file` returns `502`.
 
 The default `docker-compose.yml` includes the `markitdown` sidecar with `MARKITDOWN_URL` pre-wired. To opt out, remove the `markitdown` service block and unset the env var.
 
