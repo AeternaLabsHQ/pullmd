@@ -435,7 +435,7 @@ for it.
 
 When the markitdown sidecar is running (set `MARKITDOWN_URL=http://markitdown:8003/convert`), PullMD can convert document files to Markdown in addition to web pages.
 
-**Supported formats:** PDF, DOCX/DOC, PPTX/PPT, XLSX/XLS, EPUB, ZIP (contents listed), CSV, JSON, XML.
+**Supported formats:** PDF, DOCX, PPTX, XLSX/XLS, EPUB, ZIP (contents listed), CSV, JSON, XML.
 
 **Two ways to convert documents:**
 

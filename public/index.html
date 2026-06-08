@@ -1279,7 +1279,7 @@
         <kbd>Enter</kbd>
       </p>
       <label class="drop-open">
-        <input type="file" id="html-file-input" accept=".html,.htm,.pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.epub,.zip,.csv,.json,.xml,text/html,application/pdf" hidden>
+        <input type="file" id="html-file-input" accept=".html,.htm,text/html" hidden>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
         <span class="aff-drag" data-i18n="drop.affordance">… oder HTML-Datei ziehen oder öffnen</span>
         <span class="aff-open" data-i18n="drop.affordanceOpen">… oder HTML-Datei öffnen</span>
@@ -1985,7 +1985,7 @@
       var dragDepth = 0;
 
       // Documents markitdown handles from bytes. Gated on /api/config.
-      var DOC_EXT_RE = /\.(pdf|docx?|pptx?|xlsx?|epub|zip|csv|json|xml)$/i;
+      var DOC_EXT_RE = /\.(pdf|docx|pptx|xlsx?|epub|zip|csv|json|xml)$/i;
       var markitdownEnabled = false;
       fetch('/api/config').then(function (r) { return r.json(); })
         .then(function (c) {
@@ -1998,6 +1998,8 @@
             var affOpen = document.querySelector('.aff-open');
             if (affOpen) affOpen.setAttribute('data-i18n', 'drop.affordanceOpenDoc');
             window.PullMD.setLang(window.PullMD.getLang());
+            var picker = document.getElementById('html-file-input');
+            if (picker) picker.accept = '.html,.htm,.pdf,.docx,.pptx,.xls,.xlsx,.epub,.zip,.csv,.json,.xml,text/html,application/pdf';
           }
         })
         .catch(function () {});
