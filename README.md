@@ -21,7 +21,7 @@ Chromium (Playwright sidecar) before extracting.
 
 It ships as:
 
-- a **PWA frontend** with raw/rendered view toggle, dark/paper themes, history, archive, share links, and drag-and-drop conversion of local HTML files
+- a **PWA frontend** with raw/rendered view toggle, dark/paper themes, history, archive, share links, and conversion of local HTML files (drag-and-drop on desktop, file picker on desktop and mobile)
 - a **REST API** at `GET /api?url=…`
 - an **MCP server** at `POST /mcp` (Streamable-HTTP transport, stateless)
 - a **Claude Code skill** as a downloadable zip

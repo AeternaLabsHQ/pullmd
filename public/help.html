@@ -533,8 +533,8 @@ Then: claude mcp list to verify.</pre>
     <!-- ===================================================== -->
     <section id="local-html">
       <h2><span lang="de">Lokale HTML-Dateien</span><span lang="en">Local HTML files</span><span class="kicker">POST /api/html</span></h2>
-      <p lang="de">Bereits gespeicherte Seiten ("Seite speichern unter", SingleFile-Exports) lassen sich direkt konvertieren: einfach die <code>.html</code>-Datei per Drag-and-Drop auf die PullMD-Oberfläche ziehen - oder per API:</p>
-      <p lang="en">Already-saved pages ("Save Page As", SingleFile exports) can be converted directly: just drag-and-drop the <code>.html</code> file onto the PullMD UI - or via the API:</p>
+      <p lang="de">Bereits gespeicherte Seiten ("Seite speichern unter", SingleFile-Exports) lassen sich direkt konvertieren: die <code>.html</code>-Datei auf die PullMD-Oberfläche ziehen (Desktop) oder den gestrichelten Hinweis unter dem URL-Feld antippen, um eine Datei zu wählen (Desktop + Mobile) - oder per API:</p>
+      <p lang="en">Already-saved pages ("Save Page As", SingleFile exports) can be converted directly: drag-and-drop the <code>.html</code> file onto the PullMD UI (desktop) or tap the dashed hint below the URL field to pick a file (desktop and mobile) - or via the API:</p>
       <pre>curl -s -X POST --data-binary @page.html \
   -H 'Content-Type: text/html' \
   "__PULLMD_URL__/api/html?filename=page.html"</pre>
