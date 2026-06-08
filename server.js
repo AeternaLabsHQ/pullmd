@@ -1,6 +1,6 @@
 import express from 'express';
 import { extractPost, normalizeRedditUrl } from './lib/reddit.js';
-import { extractWeb, extractHtml } from './lib/web.js';
+import { extractWeb, extractHtml, extractFile } from './lib/web.js';
 import { createCache } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
 import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
@@ -60,6 +60,7 @@ export function createApp(overrides = {}) {
   const extract = overrides.extractPost || extractPost;
   const extractWebFn = overrides.extractWeb || extractWeb;
   const extractHtmlFn = overrides.extractHtml || extractHtml;
+  const extractFileFn = overrides.extractFile || extractFile;
   const cache = overrides.cache || null;
   const auth = overrides.auth || null;
   const oauth = overrides.oauth || null;
@@ -469,6 +470,63 @@ export function createApp(overrides = {}) {
     }
   });
 
+  // Convert an uploaded document (PDF/Office/EPUB/ZIP/CSV/JSON/XML) via the
+  // markitdown sidecar. Same privacy model as /api/html: no cache.put (no
+  // history, no share link), telemetry logs a constant placeholder.
+  const MAX_FILE_BYTES = '25mb';
+  app.post('/api/file', gate, express.raw({ type: () => true, limit: MAX_FILE_BYTES }), async (req, res) => {
+    const { format, frontmatter } = req.query;
+    let filename = req.query.filename;
+    const filenameHeader = req.headers['x-filename'];
+    if (filenameHeader) {
+      try { filename = decodeURIComponent(filenameHeader); } catch { filename = filenameHeader; }
+    }
+    const contentType = req.headers['content-type'] || 'application/octet-stream';
+    const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
+
+    if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+      return res.status(400).json({ error: 'Send the raw file bytes in the request body. / Sende die rohen Datei-Bytes im Request-Body.' });
+    }
+
+    const client = detectClient(req.headers['user-agent'], req.headers['x-client-mode'] || req.query.client_mode);
+    const t0 = Date.now();
+
+    try {
+      const result = await extractFileFn(req.body, { filename, contentType });
+
+      const fm = wantFrontmatter
+        ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId: null })
+        : '';
+      const finalMd = fm + result.markdown;
+
+      res.set('X-Source', result.source);
+      if (result.metadata?.quality !== undefined) {
+        res.set('X-Quality', String(result.metadata.quality));
+      }
+      if (cache) cache.logExtraction({
+        url: 'local-file',
+        source: result.source,
+        quality: result.metadata?.quality,
+        markdownLen: result.markdown.length,
+        extractorReason: null,
+        durationMs: Date.now() - t0,
+        client, cached: false,
+      });
+      if (format === 'json') {
+        return res.json({ markdown: finalMd, metadata: result.metadata || null, source: result.source, shareId: null });
+      }
+      if (format === 'text') {
+        res.set('Content-Type', 'text/plain; charset=utf-8');
+        return res.send(stripMarkdown(finalMd));
+      }
+      res.set('Content-Type', 'text/markdown; charset=utf-8');
+      return res.send(finalMd);
+    } catch (err) {
+      console.error('File conversion error:', err);
+      return res.status(502).json({ error: `Failed to convert file: ${err.message}` });
+    }
+  });
+
   app.get('/api/stream', gate, async (req, res) => {
     const { url, comments, comment_depth, comment_limit, frontmatter, lang, nocache, render, extractor } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
@@ -677,9 +735,9 @@ export function createApp(overrides = {}) {
   // 10 MB cap; other routes (e.g. /mcp at 1 MB) get the generic message.
   app.use((err, req, res, next) => {
     if (err?.type === 'entity.too.large') {
-      const error = req.path === '/api/html'
-        ? 'File too large (max 10 MB). / Datei zu groß (max. 10 MB).'
-        : 'Request body too large. / Anfrage zu groß.';
+      let error = 'Request body too large. / Anfrage zu groß.';
+      if (req.path === '/api/html') error = 'File too large (max 10 MB). / Datei zu groß (max. 10 MB).';
+      else if (req.path === '/api/file') error = 'File too large (max 25 MB). / Datei zu groß (max. 25 MB).';
       return res.status(413).json({ error });
     }
     next(err);
