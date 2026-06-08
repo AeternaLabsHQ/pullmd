@@ -941,9 +941,15 @@ describe('DISABLE_PUBLIC_HISTORY', () => {
 
   it('exposes the flag via /api/config', async () => {
     const off = await request(createApp({ disablePublicHistory: false }), '/api/config');
-    assert.deepEqual(JSON.parse(off.body), { disablePublicHistory: false, authMode: 'disabled', authMisconfigured: false });
+    const offBody = JSON.parse(off.body);
+    assert.equal(offBody.disablePublicHistory, false);
+    assert.equal(offBody.authMode, 'disabled');
+    assert.equal(offBody.authMisconfigured, false);
     const on = await request(createApp({ disablePublicHistory: true }), '/api/config');
-    assert.deepEqual(JSON.parse(on.body), { disablePublicHistory: true, authMode: 'disabled', authMisconfigured: false });
+    const onBody = JSON.parse(on.body);
+    assert.equal(onBody.disablePublicHistory, true);
+    assert.equal(onBody.authMode, 'disabled');
+    assert.equal(onBody.authMisconfigured, false);
   });
 
   it('reads DISABLE_PUBLIC_HISTORY=true from env when no override given', async () => {
@@ -982,5 +988,25 @@ describe('DISABLE_PUBLIC_HISTORY', () => {
     const offApp = createApp({ disablePublicHistory: false });
     const offRes = await request(offApp, '/');
     assert.ok(offRes.body.includes('window.__PULLMD_DISABLE_HISTORY__ = false'), 'expected flag=false in html');
+  });
+});
+
+describe('GET /api/config - markitdown flag', () => {
+  it('reports markitdown:false when MARKITDOWN_URL is unset', async () => {
+    const prev = process.env.MARKITDOWN_URL;
+    delete process.env.MARKITDOWN_URL;
+    const app = createApp({});
+    const res = await request(app, '/api/config');
+    assert.equal(JSON.parse(res.body).markitdown, false);
+    if (prev !== undefined) process.env.MARKITDOWN_URL = prev;
+  });
+
+  it('reports markitdown:true when MARKITDOWN_URL is set', async () => {
+    const prev = process.env.MARKITDOWN_URL;
+    process.env.MARKITDOWN_URL = 'http://markitdown:8003/convert';
+    const app = createApp({});
+    const res = await request(app, '/api/config');
+    assert.equal(JSON.parse(res.body).markitdown, true);
+    if (prev === undefined) delete process.env.MARKITDOWN_URL; else process.env.MARKITDOWN_URL = prev;
   });
 });

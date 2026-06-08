@@ -678,6 +678,7 @@ export function createApp(overrides = {}) {
       disablePublicHistory,
       authMode: auth ? auth.mode : 'disabled',
       authMisconfigured: !!auth?.isMisconfigured,
+      markitdown: !!process.env.MARKITDOWN_URL,
     });
   });
 
