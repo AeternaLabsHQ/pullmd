@@ -1279,7 +1279,7 @@
         <kbd>Enter</kbd>
       </p>
       <label class="drop-open">
-        <input type="file" id="html-file-input" accept=".html,.htm,text/html" hidden>
+        <input type="file" id="html-file-input" accept=".html,.htm,.pdf,.docx,.doc,.pptx,.ppt,.xlsx,.xls,.epub,.csv,.json,.xml,text/html,application/pdf" hidden>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
         <span class="aff-drag" data-i18n="drop.affordance">… oder HTML-Datei ziehen oder öffnen</span>
         <span class="aff-open" data-i18n="drop.affordanceOpen">… oder HTML-Datei öffnen</span>
@@ -1422,6 +1422,7 @@
           'drop.affordanceOpen': '… oder HTML-Datei öffnen',
           'err.notHtml':       'Nur HTML-Dateien (.html, .htm) werden unterstützt.',
           'err.fileTooLarge':  'Datei zu groß (max. 10 MB).',
+          'err.fileTooLargeDoc': 'Datei zu groß (max. 25 MB).',
           'badge.chars':       '{n} chars',
           'badge.charsK':      '{n}k chars',
           'badge.comments':    '{shown}/{total} comments',
@@ -1473,6 +1474,7 @@
           'drop.affordanceOpen': '… or open an HTML file',
           'err.notHtml':       'Only HTML files (.html, .htm) are supported.',
           'err.fileTooLarge':  'File too large (max 10 MB).',
+          'err.fileTooLargeDoc': 'File too large (max 25 MB).',
           'badge.chars':       '{n} chars',
           'badge.charsK':      '{n}k chars',
           'badge.comments':    '{shown}/{total} comments',
@@ -1976,6 +1978,13 @@
       var dropOverlay = document.getElementById('drop-overlay');
       var dragDepth = 0;
 
+      // Documents markitdown handles from bytes. Gated on /api/config.
+      var DOC_EXT_RE = /\.(pdf|docx?|pptx?|xlsx?|epub|zip|csv|json|xml)$/i;
+      var markitdownEnabled = false;
+      fetch('/api/config').then(function (r) { return r.json(); })
+        .then(function (c) { markitdownEnabled = !!c.markitdown; })
+        .catch(function () {});
+
       function dragHasFiles(e) {
         var types = e.dataTransfer && e.dataTransfer.types;
         if (!types) return false;
@@ -1985,6 +1994,11 @@
       function isHtmlFile(file) {
         if (file.type === 'text/html' || file.type === 'application/xhtml+xml') return true;
         return /\.html?$/i.test(file.name || '');
+      }
+
+      function isDocFile(file) {
+        if (!markitdownEnabled) return false;
+        return DOC_EXT_RE.test(file.name || '');
       }
 
       window.addEventListener('dragenter', function (e) {
@@ -2008,9 +2022,15 @@
         e.preventDefault();
         if (!e.dataTransfer.files || !e.dataTransfer.files.length) return;
         var file = e.dataTransfer.files[0];
-        if (!isHtmlFile(file)) { showError(t('err.notHtml')); return; }
-        if (file.size > 10 * 1024 * 1024) { showError(t('err.fileTooLarge')); return; }
-        convertHtmlFile(file);
+        if (isHtmlFile(file)) {
+          if (file.size > 10 * 1024 * 1024) { showError(t('err.fileTooLarge')); return; }
+          convertHtmlFile(file);
+        } else if (isDocFile(file)) {
+          if (file.size > 25 * 1024 * 1024) { showError(t('err.fileTooLargeDoc')); return; }
+          convertBinaryFile(file);
+        } else {
+          showError(t('err.notHtml'));
+        }
       });
 
       function convertHtmlFile(file) {
@@ -2053,6 +2073,42 @@
         reader.readAsText(file);
       }
 
+      function convertBinaryFile(file) {
+        if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
+        pushOpenState();
+        showLoading();
+        var reader = new FileReader();
+        reader.onerror = function () { showError(t('err.network')); };
+        reader.onload = async function () {
+          try {
+            var params = new URLSearchParams({ format: 'json' });
+            if (frontmatterToggle.checked) params.set('frontmatter', 'true');
+            var res = await fetch('/api/file?' + params.toString(), {
+              method: 'POST',
+              headers: {
+                'Content-Type': file.type || 'application/octet-stream',
+                'X-Client-Mode': clientMode,
+                'X-Filename': encodeURIComponent(file.name),
+              },
+              body: reader.result,
+            });
+            if (!res.ok) {
+              if (res.status === 401) { location.href = '/login?next=' + encodeURIComponent('/'); return; }
+              var msg = t('err.unknown', { code: res.status });
+              try { var body = await res.json(); if (body.error) msg = body.error; } catch (_) {}
+              showError(msg);
+              return;
+            }
+            var d = await res.json();
+            if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
+            showResult(d.markdown, d.source || '', '');
+          } catch (err) {
+            showError(t('err.network'));
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
       // --- File picker: same conversion path as drop, works on mobile + desktop (#28) ---
       var htmlFileInput = document.getElementById('html-file-input');
       if (htmlFileInput) {
@@ -2060,9 +2116,15 @@
           var file = htmlFileInput.files && htmlFileInput.files[0];
           htmlFileInput.value = '';   // reset so re-picking the same file fires change
           if (!file) return;
-          if (!isHtmlFile(file)) { showError(t('err.notHtml')); return; }
-          if (file.size > 10 * 1024 * 1024) { showError(t('err.fileTooLarge')); return; }
-          convertHtmlFile(file);
+          if (isHtmlFile(file)) {
+            if (file.size > 10 * 1024 * 1024) { showError(t('err.fileTooLarge')); return; }
+            convertHtmlFile(file);
+          } else if (isDocFile(file)) {
+            if (file.size > 25 * 1024 * 1024) { showError(t('err.fileTooLargeDoc')); return; }
+            convertBinaryFile(file);
+          } else {
+            showError(t('err.notHtml'));
+          }
         });
       }
 
