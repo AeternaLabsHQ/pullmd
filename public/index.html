@@ -1986,10 +1986,13 @@
 
       // Documents markitdown handles from bytes. Gated on /api/config.
       var DOC_EXT_RE = /\.(pdf|docx|pptx|xlsx?|epub|zip|csv|json|xml)$/i;
+      var MEDIA_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|tiff?|mp3|wav|m4a|ogg|flac|aac)$/i;
       var markitdownEnabled = false;
+      var markitdownMediaEnabled = false;
       fetch('/api/config').then(function (r) { return r.json(); })
         .then(function (c) {
           markitdownEnabled = !!c.markitdown;
+          markitdownMediaEnabled = !!c.markitdownMedia;
           if (markitdownEnabled) {
             var hint = document.querySelector('#drop-overlay .drop-box');
             if (hint) hint.setAttribute('data-i18n', 'drop.hintDoc');
@@ -2000,6 +2003,10 @@
             window.PullMD.setLang(window.PullMD.getLang());
             var picker = document.getElementById('html-file-input');
             if (picker) picker.accept = '.html,.htm,.pdf,.docx,.pptx,.xls,.xlsx,.epub,.zip,.csv,.json,.xml,text/html,application/pdf';
+          }
+          if (markitdownMediaEnabled) {
+            var mpicker = document.getElementById('html-file-input');
+            if (mpicker) mpicker.accept += ',.png,.jpg,.jpeg,.gif,.webp,.mp3,.wav,.m4a,.ogg,.flac,image/*,audio/*';
           }
         })
         .catch(function () {});
@@ -2016,8 +2023,9 @@
       }
 
       function isDocFile(file) {
-        if (!markitdownEnabled) return false;
-        return DOC_EXT_RE.test(file.name || '');
+        if (markitdownEnabled && DOC_EXT_RE.test(file.name || '')) return true;
+        if (markitdownMediaEnabled && MEDIA_EXT_RE.test(file.name || '')) return true;
+        return false;
       }
 
       window.addEventListener('dragenter', function (e) {
