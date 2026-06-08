@@ -817,3 +817,46 @@ describe('extractWeb - gated media routing', () => {
     if (prev === undefined) delete process.env.MARKITDOWN_MEDIA; else process.env.MARKITDOWN_MEDIA = prev;
   });
 });
+
+describe('extractWeb - YouTube routing', () => {
+  function ytFetch() {
+    return async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
+      arrayBuffer: async () => Buffer.from('<html><head><title>Vid - YouTube</title></head><body>p</body></html>').buffer,
+    });
+  }
+
+  it('routes youtu.be with normalized sourceUrl + format opts when enabled', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'true';
+    let received;
+    const result = await extractWeb('https://youtu.be/abc123', {
+      fetch: ytFetch(), ytTimecodes: 'plain', ytChunk: 0,
+      youtubeClient: async (html, o) => { received = o; return { markdown: '## Transcript\n\nhello', title: 'My Video', fields: { channel: 'Chan', duration: '12:34', views: '1000' } }; },
+    });
+    assert.equal(result.source, 'youtube');
+    assert.equal(received.sourceUrl, 'https://www.youtube.com/watch?v=abc123');
+    assert.equal(received.timecodes, 'plain');
+    assert.equal(received.chunk, 0);
+    assert.ok(result.markdown.includes('# My Video'));
+    assert.ok(result.markdown.includes('Chan'));
+    assert.equal(result.metadata.author, 'Chan');
+    if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
+  });
+
+  it('falls back to the HTML pipeline when the youtube sidecar is down', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'true';
+    const result = await extractWeb('https://www.youtube.com/watch?v=abc123', { fetch: ytFetch(), youtubeClient: async () => null });
+    assert.notEqual(result.source, 'youtube');
+    if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
+  });
+
+  it('does NOT route YouTube when disabled', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; delete process.env.MARKITDOWN_YOUTUBE;
+    let called = false;
+    const result = await extractWeb('https://www.youtube.com/watch?v=abc123', { fetch: ytFetch(), youtubeClient: async () => { called = true; return { markdown: 'x', title: 'x' }; } });
+    assert.equal(called, false);
+    assert.notEqual(result.source, 'youtube');
+    if (prev !== undefined) process.env.MARKITDOWN_YOUTUBE = prev;
+  });
+});
