@@ -64,6 +64,7 @@ services:
       - PUBLIC_URL=${PUBLIC_URL:-http://localhost:${PORT:-3000}}
       - TRAFILATURA_URL=http://trafilatura:8001/extract
       - PLAYWRIGHT_URL=http://playwright:8002/render
+      - MARKITDOWN_URL=http://markitdown:8003/convert
       - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
       - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
       - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-}
@@ -74,6 +75,7 @@ services:
     depends_on:
       - trafilatura
       - playwright
+      - markitdown
 
   trafilatura:
     image: aeternalabshq/pullmd-trafilatura:latest
@@ -89,6 +91,13 @@ services:
     networks:
       - pullmd-internal
 
+  markitdown:
+    image: aeternalabshq/pullmd-markitdown:latest
+    container_name: pullmd-markitdown
+    restart: unless-stopped
+    networks:
+      - pullmd-internal
+
 networks:
   pullmd-internal:
     driver: bridge
@@ -100,7 +109,11 @@ networks:
 > `playwright` service block off, and PullMD silently degrades to
 > static extraction with a fallback note in the metadata.
 
-> **Mirror on GHCR:** `ghcr.io/aeternalabshq/{pullmd,pullmd-trafilatura,pullmd-playwright}`.
+> **Note:** the MarkItDown sidecar is optional. Leave `MARKITDOWN_URL` unset
+> and remove the `markitdown` service block to disable document conversion.
+> Web-page URLs always work without it.
+
+> **Mirror on GHCR:** `ghcr.io/aeternalabshq/{pullmd,pullmd-trafilatura,pullmd-playwright,pullmd-markitdown}`.
 > Replace the `image:` lines if you prefer GitHub's registry.
 
 ### Behind Traefik
@@ -137,6 +150,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `PUBLIC_URL`           | no       | Full public origin embedded in `/help` and the skill zip. Defaults to `https://${HOST_DOMAIN}`.     |
 | `TRAFILATURA_URL`      | no       | URL of the Trafilatura sidecar's `/extract` endpoint. Unset → skip Trafilatura, Readability only.    |
 | `PLAYWRIGHT_URL`       | no       | URL of the Playwright sidecar's `/render` endpoint. Unset → skip Playwright fallback for JS pages.   |
+| `MARKITDOWN_URL`       | no       | URL of the MarkItDown sidecar's `/convert` endpoint. Unset → document-conversion path disabled; `POST /api/file` returns `503`. |
 | `REDDIT_CLIENT_ID`     | no       | OAuth credentials for Reddit. Without them, PullMD uses the public JSON API (lower rate limit).     |
 | `REDDIT_CLIENT_SECRET` | no       |                                                                                                      |
 | `REDDIT_USER_AGENT`    | no       | Reddit requires a unique UA. Default: `PullMD/1.0 (URL-to-Markdown service)`.                       |
@@ -373,9 +387,10 @@ for it.
 
 | Endpoint               | Returns                                                                          |
 | ---------------------- | -------------------------------------------------------------------------------- |
-| `GET /api?url=…`       | Markdown (or JSON / plain text via `format=`).                                   |
+| `GET /api?url=…`       | Markdown (or JSON / plain text via `format=`). Also handles direct links to documents (PDF, Office, EPUB, …) when the markitdown sidecar is configured. |
 | `GET /api/stream?url=…`| Server-Sent Events stream of extraction-stage status, ending in a `result` event. Used by the PWA. |
 | `POST /api/html`       | Convert a local/raw HTML document (body = HTML, max 10 MB). Never cached — no history entry, no share link. |
+| `POST /api/file`       | Convert an uploaded document (multipart `file` field, max 50 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`). |
 | `GET /s/:id`           | Cached Markdown by share id; refreshes from source if > 1 h old.                 |
 | `GET /api/history`     | Recent conversions (JSON).                                                       |
 | `GET /api/archive`     | Paginated full archive.                                                          |
@@ -416,6 +431,34 @@ for it.
 
 ---
 
+## Document conversion
+
+When the markitdown sidecar is running (set `MARKITDOWN_URL=http://markitdown:8003/convert`), PullMD can convert document files to Markdown in addition to web pages.
+
+**Supported formats:** PDF, DOCX/DOC, PPTX/PPT, XLSX/XLS, EPUB, ZIP (contents listed), CSV, JSON, XML.
+
+**Two ways to convert documents:**
+
+- **By URL** — pass a direct document link to the regular API:
+  ```
+  GET /api?url=https://example.com/report.pdf
+  ```
+  PullMD detects the document content type and routes it through the sidecar automatically.
+
+- **By upload** — POST a file directly (multipart/form-data, max 50 MB):
+  ```
+  POST /api/file
+  Content-Type: multipart/form-data
+  # field name: file
+  ```
+  The PWA supports both drag-and-drop and a file picker (desktop and mobile) for the same path.
+
+If `MARKITDOWN_URL` is unset, document links fall back to the standard HTML extraction pipeline and `POST /api/file` returns `503`.
+
+The default `docker-compose.yml` includes the `markitdown` sidecar with `MARKITDOWN_URL` pre-wired. To opt out, remove the `markitdown` service block and unset the env var.
+
+---
+
 ## Architecture
 
 - `server.js` — Express app factory (`createApp`) with dependency injection for tests. Exposes `/api` and `/api/stream` (SSE).
@@ -429,6 +472,8 @@ for it.
 - `lib/distrib.js` — Public-URL substitution in `/help` and `/web-reader.zip`.
 - `trafilatura-sidecar/` — Python sidecar (FastAPI) wrapping Trafilatura.
 - `playwright-sidecar/` — Python sidecar (FastAPI + Playwright + Chromium) for JS-rendered pages.
+- `markitdown-sidecar/` — Python sidecar (FastAPI) wrapping MarkItDown for document conversion (PDF, Office, EPUB, …).
+- `lib/markitdown-client.js` — HTTP client for the markitdown sidecar.
 - `public/` — PWA frontend (vanilla JS, dark/paper themes, service worker, EventSource client for `/api/stream`).
 - `skill/web-reader/` — Claude Code skill source (templated with `__PULLMD_URL__`).
 

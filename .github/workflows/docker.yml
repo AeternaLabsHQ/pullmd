@@ -37,6 +37,11 @@ jobs:
             dockerfile: ./playwright-sidecar/Dockerfile
             readme: ./playwright-sidecar/README.md
             short: "Headless Chromium renderer sidecar for PullMD — handles JavaScript-rendered pages."
+          - name: pullmd-markitdown
+            context: ./markitdown-sidecar
+            dockerfile: ./markitdown-sidecar/Dockerfile
+            readme: ./markitdown-sidecar/README.md
+            short: "MarkItDown document-conversion sidecar for PullMD — converts PDF, Office, EPUB, and more."
     steps:
       - uses: actions/checkout@v4
 
