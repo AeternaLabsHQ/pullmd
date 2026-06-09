@@ -49,4 +49,11 @@ describe('abortController', () => {
     assert.equal(signal.aborted, true);
     cleanup();
   });
+
+  it('cleanup prevents the timeout from firing', async () => {
+    const { signal, cleanup } = abortController({}, 20);
+    cleanup();
+    await new Promise(r => setTimeout(r, 40));
+    assert.equal(signal.aborted, false);
+  });
 });
