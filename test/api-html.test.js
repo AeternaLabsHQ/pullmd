@@ -86,12 +86,14 @@ describe('POST /api/html - happy paths', () => {
   });
 
   it('converts real HTML end-to-end (no override)', async () => {
+    const prev = process.env.PULLMD_SOURCE_HEADER; process.env.PULLMD_SOURCE_HEADER = 'true';
     const app = createApp({});
     const html = `<html><head><title>E2E</title></head><body><article><p>${LONG_PARAGRAPH}</p></article></body></html>`;
     const res = await post(app, '/api/html?filename=e2e.html', html);
     assert.equal(res.status, 200);
     assert.ok(res.body.includes('Main content paragraph'));
     assert.ok(res.body.includes('**e2e.html**'));
+    if (prev === undefined) delete process.env.PULLMD_SOURCE_HEADER; else process.env.PULLMD_SOURCE_HEADER = prev;
   });
 
   it('prefers the X-Filename header (URI-encoded) over the query param', async () => {

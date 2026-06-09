@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWeb, extractFile } from '../lib/web.js';
+import { extractWeb, extractFile, extractHtml } from '../lib/web.js';
 import { matchRecipesAgainst } from '../lib/recipes.js';
 
 // Single-fetch: extractWeb makes exactly ONE request per call.
@@ -310,6 +310,7 @@ describe('extractWeb - error handling', () => {
 
 describe('extractWeb - output format', () => {
   it('includes title and domain in header', async () => {
+    const prev = process.env.PULLMD_SOURCE_HEADER; process.env.PULLMD_SOURCE_HEADER = 'true';
     const html = `
       <html><head>
         <title>Great Article</title>
@@ -327,6 +328,7 @@ describe('extractWeb - output format', () => {
     const result = await extractWeb('https://example.com/article', { fetch: fetcher });
     assert.ok(result.markdown.includes('# Great Article'));
     assert.ok(result.markdown.includes('example.com'));
+    if (prev === undefined) delete process.env.PULLMD_SOURCE_HEADER; else process.env.PULLMD_SOURCE_HEADER = prev;
   });
 });
 
@@ -709,6 +711,7 @@ describe('extractWeb - markitdown document routing', () => {
   }
 
   it('routes application/pdf to the markitdown client and tags source=markitdown', async () => {
+    const prev = process.env.PULLMD_SOURCE_HEADER; process.env.PULLMD_SOURCE_HEADER = 'true';
     let received;
     const markitdownClient = async (buf, o) => { received = { len: buf.length, ...o }; return { markdown: 'PDF body text here, long enough.', title: 'My PDF' }; };
     const result = await extractWeb('https://example.com/doc.pdf?token=abc', { fetch: pdfFetch(), markitdownClient });
@@ -718,6 +721,7 @@ describe('extractWeb - markitdown document routing', () => {
     assert.ok(result.markdown.includes('example.com'));
     assert.equal(received.contentType, 'application/pdf');
     assert.equal(received.filename, 'doc.pdf');
+    if (prev === undefined) delete process.env.PULLMD_SOURCE_HEADER; else process.env.PULLMD_SOURCE_HEADER = prev;
   });
 
   it('routes by URL extension when content-type is octet-stream', async () => {
@@ -755,6 +759,7 @@ describe('extractWeb - markitdown document routing', () => {
 
 describe('extractFile - local document upload', () => {
   it('converts bytes via markitdown and shows the filename in the header', async () => {
+    const prev = process.env.PULLMD_SOURCE_HEADER; process.env.PULLMD_SOURCE_HEADER = 'true';
     const result = await extractFile(Buffer.from('PDFBYTES'), {
       filename: 'report.pdf',
       contentType: 'application/pdf',
@@ -766,6 +771,7 @@ describe('extractFile - local document upload', () => {
     assert.ok(!result.markdown.includes('http'));   // no source URL for local files
     assert.equal(result.metadata.sourceUrl, null);
     assert.ok(result.metadata.contentLength > 0);
+    if (prev === undefined) delete process.env.PULLMD_SOURCE_HEADER; else process.env.PULLMD_SOURCE_HEADER = prev;
   });
 
   it('throws when the sidecar is unavailable', async () => {
@@ -884,5 +890,26 @@ describe('extractWeb - LLM usage metadata', () => {
     assert.equal(result.metadata.llmTokens, 123);
     assert.equal(result.metadata.imageSize, '172x178');
     if (prev === undefined) delete process.env.MARKITDOWN_MEDIA; else process.env.MARKITDOWN_MEDIA = prev;
+  });
+});
+
+describe('formatHeader - clean body (default) vs legacy', () => {
+  it('default body is just the H1 title (no domain/date/url line)', async () => {
+    const prev = process.env.PULLMD_SOURCE_HEADER; delete process.env.PULLMD_SOURCE_HEADER;
+    const html = '<html><head><title>T</title></head><body><article><p>Plenty of real article body text well over the two hundred character minimum so Readability keeps it as the main content of this page for certain, yes indeed it does.</p></article></body></html>';
+    const r = await extractHtml(html, { url: 'https://example.com/x' });
+    assert.ok(r.markdown.startsWith('# T'));
+    assert.ok(!r.markdown.includes('example.com'), 'no domain line in clean body');
+    assert.ok(!r.markdown.includes('https://example.com/x'), 'no url line in clean body');
+    if (prev !== undefined) process.env.PULLMD_SOURCE_HEADER = prev;
+  });
+
+  it('PULLMD_SOURCE_HEADER=true restores the legacy domain/url header', async () => {
+    const prev = process.env.PULLMD_SOURCE_HEADER; process.env.PULLMD_SOURCE_HEADER = 'true';
+    const html = '<html><head><title>T</title></head><body><article><p>Plenty of real article body text well over the two hundred character minimum so Readability keeps it as the main content of this page for certain, yes indeed it does.</p></article></body></html>';
+    const r = await extractHtml(html, { url: 'https://example.com/x' });
+    assert.ok(r.markdown.includes('example.com'));
+    assert.ok(r.markdown.includes('https://example.com/x'));
+    if (prev === undefined) delete process.env.PULLMD_SOURCE_HEADER; else process.env.PULLMD_SOURCE_HEADER = prev;
   });
 });

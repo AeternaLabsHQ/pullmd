@@ -27,9 +27,11 @@ describe('extractHtml - basic conversion (no URL)', () => {
   });
 
   it('uses the filename in the header and renders no link line', async () => {
+    const prev = process.env.PULLMD_SOURCE_HEADER; process.env.PULLMD_SOURCE_HEADER = 'true';
     const result = await extractHtml(ARTICLE_HTML, { filename: 'saved-article.html' });
     assert.ok(result.markdown.includes('**saved-article.html**'));
     assert.ok(!result.markdown.includes('http'), 'header must not contain a link');
+    if (prev === undefined) delete process.env.PULLMD_SOURCE_HEADER; else process.env.PULLMD_SOURCE_HEADER = prev;
   });
 
   it('sets metadata.sourceUrl to null and exposes contentLength', async () => {
@@ -49,10 +51,12 @@ describe('extractHtml - basic conversion (no URL)', () => {
 
 describe('extractHtml - with original URL', () => {
   it('renders the standard linked header and sourceUrl', async () => {
+    const prev = process.env.PULLMD_SOURCE_HEADER; process.env.PULLMD_SOURCE_HEADER = 'true';
     const result = await extractHtml(ARTICLE_HTML, { url: 'https://www.example.com/post' });
     assert.ok(result.markdown.includes('**example.com**'));
     assert.ok(result.markdown.includes('https://www.example.com/post'));
     assert.equal(result.metadata.sourceUrl, 'https://www.example.com/post');
+    if (prev === undefined) delete process.env.PULLMD_SOURCE_HEADER; else process.env.PULLMD_SOURCE_HEADER = prev;
   });
 
   it('applies matching recipes only when a URL is provided', async () => {
