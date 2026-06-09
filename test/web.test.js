@@ -957,3 +957,26 @@ describe('media routing → Node LLM layer', () => {
     assert.equal(r.source, 'markitdown');
   });
 });
+
+describe('extractWeb - media null-fallthrough single body read (regression)', () => {
+  it('image URL with no provider falls through to normal extraction without double-reading the body', async () => {
+    const sv = process.env.PULLMD_VISION_API_KEY; delete process.env.PULLMD_VISION_API_KEY;
+    const html = '<html><head><title>Img Page</title></head><body><article><p>'
+      + 'Plenty of real article text well over the two hundred character minimum so Readability keeps this as the main content of the page, yes indeed it certainly does for sure.'
+      + '</p></article></body></html>';
+    let reads = 0;
+    const bytes = Buffer.from(html);
+    const onceFetch = async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/png' : null) },
+      arrayBuffer: async () => {
+        if (reads++ > 0) throw new TypeError('body used already');
+        return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+      },
+    });
+    // image content-type, captionFn returns null (no provider) → must fall through, not crash
+    const r = await extractWeb('https://example.com/pic.png', { fetch: onceFetch, captionFn: async () => null });
+    assert.ok(r.markdown.startsWith('# '));
+    if (sv === undefined) delete process.env.PULLMD_VISION_API_KEY; else process.env.PULLMD_VISION_API_KEY = sv;
+  });
+});
