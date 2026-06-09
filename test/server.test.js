@@ -1093,3 +1093,25 @@ describe('GET /api - YouTube format params', () => {
     assert.ok(res.body.includes('views: 1000'));
   });
 });
+
+describe('GET /api - LLM usage + meta frontmatter', () => {
+  it('emits llm token + model + image_size in frontmatter for media source', async () => {
+    const app = createApp({ extractWeb: async () => ({ markdown: '# I\n\ncaption', title: 'I', source: 'markitdown', metadata: { quality: 0.8, sourceUrl: 'https://e/p.jpg', llmModel: 'gpt-4o-mini', llmTokens: 123, imageSize: '172x178' } }) });
+    const res = await request(app, '/api?url=https://e/p.jpg&frontmatter=true');
+    assert.ok(res.body.includes('llm_model: gpt-4o-mini'));
+    assert.ok(res.body.includes('llm_tokens: 123'));
+    assert.ok(res.body.includes('image_size: 172x178'));
+  });
+  it('emits audio_seconds for transcription results', async () => {
+    const app = createApp({ extractWeb: async () => ({ markdown: '# A\n\nx', title: 'A', source: 'markitdown', metadata: { quality: 0.8, sourceUrl: 'https://e/a.mp3', llmModel: 'whisper-1', audioSeconds: 12.3 } }) });
+    const res = await request(app, '/api?url=https://e/a.mp3&frontmatter=true');
+    assert.ok(res.body.includes('audio_seconds: 12.3'));
+    assert.ok(res.body.includes('llm_model: whisper-1'));
+  });
+  it('emits NO meta in the body or without frontmatter', async () => {
+    const app = createApp({ extractWeb: async () => ({ markdown: '# I\n\ncaption', title: 'I', source: 'markitdown', metadata: { quality: 0.8, llmModel: 'gpt-4o-mini', llmTokens: 123 } }) });
+    const res = await request(app, '/api?url=https://e/p.jpg');
+    assert.ok(!res.body.includes('llm_model'), 'no meta without frontmatter');
+    assert.ok(!res.body.includes('llm_tokens'));
+  });
+});

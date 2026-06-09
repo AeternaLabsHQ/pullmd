@@ -367,10 +367,17 @@ export function createApp(overrides = {}) {
       const finalMd = fm + result.markdown;
 
       let outMd = finalMd;
-      if (wantFrontmatter && result.source === 'youtube') {
+      if (wantFrontmatter && (result.source === 'youtube' || result.source === 'markitdown')) {
+        const m = result.metadata || {};
         outMd = mergeFrontmatter(outMd, [
-          ['duration', result.metadata?.ytDuration],
-          ['views', result.metadata?.ytViews],
+          ['duration', m.ytDuration],
+          ['views', m.ytViews],
+          ['image_size', m.imageSize],
+          ['audio_seconds', m.audioSeconds],
+          ['llm_model', m.llmModel],
+          ['llm_tokens', m.llmTokens],
+          ['llm_prompt_tokens', m.llmPromptTokens],
+          ['llm_completion_tokens', m.llmCompletionTokens],
         ]);
       }
 
@@ -653,10 +660,17 @@ export function createApp(overrides = {}) {
       const finalMd = fm + result.markdown;
 
       let outMd = finalMd;
-      if (wantFrontmatter && result.source === 'youtube') {
+      if (wantFrontmatter && (result.source === 'youtube' || result.source === 'markitdown')) {
+        const m = result.metadata || {};
         outMd = mergeFrontmatter(outMd, [
-          ['duration', result.metadata?.ytDuration],
-          ['views', result.metadata?.ytViews],
+          ['duration', m.ytDuration],
+          ['views', m.ytViews],
+          ['image_size', m.imageSize],
+          ['audio_seconds', m.audioSeconds],
+          ['llm_model', m.llmModel],
+          ['llm_tokens', m.llmTokens],
+          ['llm_prompt_tokens', m.llmPromptTokens],
+          ['llm_completion_tokens', m.llmCompletionTokens],
         ]);
       }
 
