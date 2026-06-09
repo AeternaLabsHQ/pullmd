@@ -40,4 +40,15 @@ describe('captionImage', () => {
     await assert.rejects(() => captionImage(PNG, { mimetype: 'image/png', fetch: async () => ({ ok: false, status: 422, json: async () => ({}) }) }), /captioning failed/);
     restore(s);
   });
+
+  it('falls back to image/jpeg data-uri when mimetype is missing', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_VISION_BASE_URL; delete process.env.PULLMD_VISION_MODEL; delete process.env.PULLMD_LLM_API_KEY;
+    let captured;
+    const fetchFn = async (url, opts) => { captured = { url, opts }; return { ok: true, json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; };
+    await captionImage(PNG, { fetch: fetchFn }); // no mimetype
+    assert.equal(captured.url, 'https://api.openai.com/v1/chat/completions'); // default base
+    const sent = JSON.parse(captured.opts.body);
+    assert.ok(sent.messages[0].content[1].image_url.url.startsWith('data:image/jpeg;base64,'));
+    restore(s);
+  });
 });
