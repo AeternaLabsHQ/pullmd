@@ -21,6 +21,7 @@
     "better-sqlite3": "^12.6.2",
     "cheerio": "^1.2.0",
     "express": "^5.2.1",
+    "image-size": "^2.0.2",
     "jose": "^6.2.3",
     "linkedom": "^0.18.12",
     "node-html-markdown": "^2.0.0",
