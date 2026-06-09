@@ -215,7 +215,7 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api', gate, async (req, res) => {
-    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor, yt_timecodes, yt_chunk } = req.query;
+    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor, yt_timecodes, yt_chunk, pdf } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const reqLang = lang === 'en' ? 'en' : 'de';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura' || extractor === 'playwright')
@@ -354,6 +354,7 @@ export function createApp(overrides = {}) {
         extractor: validExtractor,
         ytTimecodes: validYtTimecodes,
         ytChunk: validYtChunk,
+        pdfOcr: pdf === 'ocr',
       });
 
       let shareId = null;
@@ -367,13 +368,14 @@ export function createApp(overrides = {}) {
       const finalMd = fm + result.markdown;
 
       let outMd = finalMd;
-      if (wantFrontmatter && ['youtube', 'markitdown', 'image-caption', 'audio-transcript'].includes(result.source)) {
+      if (wantFrontmatter && ['youtube', 'markitdown', 'image-caption', 'audio-transcript', 'pdf-ocr'].includes(result.source)) {
         const m = result.metadata || {};
         outMd = mergeFrontmatter(outMd, [
           ['duration', m.ytDuration],
           ['views', m.ytViews],
           ['image_size', m.imageSize],
           ['audio_seconds', m.audioSeconds],
+          ['pdf_pages', m.pdfPages],
           ['llm_model', m.llmModel],
           ['llm_tokens', m.llmTokens],
           ['llm_prompt_tokens', m.llmPromptTokens],
@@ -495,7 +497,7 @@ export function createApp(overrides = {}) {
   // history, no share link), telemetry logs a constant placeholder.
   const MAX_FILE_BYTES = '25mb';
   app.post('/api/file', gate, express.raw({ type: () => true, limit: MAX_FILE_BYTES }), async (req, res) => {
-    const { format, frontmatter } = req.query;
+    const { format, frontmatter, pdf } = req.query;
     let filename = req.query.filename;
     const filenameHeader = req.headers['x-filename'];
     if (filenameHeader) {
@@ -512,7 +514,7 @@ export function createApp(overrides = {}) {
     const t0 = Date.now();
 
     try {
-      const result = await extractFileFn(req.body, { filename, contentType });
+      const result = await extractFileFn(req.body, { filename, contentType, pdfOcr: pdf === 'ocr' });
 
       const fm = wantFrontmatter
         ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId: null })
@@ -520,12 +522,13 @@ export function createApp(overrides = {}) {
       const finalMd = fm + result.markdown;
 
       let outMd = finalMd;
-      const MEDIA_SOURCES = new Set(['markitdown', 'image-caption', 'audio-transcript']);
+      const MEDIA_SOURCES = new Set(['markitdown', 'image-caption', 'audio-transcript', 'pdf-ocr']);
       if (wantFrontmatter && MEDIA_SOURCES.has(result.source)) {
         const m = result.metadata || {};
         outMd = mergeFrontmatter(outMd, [
           ['image_size', m.imageSize],
           ['audio_seconds', m.audioSeconds],
+          ['pdf_pages', m.pdfPages],
           ['llm_model', m.llmModel],
           ['llm_tokens', m.llmTokens],
           ['llm_prompt_tokens', m.llmPromptTokens],
@@ -563,7 +566,7 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api/stream', gate, async (req, res) => {
-    const { url, comments, comment_depth, comment_limit, frontmatter, lang, nocache, render, extractor, yt_timecodes, yt_chunk } = req.query;
+    const { url, comments, comment_depth, comment_limit, frontmatter, lang, nocache, render, extractor, yt_timecodes, yt_chunk, pdf } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const reqLang = lang === 'en' ? 'en' : 'de';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura' || extractor === 'playwright')
@@ -659,6 +662,7 @@ export function createApp(overrides = {}) {
         extractor: validExtractor,
         ytTimecodes: validYtTimecodes,
         ytChunk: validYtChunk,
+        pdfOcr: pdf === 'ocr',
         emit,
         signal: ac.signal,
       });
@@ -674,13 +678,14 @@ export function createApp(overrides = {}) {
       const finalMd = fm + result.markdown;
 
       let outMd = finalMd;
-      if (wantFrontmatter && ['youtube', 'markitdown', 'image-caption', 'audio-transcript'].includes(result.source)) {
+      if (wantFrontmatter && ['youtube', 'markitdown', 'image-caption', 'audio-transcript', 'pdf-ocr'].includes(result.source)) {
         const m = result.metadata || {};
         outMd = mergeFrontmatter(outMd, [
           ['duration', m.ytDuration],
           ['views', m.ytViews],
           ['image_size', m.imageSize],
           ['audio_seconds', m.audioSeconds],
+          ['pdf_pages', m.pdfPages],
           ['llm_model', m.llmModel],
           ['llm_tokens', m.llmTokens],
           ['llm_prompt_tokens', m.llmPromptTokens],
@@ -735,6 +740,7 @@ export function createApp(overrides = {}) {
       markitdown: !!process.env.MARKITDOWN_URL,
       vision: !!(process.env.PULLMD_VISION_API_KEY || process.env.PULLMD_LLM_API_KEY),
       stt: !!(process.env.PULLMD_STT_API_KEY || process.env.PULLMD_LLM_API_KEY),
+      pdfOcr: !!(process.env.PULLMD_PDF_OCR_API_KEY || process.env.PULLMD_LLM_API_KEY),
       markitdownYoutube: !!process.env.MARKITDOWN_YOUTUBE,
     });
   });

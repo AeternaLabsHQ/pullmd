@@ -1116,6 +1116,47 @@ describe('GET /api/config - markitdownYoutube flag', () => {
   });
 });
 
+describe('GET /api/config - pdfOcr flag', () => {
+  it('reports pdfOcr:true when PULLMD_PDF_OCR_API_KEY is set', async () => {
+    const prevOcr = process.env.PULLMD_PDF_OCR_API_KEY;
+    const prevLlm = process.env.PULLMD_LLM_API_KEY;
+    process.env.PULLMD_PDF_OCR_API_KEY = 'test-ocr-key';
+    delete process.env.PULLMD_LLM_API_KEY;
+    const res = await request(createApp({}), '/api/config');
+    assert.equal(JSON.parse(res.body).pdfOcr, true);
+    if (prevOcr === undefined) delete process.env.PULLMD_PDF_OCR_API_KEY; else process.env.PULLMD_PDF_OCR_API_KEY = prevOcr;
+    if (prevLlm !== undefined) process.env.PULLMD_LLM_API_KEY = prevLlm;
+  });
+
+  it('reports pdfOcr:false when neither PULLMD_PDF_OCR_API_KEY nor PULLMD_LLM_API_KEY is set', async () => {
+    const prevOcr = process.env.PULLMD_PDF_OCR_API_KEY;
+    const prevLlm = process.env.PULLMD_LLM_API_KEY;
+    delete process.env.PULLMD_PDF_OCR_API_KEY;
+    delete process.env.PULLMD_LLM_API_KEY;
+    const res = await request(createApp({}), '/api/config');
+    assert.equal(JSON.parse(res.body).pdfOcr, false);
+    if (prevOcr !== undefined) process.env.PULLMD_PDF_OCR_API_KEY = prevOcr;
+    if (prevLlm !== undefined) process.env.PULLMD_LLM_API_KEY = prevLlm;
+  });
+});
+
+describe('GET /api - pdf-ocr frontmatter', () => {
+  it('emits pdf_pages and source:pdf-ocr in frontmatter for pdf-ocr source', async () => {
+    const app = createApp({
+      extractWeb: async () => ({
+        markdown: '# doc.pdf\n\n| a | b |',
+        title: 'doc.pdf',
+        source: 'pdf-ocr',
+        metadata: { quality: 0.6, sourceUrl: 'https://example.com/doc.pdf', pdfPages: 2, llmModel: 'mistral-ocr-latest' },
+      }),
+    });
+    const res = await request(app, '/api?url=https://example.com/doc.pdf&pdf=ocr&frontmatter=true');
+    assert.ok(res.body.startsWith('---\n'));
+    assert.ok(res.body.includes('source: pdf-ocr'), 'expected source: pdf-ocr in frontmatter');
+    assert.ok(res.body.includes('pdf_pages:'), 'expected pdf_pages in frontmatter');
+  });
+});
+
 describe('GET /api - YouTube format params', () => {
   it('forwards yt_timecodes/yt_chunk to extractWeb and bypasses cache', async () => {
     let opts;

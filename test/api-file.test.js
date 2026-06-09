@@ -107,6 +107,22 @@ describe('POST /api/file - happy paths', () => {
     assert.ok(resFm.body.includes('llm_model:'), 'expected llm_model in frontmatter');
   });
 
+  it('sets X-Source: pdf-ocr and emits pdf_pages + llm_model in frontmatter when ?pdf=ocr', async () => {
+    const FAKE_PDF_OCR = {
+      markdown: '# doc.pdf\n\n| a | b |',
+      title: 'doc.pdf',
+      source: 'pdf-ocr',
+      metadata: { quality: 0.6, pdfPages: 3, llmModel: 'mistral-ocr-latest' },
+    };
+    const app = createApp({ extractFile: async () => FAKE_PDF_OCR });
+    const resPlain = await postFile(app, '/api/file?pdf=ocr', Buffer.from('%PDF-1.4'));
+    assert.equal(resPlain.headers['x-source'], 'pdf-ocr');
+
+    const resFm = await postFile(app, '/api/file?pdf=ocr&frontmatter=true', Buffer.from('%PDF-1.4'));
+    assert.ok(resFm.body.includes('pdf_pages:'), 'expected pdf_pages in frontmatter');
+    assert.ok(resFm.body.includes('llm_model:'), 'expected llm_model in frontmatter');
+  });
+
   it('sets X-Source: audio-transcript and emits audio_seconds + llm_model in frontmatter for audio source', async () => {
     const FAKE_AUDIO = {
       markdown: '# clip.mp3\n\n### Audio Transcript\n\nHello.',
