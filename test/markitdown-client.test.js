@@ -19,7 +19,7 @@ describe('convertViaMarkitdown', () => {
       filename: 'a b.pdf',
       fetch: fetchFn,
     });
-    assert.deepEqual(out, { markdown: '# Doc\n\nhi', title: 'Doc' });
+    assert.deepEqual(out, { markdown: '# Doc\n\nhi', title: 'Doc', usage: null, audioSeconds: null, imageSize: null });
     assert.equal(captured.url, 'http://markitdown:8003/convert');
     assert.equal(captured.opts.method, 'POST');
     assert.equal(captured.opts.headers['Content-Type'], 'application/pdf');

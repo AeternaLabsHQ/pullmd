@@ -860,3 +860,25 @@ describe('extractWeb - YouTube routing', () => {
     if (prev !== undefined) process.env.MARKITDOWN_YOUTUBE = prev;
   });
 });
+
+describe('extractWeb - LLM usage metadata', () => {
+  function imgFetch() {
+    return async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
+      arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
+    });
+  }
+  it('maps sidecar usage/imageSize into metadata (media)', async () => {
+    const prev = process.env.MARKITDOWN_MEDIA; process.env.MARKITDOWN_MEDIA = 'true';
+    const result = await extractWeb('https://example.com/p.jpg', {
+      fetch: imgFetch(),
+      markitdownClient: async () => ({ markdown: '## Description\n\na caption', title: 'P', usage: { model: 'gpt-4o-mini', total_tokens: 123 }, imageSize: '172x178' }),
+    });
+    assert.equal(result.source, 'markitdown');
+    assert.equal(result.metadata.llmModel, 'gpt-4o-mini');
+    assert.equal(result.metadata.llmTokens, 123);
+    assert.equal(result.metadata.imageSize, '172x178');
+    if (prev === undefined) delete process.env.MARKITDOWN_MEDIA; else process.env.MARKITDOWN_MEDIA = prev;
+  });
+});
