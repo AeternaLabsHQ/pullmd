@@ -11,6 +11,7 @@ NOT use markitdown's built-in audio path (it silently calls Google).
 Without credentials: images → EXIF metadata only, audio → metadata only,
 no third-party calls.
 """
+import base64
 import io
 import os
 from urllib.parse import unquote, urlparse, parse_qs
@@ -273,7 +274,6 @@ async def convert(request: Request):
 
     # Image → direct vision caption (only when a vision client is configured).
     if _is_image(mimetype, filename) and _vision_client:
-        import base64
         img_mime = mimetype if (mimetype or "").startswith("image/") else "image/jpeg"
         data_uri = "data:" + img_mime + ";base64," + base64.b64encode(body).decode("ascii")
         size = None

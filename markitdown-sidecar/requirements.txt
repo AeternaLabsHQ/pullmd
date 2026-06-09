@@ -3,3 +3,4 @@ uvicorn[standard]==0.32.0
 markitdown[pptx,docx,xlsx,xls,pdf,outlook]==0.1.2
 openai==1.59.2
 youtube-transcript-api~=1.2.0
+Pillow>=10.4
