@@ -901,7 +901,7 @@ describe('formatHeader - clean body (default) vs legacy', () => {
     assert.ok(r.markdown.startsWith('# T'));
     assert.ok(!r.markdown.includes('example.com'), 'no domain line in clean body');
     assert.ok(!r.markdown.includes('https://example.com/x'), 'no url line in clean body');
-    if (prev !== undefined) process.env.PULLMD_SOURCE_HEADER = prev;
+    if (prev === undefined) delete process.env.PULLMD_SOURCE_HEADER; else process.env.PULLMD_SOURCE_HEADER = prev;
   });
 
   it('PULLMD_SOURCE_HEADER=true restores the legacy domain/url header', async () => {

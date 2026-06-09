@@ -27,7 +27,7 @@ function postFile(app, path, body, headers = {}) {
 }
 
 const FAKE = {
-  markdown: '# Report\n\n**report.pdf** · 2026-06-08\n\nConverted body.',
+  markdown: '# Report\n\nConverted body.',
   title: 'Report', source: 'markitdown',
   metadata: { title: 'Report', sourceUrl: null, quality: 0.8, contentLength: 400 },
 };
