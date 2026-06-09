@@ -36,8 +36,9 @@ describe('ocrPdf', () => {
   it('sends a plain document_url when given a url (no download)', async () => {
     const s = save(); process.env.PULLMD_PDF_OCR_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
     let captured;
-    await ocrPdf({ url: 'https://example.com/doc.pdf', fetch: async (u, o) => { captured = o; return { ok: true, json: async () => ({ pages: [{ markdown: 'x' }] }) }; } });
-    assert.equal(JSON.parse(captured.body).document.document_url, 'https://example.com/doc.pdf');
+    await ocrPdf({ url: 'https://example.com/doc.pdf', fetch: async (u, o) => { captured = { url: u, opts: o }; return { ok: true, json: async () => ({ pages: [{ markdown: 'x' }] }) }; } });
+    assert.ok(captured.url.endsWith('/ocr'));
+    assert.equal(JSON.parse(captured.opts.body).document.document_url, 'https://example.com/doc.pdf');
     restore(s);
   });
 
