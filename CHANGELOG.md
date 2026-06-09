@@ -13,7 +13,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ### Breaking
 
-- **Clean markdown body by default.** The inline source-attribution line (`**domain** · fetched` + url, or `**filename** · fetched` for local files) is no longer emitted in the response body. The body now starts with `# Title` and goes straight into content. Source URL, domain, and fetch date are unaffected - they remain in the YAML frontmatter as before. Set `PULLMD_SOURCE_HEADER=true` to restore the legacy inline header verbatim. Self-hosters upgrading from v2.x should review `MIGRATION.md`.
+- **Clean markdown body by default.** The inline source-attribution line (`**domain** · fetched` + url, or `**filename** · fetched` for local files) is no longer emitted in the response body. The body now starts with `# Title` and goes straight into content. The source URL, fetch date, and all extraction metadata are unaffected - they remain in the YAML frontmatter as before. Set `PULLMD_SOURCE_HEADER=true` to restore the legacy inline header verbatim. Self-hosters upgrading from v2.x should review `MIGRATION.md`.
 
 ### Added
 

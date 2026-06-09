@@ -6,7 +6,7 @@ v3.0.0 is a major release with one breaking change to the response body format. 
 
 The inline source-attribution line that previously appeared at the top of the body (`**domain** · fetched` + url, or `**filename** · fetched` for local uploads) is no longer emitted. The body now opens with `# Title` and goes straight into content.
 
-Source URL, domain, and fetch date are still available - unchanged - in the YAML frontmatter (`source`, `domain`, `fetched`). No frontmatter fields were removed.
+The source URL, fetch date, and all extraction metadata are still available - unchanged - in the YAML frontmatter (e.g. `url`, `fetched`, `source`, `quality`). No frontmatter fields were removed.
 
 **Keep the old behavior:** add `PULLMD_SOURCE_HEADER=true` to your `.env`. The legacy inline header is restored verbatim. No other configuration changes are needed.
 
