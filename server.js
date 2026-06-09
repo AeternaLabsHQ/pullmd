@@ -5,7 +5,7 @@ import { createCache } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
 import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
 import { qualityScore } from './lib/scoring.js';
-import { buildFrontmatter, mergeFrontmatter } from './lib/frontmatter.js';
+import { buildFrontmatter, mergeFrontmatter, validateFrontmatterFields } from './lib/frontmatter.js';
 import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
@@ -825,6 +825,7 @@ if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
           ? path.resolve(process.cwd(), 'data/site-recipes.json')
           : null);
   loadRecipes({ defaultPath: defaultRecipesPath, userPath: userRecipesPath });
+  validateFrontmatterFields();
 
   // Hash recipe content; if changed since last boot, invalidate cache.
   const recipesHash = computeRecipesHash([defaultRecipesPath, userRecipesPath].filter(Boolean));

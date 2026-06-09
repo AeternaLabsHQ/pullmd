@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFrontmatter } from '../lib/frontmatter.js';
+import { buildFrontmatter, mergeFrontmatter, KNOWN_FRONTMATTER_FIELDS, validateFrontmatterFields } from '../lib/frontmatter.js';
 
 describe('buildFrontmatter', () => {
   it('emits a YAML block with delimiters and trailing blank line', () => {
@@ -72,5 +72,64 @@ describe('buildFrontmatter', () => {
     const out = buildFrontmatter({ title: 'X' }, { source: 'reddit', shareId: 'abc12345' });
     assert.match(out, /source: reddit/);
     assert.match(out, /share_id: abc12345/);
+  });
+});
+
+describe('PULLMD_FRONTMATTER_FIELDS allowlist', () => {
+  const save = () => process.env.PULLMD_FRONTMATTER_FIELDS;
+  const restore = (p) => { if (p === undefined) delete process.env.PULLMD_FRONTMATTER_FIELDS; else process.env.PULLMD_FRONTMATTER_FIELDS = p; };
+
+  it('emits all fields when unset OR empty', () => {
+    const p = save();
+    delete process.env.PULLMD_FRONTMATTER_FIELDS;
+    let fm = buildFrontmatter({ title: 'T', sourceUrl: 'https://e/x', quality: 0.9 }, { source: 'web' });
+    assert.ok(fm.includes('title:') && fm.includes('url:') && fm.includes('source:') && fm.includes('quality:'));
+    process.env.PULLMD_FRONTMATTER_FIELDS = '';   // empty == unset == all
+    fm = buildFrontmatter({ title: 'T', sourceUrl: 'https://e/x', quality: 0.9 }, { source: 'web' });
+    assert.ok(fm.includes('title:') && fm.includes('quality:'));
+    restore(p);
+  });
+
+  it('emits only allowlisted fields when set', () => {
+    const p = save(); process.env.PULLMD_FRONTMATTER_FIELDS = 'title,source';
+    const fm = buildFrontmatter({ title: 'T', sourceUrl: 'https://e/x', quality: 0.9, author: 'A' }, { source: 'web' });
+    assert.ok(fm.includes('title:') && fm.includes('source:'));
+    assert.ok(!fm.includes('url:') && !fm.includes('quality:') && !fm.includes('author:'));
+    restore(p);
+  });
+
+  it('mergeFrontmatter respects the allowlist', () => {
+    const p = save(); process.env.PULLMD_FRONTMATTER_FIELDS = 'title';
+    const merged = mergeFrontmatter(buildFrontmatter({ title: 'T' }, { source: 'youtube' }), [['duration', '12:34'], ['views', '1000']]);
+    assert.ok(!merged.includes('duration:') && !merged.includes('views:'));
+    restore(p);
+  });
+
+  it('all-unknown names → falls back to ALL fields (not empty)', () => {
+    const p = save(); process.env.PULLMD_FRONTMATTER_FIELDS = 'titel,sauce';   // typos
+    const fm = buildFrontmatter({ title: 'T', sourceUrl: 'https://e/x', quality: 0.9 }, { source: 'web' });
+    assert.ok(fm.includes('title:') && fm.includes('url:') && fm.includes('quality:'), 'fallback to all');
+    restore(p);
+  });
+
+  it('valid field with no value this result → no empty block', () => {
+    const p = save(); process.env.PULLMD_FRONTMATTER_FIELDS = 'llm_tokens';   // valid name, but no LLM usage here
+    const fm = buildFrontmatter({ title: 'T', sourceUrl: 'https://e/x' }, { source: 'web' });
+    assert.equal(fm, '', 'no fields to emit → empty string, not "---\\n---"');
+    restore(p);
+  });
+
+  it('validateFrontmatterFields warns on unknown names, silent when all valid/unset', () => {
+    const warns = [];
+    const warn = (m) => warns.push(m);
+    validateFrontmatterFields({ PULLMD_FRONTMATTER_FIELDS: 'title,bogus,views' }, warn);
+    assert.equal(warns.length, 1);
+    assert.ok(warns[0].includes('bogus'));
+    warns.length = 0;
+    validateFrontmatterFields({ PULLMD_FRONTMATTER_FIELDS: 'title,views' }, warn);
+    validateFrontmatterFields({}, warn);
+    assert.equal(warns.length, 0);
+    // KNOWN set sanity:
+    assert.ok(KNOWN_FRONTMATTER_FIELDS.has('llm_tokens') && KNOWN_FRONTMATTER_FIELDS.has('title'));
   });
 });
