@@ -144,7 +144,7 @@ npm test              # node --test
 
 All variables go in `.env` (copy from `.env.example`):
 
-> **v3.0.0 output format change:** the markdown body is clean by default - just `# Title` followed by content. Source URL, domain, and fetch date moved to the YAML frontmatter (unchanged). Set `PULLMD_SOURCE_HEADER=true` to restore the old inline header. Use `PULLMD_FRONTMATTER_FIELDS` to pick which frontmatter fields are emitted (handy for trimming tokens in agent pipelines).
+> **v3.0.0 output format change:** the markdown body is clean by default - just `# Title` followed by content. The source URL, fetch date, and all extraction metadata remain in the YAML frontmatter unchanged - the body no longer duplicates them. Set `PULLMD_SOURCE_HEADER=true` to restore the old inline header. Use `PULLMD_FRONTMATTER_FIELDS` to pick which frontmatter fields are emitted (handy for trimming tokens in agent pipelines).
 
 | Variable               | Required | Purpose                                                                                              |
 | ---------------------- | -------- | ---------------------------------------------------------------------------------------------------- |

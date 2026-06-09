@@ -25,7 +25,7 @@ image: aeternalabshq/pullmd:2.6.0
 image: aeternalabshq/pullmd:3.0.0
 ```
 
-The MarkItDown sidecar is optional and only needed if you use document conversion, image captioning, audio transcription, or YouTube transcript features. Existing sidecar versions are compatible.
+The MarkItDown sidecar is optional and only needed if you use document conversion, image captioning, audio transcription, or YouTube transcript features. No sidecar update is required for v3.0.0 - the markitdown sidecar API is unchanged.
 
 ## Rolling back to v2.x
 
