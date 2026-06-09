@@ -1,17 +1,4 @@
-"""MarkItDown HTTP sidecar for PullMD: documents → Markdown.
-
-Optional media tier (opt-in, env-gated), per-modality OpenAI-compatible:
-  - Vision (image captions): MARKITDOWN_VISION_* (fallback MARKITDOWN_LLM_*)
-  - Speech-to-text (audio):  MARKITDOWN_STT_*    (fallback MARKITDOWN_LLM_*)
-
-Each backend is an OpenAI-compatible base_url — point it at a cloud provider
-or a fully-local server (faster-whisper-server, LocalAI, Ollama, ...). We do
-NOT use markitdown's built-in audio path (it silently calls Google).
-
-Without credentials: images → EXIF metadata only, audio → metadata only,
-no third-party calls.
-"""
-import base64
+"""MarkItDown HTTP sidecar for PullMD: documents → Markdown."""
 import io
 import os
 from urllib.parse import unquote, urlparse, parse_qs
@@ -22,8 +9,6 @@ from fastapi import FastAPI, Request, HTTPException
 from markitdown import MarkItDown, StreamInfo
 
 MAX_BODY_BYTES = 50 * 1024 * 1024  # 50 MB
-WHISPER_MAX_BYTES = 25 * 1024 * 1024  # OpenAI transcription hard limit
-IMAGE_MAX_BYTES = 20 * 1024 * 1024  # vision API rejects very large images
 
 YT_LANGS = [s.strip() for s in os.environ.get("MARKITDOWN_YT_LANGS", "").split(",") if s.strip()]
 YT_PROXY = os.environ.get("MARKITDOWN_YT_PROXY")
@@ -33,71 +18,9 @@ try:
 except ValueError:
     YT_CHUNK_DEFAULT = 30
 
-
-def _env(*names, default=None):
-    """First non-empty env var among names, else default."""
-    for n in names:
-        v = os.environ.get(n)
-        if v:
-            return v
-    return default
-
-
-VISION_API_KEY = _env("MARKITDOWN_VISION_API_KEY", "MARKITDOWN_LLM_API_KEY")
-VISION_BASE_URL = _env("MARKITDOWN_VISION_BASE_URL", "MARKITDOWN_LLM_BASE_URL")
-VISION_MODEL = _env("MARKITDOWN_VISION_MODEL", "MARKITDOWN_LLM_MODEL", default="gpt-4o-mini")
-
-STT_API_KEY = _env("MARKITDOWN_STT_API_KEY", "MARKITDOWN_LLM_API_KEY")
-STT_BASE_URL = _env("MARKITDOWN_STT_BASE_URL", "MARKITDOWN_LLM_BASE_URL")
-STT_MODEL = _env("MARKITDOWN_STT_MODEL", "MARKITDOWN_TRANSCRIBE_MODEL", default="whisper-1")
-
 app = FastAPI(title="markitdown-sidecar")
 
-
-def _make_client(base_url, api_key):
-    if not api_key:
-        return None
-    from openai import OpenAI
-    return OpenAI(base_url=base_url, api_key=api_key) if base_url else OpenAI(api_key=api_key)
-
-
-_vision_client = _make_client(VISION_BASE_URL, VISION_API_KEY)
-_stt_client = _make_client(STT_BASE_URL, STT_API_KEY)
-
 md = MarkItDown(enable_plugins=False)
-
-AUDIO_EXT = {"mp3", "wav", "m4a", "ogg", "flac", "aac", "webm", "mpga", "mpeg"}
-
-
-def _is_audio(mimetype, filename):
-    if mimetype and mimetype.startswith("audio/"):
-        return True
-    if filename and "." in filename:
-        return filename.rsplit(".", 1)[-1].lower() in AUDIO_EXT
-    return False
-
-
-IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"}
-
-
-def _is_image(mimetype, filename):
-    if mimetype and mimetype.startswith("image/"):
-        return True
-    if filename and "." in filename:
-        return filename.rsplit(".", 1)[-1].lower() in IMAGE_EXT
-    return False
-
-
-def _usage_dict(usage, model):
-    out = {}
-    if model:
-        out["model"] = model
-    if usage is not None:
-        for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
-            v = getattr(usage, k, None)
-            if v is not None:
-                out[k] = v
-    return out or None
 
 
 def _yt_video_id(url):
@@ -226,7 +149,7 @@ def _humanize_iso_duration(iso):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "vision": _vision_client is not None, "stt": _stt_client is not None}
+    return {"ok": True}
 
 
 @app.post("/convert")
@@ -247,69 +170,7 @@ async def convert(request: Request):
     content_type = request.headers.get("content-type")
     mimetype = content_type.split(";")[0].strip() if content_type else None
 
-    # Audio → OpenAI-compatible transcription (only when STT is configured).
-    if _is_audio(mimetype, filename) and _stt_client:
-        if len(body) > WHISPER_MAX_BYTES:
-            raise HTTPException(status_code=413, detail="audio too large for transcription (max 25 MB)")
-        audio_name = filename or "audio.mp3"
-        is_whisper = STT_MODEL.startswith("whisper")
-        try:
-            kwargs = {"model": STT_MODEL, "file": (audio_name, io.BytesIO(body))}
-            if is_whisper:
-                kwargs["response_format"] = "verbose_json"   # adds duration
-            tr = _stt_client.audio.transcriptions.create(**kwargs)
-            text = (getattr(tr, "text", "") or "").strip()
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=422, detail="transcription failed") from e
-        out = {
-            "markdown": f"### Audio Transcript\n\n{text}" if text else "",
-            "title": filename or "Audio",
-        }
-        seconds = getattr(tr, "duration", None)
-        if seconds is not None:
-            out["audio_seconds"] = round(float(seconds), 1)
-        vu = _usage_dict(getattr(tr, "usage", None), STT_MODEL)
-        if vu:
-            out["usage"] = vu
-        return out
-
-    # Image → direct vision caption (only when a vision client is configured).
-    if _is_image(mimetype, filename) and _vision_client:
-        if len(body) > IMAGE_MAX_BYTES:
-            raise HTTPException(status_code=413, detail="image too large for captioning (max 20 MB)")
-        img_mime = mimetype if (mimetype or "").startswith("image/") else "image/jpeg"
-        data_uri = "data:" + img_mime + ";base64," + base64.b64encode(body).decode("ascii")
-        size = None
-        try:
-            from PIL import Image
-            with Image.open(io.BytesIO(body)) as im:
-                size = f"{im.width}x{im.height}"
-        except Exception:
-            size = None
-        try:
-            r = _vision_client.chat.completions.create(
-                model=VISION_MODEL,
-                messages=[{"role": "user", "content": [
-                    {"type": "text", "text": "Write a detailed caption describing this image."},
-                    {"type": "image_url", "image_url": {"url": data_uri}},
-                ]}],
-                max_tokens=500,
-            )
-            caption = (r.choices[0].message.content or "").strip()
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=422, detail="captioning failed") from e
-        out = {
-            "markdown": f"## Description\n\n{caption}" if caption else "",
-            "title": filename or "Image",
-        }
-        vu = _usage_dict(getattr(r, "usage", None), getattr(r, "model", None))
-        if vu:
-            out["usage"] = vu
-        if size:
-            out["image_size"] = size
-        return out
-
-    # Everything else → markitdown.
+    # Everything → markitdown document conversion.
     stream_info = StreamInfo(mimetype=mimetype, filename=filename)
     try:
         result = md.convert_stream(io.BytesIO(body), stream_info=stream_info)
