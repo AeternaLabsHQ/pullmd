@@ -153,10 +153,9 @@ All variables go in `.env` (copy from `.env.example`):
 | `TRAFILATURA_URL`      | no       | URL of the Trafilatura sidecar's `/extract` endpoint. Unset → skip Trafilatura, Readability only.    |
 | `PLAYWRIGHT_URL`       | no       | URL of the Playwright sidecar's `/render` endpoint. Unset → skip Playwright fallback for JS pages.   |
 | `MARKITDOWN_URL`       | no       | URL of the MarkItDown sidecar's `/convert` endpoint. Unset → document-conversion path disabled; `POST /api/file` returns `502`. |
-| `MARKITDOWN_MEDIA`     | no       | Set to `true` to enable image captioning and audio transcription in the markitdown sidecar. Opt-in — requires API credentials on the sidecar (see "Document conversion" below). Default: off. |
-| `MARKITDOWN_LLM_API_KEY` / `…_BASE_URL` / `…_MODEL` | no (sidecar) | Shared fallback credentials for vision + STT when `MARKITDOWN_MEDIA=true`. Point `_BASE_URL` at a local OpenAI-compatible server to keep everything on-host. |
-| `MARKITDOWN_VISION_API_KEY` / `…_BASE_URL` / `…_MODEL` | no (sidecar) | Per-modality override for image captioning. Takes precedence over the shared `LLM_*` vars when set. |
-| `MARKITDOWN_STT_API_KEY` / `…_BASE_URL` / `…_MODEL` / `MARKITDOWN_TRANSCRIBE_MODEL` | no (sidecar) | Per-modality override for audio transcription (STT). `TRANSCRIBE_MODEL` defaults to `whisper-1`. |
+| `PULLMD_VISION_API_KEY` / `…_BASE_URL` / `…_MODEL` | no | Image captioning via an OpenAI-compatible vision endpoint. Enabled when the key is set. `_MODEL` defaults to `gpt-4o-mini`. |
+| `PULLMD_STT_API_KEY` / `…_BASE_URL` / `…_MODEL` | no | Audio transcription via an OpenAI-compatible `/audio/transcriptions` endpoint. Enabled when the key is set. `_MODEL` defaults to `whisper-1`. |
+| `PULLMD_LLM_API_KEY` / `…_BASE_URL` | no | Shared fallback credentials for vision + STT when the per-modality vars are unset. |
 | `MARKITDOWN_YOUTUBE`   | no       | Set to `true` to route YouTube URLs through the markitdown sidecar (returns title + description + transcript). No API key required. Default: off. |
 | `MARKITDOWN_YT_TIMECODES` | no (sidecar) | Default timecode format in transcripts: `links` (YouTube timestamp links, default), `plain` (bare `[MM:SS]` labels), `none` (transcript text only). Overridable per-request via `?yt_timecodes=`. |
 | `MARKITDOWN_YT_CHUNK`  | no (sidecar) | Transcript block size in seconds (default `30`). `0` keeps the original per-snippet granularity. Overridable per-request via `?yt_chunk=`. |
@@ -473,24 +472,22 @@ The default `docker-compose.yml` includes the `markitdown` sidecar with `MARKITD
 
 ### Media tier (image captions + audio transcription)
 
-By default the sidecar processes images with EXIF metadata only and audio files with track metadata only — no model calls, no external traffic. Set `MARKITDOWN_MEDIA=true` on the **pullmd** service and supply credentials on the **markitdown sidecar** to unlock richer extraction:
+Image captioning and audio transcription run inside pullmd itself - the markitdown sidecar is **not** required for media features (it is only needed for document conversion). By default pullmd processes images with EXIF metadata only and audio files with track metadata only - no model calls, no external traffic. Set the relevant `PULLMD_VISION_*` or `PULLMD_STT_*` credentials to unlock richer extraction:
 
-- **Images** — a vision-capable model generates a text caption for each image, embedded in the Markdown output.
-- **Audio** — a speech-to-text model transcribes the audio; the transcript replaces the bare metadata block.
+- **Images** - a vision-capable model generates a text caption for each image, embedded in the Markdown output. Enabled when `PULLMD_VISION_API_KEY` (or the shared fallback `PULLMD_LLM_API_KEY`) is set.
+- **Audio** - a speech-to-text model transcribes the audio; the transcript replaces the bare metadata block. Enabled when `PULLMD_STT_API_KEY` (or the shared fallback `PULLMD_LLM_API_KEY`) is set.
 
-Both modalities are independently configurable. The sidecar picks up credentials from environment variables:
+Both modalities are independently configurable via `PULLMD_*` env vars on the pullmd service:
 
 | Scope | Variables |
 | ----- | --------- |
-| Shared fallback | `MARKITDOWN_LLM_API_KEY`, `MARKITDOWN_LLM_BASE_URL`, `MARKITDOWN_LLM_MODEL` (vision); `MARKITDOWN_TRANSCRIBE_MODEL` (STT) |
-| Vision override | `MARKITDOWN_VISION_API_KEY`, `MARKITDOWN_VISION_BASE_URL`, `MARKITDOWN_VISION_MODEL` |
-| STT override | `MARKITDOWN_STT_API_KEY`, `MARKITDOWN_STT_BASE_URL`, `MARKITDOWN_STT_MODEL` |
+| Vision | `PULLMD_VISION_API_KEY`, `PULLMD_VISION_BASE_URL`, `PULLMD_VISION_MODEL` (default `gpt-4o-mini`) |
+| STT | `PULLMD_STT_API_KEY`, `PULLMD_STT_BASE_URL`, `PULLMD_STT_MODEL` (default `whisper-1`) |
+| Shared fallback | `PULLMD_LLM_API_KEY`, `PULLMD_LLM_BASE_URL` (used when per-modality key is unset) |
 
-Per-modality vars override the shared `LLM_*` fallback when set. Any OpenAI-compatible endpoint works — point `*_BASE_URL` at a local server (e.g. Ollama, LM Studio) to keep everything on-host and avoid per-call cloud costs.
+Per-modality vars override the shared `LLM_*` fallback when set. Any OpenAI-compatible endpoint works - point `*_BASE_URL` at a local server (e.g. Ollama, LM Studio) to keep everything on-host and avoid per-call cloud costs.
 
 > **Note:** cloud endpoints send image and audio content to a third-party API. Use a local model server if data-residency matters.
-
-The `docker-compose.yml` in this repo passes all `MARKITDOWN_*` variables through to the sidecar automatically; they default to empty and are inert until configured.
 
 ### YouTube transcripts
 
@@ -533,7 +530,7 @@ When you request `?frontmatter=true`, media and YouTube results include usage fi
 A few things worth noting:
 
 - PullMD reports **no computed cost**. Token counts and the model name are what the sidecar receives from the upstream API; multiply by the model's per-token rate on your end.
-- Image captioning is a **direct vision call** made by the markitdown sidecar itself — MarkItDown is not involved in that step.
+- Image captioning is a **direct vision call** made by pullmd itself - MarkItDown is not involved in that step.
 - Frontmatter fields for ordinary web pages (`title`, `url`, `source`, `quality`, …) are always present when `?frontmatter=true`; the LLM fields above are additive.
 
 ---

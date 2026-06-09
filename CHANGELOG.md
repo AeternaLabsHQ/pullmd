@@ -9,6 +9,15 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking (self-hosters):** Image captioning and audio transcription now run inside pullmd, not the markitdown sidecar, so media features no longer require the markitdown container. The `MARKITDOWN_MEDIA` / `MARKITDOWN_VISION_*` / `MARKITDOWN_STT_*` / `MARKITDOWN_LLM_*` env vars are replaced by `PULLMD_VISION_*` / `PULLMD_STT_*` / `PULLMD_LLM_*` (each modality enabled when its key is set; `PULLMD_LLM_*` is a shared fallback).
+- The `source` field of converted media results is now `image-caption` / `audio-transcript` (previously `markitdown`).
+
+---
+
 ## [3.0.0] - 2026-06-09
 
 ### Breaking
@@ -19,7 +28,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 - **`PULLMD_FRONTMATTER_FIELDS` allowlist.** Comma-separated list of frontmatter field names to include in the YAML block (e.g. `title,url,source,llm_tokens`). Unset - all fields are emitted (backward-compatible). Unknown names are silently ignored with a one-time startup warning; if every listed name is unknown, the allowlist is ignored and all fields are emitted as a safe fallback.
 - **Document conversion via the MarkItDown sidecar** (`MARKITDOWN_URL`). New `POST /api/file` endpoint accepts raw document bytes (25 MB cap) for PDF, DOCX, PPTX, XLSX, EPUB, ZIP, CSV, JSON, XML, and more. Non-HTML URLs detected as documents are also routed through the sidecar automatically in `extractWeb`. If `MARKITDOWN_URL` is unset, the document path is disabled and `/api/file` returns `502`. These features were developed incrementally as versions 2.7.0-2.10.0 on the release branch but are first officially released here in 3.0.0.
-- **Opt-in media tier** (`MARKITDOWN_MEDIA=true`). Image captioning and audio transcription (Whisper STT) via per-provider or shared OpenAI-compatible credentials on the sidecar. The PWA accepts image and audio uploads when the tier is enabled. Off by default; cloud backends cost per call and send content off-host - point `*_BASE_URL` at a local server to keep everything on-host.
+- **Opt-in media tier** (`PULLMD_VISION_*` / `PULLMD_STT_*`). Image captioning and audio transcription (Whisper STT) run inside pullmd itself - no markitdown container needed. Per-modality or shared OpenAI-compatible credentials; each modality is enabled when its key is set. The PWA accepts image and audio uploads when the tier is enabled. Off by default; cloud backends cost per call and send content off-host - point `*_BASE_URL` at a local server to keep everything on-host.
 - **Keyless YouTube transcripts** (`MARKITDOWN_YOUTUBE=true`). Routes YouTube URLs through the sidecar for title + description + full transcript. No API key required. Configurable timecodes (`yt_timecodes`: `links`/`plain`/`none`), block chunking (`yt_chunk`), preferred languages, and optional proxy. All options are also overridable per-request via query params on `/api` and the MCP `read_url` tool.
 - **LLM-usage and media metadata in frontmatter.** When media or LLM features run, the response frontmatter carries `llm_model`, `llm_tokens`, `llm_prompt_tokens`, `llm_completion_tokens`, `audio_seconds`, `image_size`, and (for YouTube) `duration` and `views`. Media and channel metadata is emitted frontmatter-only - consistent with the v3 clean-body direction.
 
