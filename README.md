@@ -402,7 +402,7 @@ for it.
 | `GET /api?url=…`       | Markdown (or JSON / plain text via `format=`). Also handles direct links to documents (PDF, Office, EPUB, …) when the markitdown sidecar is configured. |
 | `GET /api/stream?url=…`| Server-Sent Events stream of extraction-stage status, ending in a `result` event. Used by the PWA. |
 | `POST /api/html`       | Convert a local/raw HTML document (body = HTML, max 10 MB). Never cached — no history entry, no share link. |
-| `POST /api/file`       | Convert an uploaded document (raw file bytes in body; set `Content-Type` to the file's MIME type; filename via `X-Filename` header or `?filename=`; max 25 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`). |
+| `POST /api/file`       | Convert an uploaded document (raw file bytes in body; set `Content-Type` to the file's MIME type; filename via `X-Filename` header or `?filename=`; max 25 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`) for document types (PDF, Office, EPUB, ...); image and audio uploads instead use the `PULLMD_VISION_*` / `PULLMD_STT_*` tier (no markitdown container needed). |
 | `GET /s/:id`           | Cached Markdown by share id; refreshes from source if > 1 h old.                 |
 | `GET /api/history`     | Recent conversions (JSON).                                                       |
 | `GET /api/archive`     | Paginated full archive.                                                          |
@@ -522,15 +522,15 @@ When you request `?frontmatter=true`, media and YouTube results include usage fi
 | `views` | YouTube | View count at time of extraction. |
 | `image_size` | Image with caption | Dimensions of the source image: `WxH` pixels. |
 | `audio_seconds` | Audio transcription | Length of the audio file in seconds. |
-| `llm_model` | Caption or transcription | Model name reported by the sidecar (e.g. `gpt-4o`, `whisper-1`). |
+| `llm_model` | Caption or transcription | Model name returned by the upstream API (e.g. `gpt-4o`, `whisper-1`). |
 | `llm_tokens` | Caption or transcription | Total tokens consumed (prompt + completion). |
 | `llm_prompt_tokens` | Vision caption | Prompt token count (vision calls only). |
 | `llm_completion_tokens` | Vision caption | Completion token count (vision calls only). |
 
 A few things worth noting:
 
-- PullMD reports **no computed cost**. Token counts and the model name are what the sidecar receives from the upstream API; multiply by the model's per-token rate on your end.
-- Image captioning is a **direct vision call** made by pullmd itself - MarkItDown is not involved in that step.
+- PullMD reports **no computed cost**. Token counts and the model name are what pullmd receives from the upstream API; multiply by the model's per-token rate on your end.
+- Image captioning and audio transcription are direct API calls made by pullmd.
 - Frontmatter fields for ordinary web pages (`title`, `url`, `source`, `quality`, …) are always present when `?frontmatter=true`; the LLM fields above are additive.
 
 ---
