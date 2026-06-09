@@ -234,7 +234,7 @@ export function createApp(overrides = {}) {
     // values actually take effect (the fresh response then overwrites the row).
     const explicitCommentParams = comment_depth !== undefined || comment_limit !== undefined;
     const explicitRenderParam = render === 'force' || render === 'skip';
-    const useCache = cache && nocache !== 'true' && nocache !== '1' && !explicitCommentParams && !explicitRenderParam && !validExtractor && !explicitYtParams;
+    const useCache = cache && nocache !== 'true' && nocache !== '1' && !explicitCommentParams && !explicitRenderParam && !validExtractor && !explicitYtParams && pdf !== 'ocr';
 
     const wantComments = comments !== 'false' && comments !== '0';
     const t0 = Date.now();
@@ -597,7 +597,7 @@ export function createApp(overrides = {}) {
     const wantComments = comments !== 'false' && comments !== '0';
     const explicitRenderParam = render === 'force' || render === 'skip';
     const explicitCommentParams = comment_depth !== undefined || comment_limit !== undefined;
-    const useCache = cache && nocache !== 'true' && nocache !== '1' && !explicitRenderParam && !explicitCommentParams && !validExtractor && !explicitYtParams;
+    const useCache = cache && nocache !== 'true' && nocache !== '1' && !explicitRenderParam && !explicitCommentParams && !validExtractor && !explicitYtParams && pdf !== 'ocr';
     const t0 = Date.now();
 
     try {

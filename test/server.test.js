@@ -1138,6 +1138,17 @@ describe('GET /api/config - pdfOcr flag', () => {
     if (prevOcr !== undefined) process.env.PULLMD_PDF_OCR_API_KEY = prevOcr;
     if (prevLlm !== undefined) process.env.PULLMD_LLM_API_KEY = prevLlm;
   });
+
+  it('reports pdfOcr:true when only PULLMD_LLM_API_KEY is set (shared key fallback)', async () => {
+    const prevOcr = process.env.PULLMD_PDF_OCR_API_KEY;
+    const prevLlm = process.env.PULLMD_LLM_API_KEY;
+    delete process.env.PULLMD_PDF_OCR_API_KEY;
+    process.env.PULLMD_LLM_API_KEY = 'shared-key';
+    const res = await request(createApp({}), '/api/config');
+    assert.equal(JSON.parse(res.body).pdfOcr, true);
+    if (prevOcr !== undefined) process.env.PULLMD_PDF_OCR_API_KEY = prevOcr; else delete process.env.PULLMD_PDF_OCR_API_KEY;
+    if (prevLlm !== undefined) process.env.PULLMD_LLM_API_KEY = prevLlm; else delete process.env.PULLMD_LLM_API_KEY;
+  });
 });
 
 describe('GET /api - pdf-ocr frontmatter', () => {
@@ -1154,6 +1165,21 @@ describe('GET /api - pdf-ocr frontmatter', () => {
     assert.ok(res.body.startsWith('---\n'));
     assert.ok(res.body.includes('source: pdf-ocr'), 'expected source: pdf-ocr in frontmatter');
     assert.ok(res.body.includes('pdf_pages:'), 'expected pdf_pages in frontmatter');
+    assert.ok(res.body.includes('llm_model:'), 'expected llm_model in frontmatter');
+  });
+});
+
+describe('GET /api - ?pdf=ocr cache bypass', () => {
+  it('?pdf=ocr bypasses the cache so OCR always runs', async () => {
+    let calls = 0;
+    const cache = createCache(':memory:');
+    const app = createApp({
+      extractWeb: async () => { calls++; return { markdown: '# Doc\n\npage', title: 'Doc', source: 'pdf-ocr', metadata: { quality: 0.6, pdfPages: 1, llmModel: 'mistral-ocr-latest' } }; },
+      cache,
+    });
+    await request(app, '/api?url=https://example.com/doc.pdf');
+    await request(app, '/api?url=https://example.com/doc.pdf&pdf=ocr');
+    assert.equal(calls, 2, 'second call with pdf=ocr must skip the cache');
   });
 });
 
