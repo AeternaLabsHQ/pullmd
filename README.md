@@ -542,6 +542,7 @@ When you request `?frontmatter=true`, media and YouTube results include usage fi
 | `llm_tokens` | Caption or transcription | Total tokens consumed (prompt + completion). |
 | `llm_prompt_tokens` | Vision caption | Prompt token count (vision calls only). |
 | `llm_completion_tokens` | Vision caption | Completion token count (vision calls only). |
+| `pdf_pages` | PDF with OCR (`source: pdf-ocr`) | Number of pages processed by the OCR provider. |
 
 A few things worth noting:
 
