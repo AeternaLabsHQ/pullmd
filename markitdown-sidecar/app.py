@@ -62,10 +62,7 @@ def _make_client(base_url, api_key):
 _vision_client = _make_client(VISION_BASE_URL, VISION_API_KEY)
 _stt_client = _make_client(STT_BASE_URL, STT_API_KEY)
 
-if _vision_client:
-    md = MarkItDown(enable_plugins=False, llm_client=_vision_client, llm_model=VISION_MODEL)
-else:
-    md = MarkItDown(enable_plugins=False)
+md = MarkItDown(enable_plugins=False)
 
 AUDIO_EXT = {"mp3", "wav", "m4a", "ogg", "flac", "aac", "webm", "mpga", "mpeg"}
 
@@ -76,6 +73,29 @@ def _is_audio(mimetype, filename):
     if filename and "." in filename:
         return filename.rsplit(".", 1)[-1].lower() in AUDIO_EXT
     return False
+
+
+IMAGE_EXT = {"png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff"}
+
+
+def _is_image(mimetype, filename):
+    if mimetype and mimetype.startswith("image/"):
+        return True
+    if filename and "." in filename:
+        return filename.rsplit(".", 1)[-1].lower() in IMAGE_EXT
+    return False
+
+
+def _usage_dict(usage, model):
+    out = {}
+    if model:
+        out["model"] = model
+    if usage is not None:
+        for k in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            v = getattr(usage, k, None)
+            if v is not None:
+                out[k] = v
+    return out or None
 
 
 def _yt_video_id(url):
@@ -229,21 +249,64 @@ async def convert(request: Request):
     if _is_audio(mimetype, filename) and _stt_client:
         if len(body) > WHISPER_MAX_BYTES:
             raise HTTPException(status_code=413, detail="audio too large for transcription (max 25 MB)")
+        audio_name = filename or "audio.mp3"
+        is_whisper = STT_MODEL.startswith("whisper")
         try:
-            audio_name = filename or "audio.mp3"
-            tr = _stt_client.audio.transcriptions.create(
-                model=STT_MODEL,
-                file=(audio_name, io.BytesIO(body)),
-            )
+            kwargs = {"model": STT_MODEL, "file": (audio_name, io.BytesIO(body))}
+            if is_whisper:
+                kwargs["response_format"] = "verbose_json"   # adds duration
+            tr = _stt_client.audio.transcriptions.create(**kwargs)
             text = (getattr(tr, "text", "") or "").strip()
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=422, detail="transcription failed") from e
-        return {
+        out = {
             "markdown": f"### Audio Transcript\n\n{text}" if text else "",
             "title": filename or "Audio",
         }
+        seconds = getattr(tr, "duration", None)
+        if seconds is not None:
+            out["audio_seconds"] = round(float(seconds), 1)
+        vu = _usage_dict(getattr(tr, "usage", None), STT_MODEL)
+        if vu:
+            out["usage"] = vu
+        return out
 
-    # Everything else (incl. images when vision is set) → markitdown.
+    # Image → direct vision caption (only when a vision client is configured).
+    if _is_image(mimetype, filename) and _vision_client:
+        import base64
+        img_mime = mimetype if (mimetype or "").startswith("image/") else "image/jpeg"
+        data_uri = "data:" + img_mime + ";base64," + base64.b64encode(body).decode("ascii")
+        size = None
+        try:
+            from PIL import Image
+            with Image.open(io.BytesIO(body)) as im:
+                size = f"{im.width}x{im.height}"
+        except Exception:
+            size = None
+        try:
+            r = _vision_client.chat.completions.create(
+                model=VISION_MODEL,
+                messages=[{"role": "user", "content": [
+                    {"type": "text", "text": "Write a detailed caption describing this image."},
+                    {"type": "image_url", "image_url": {"url": data_uri}},
+                ]}],
+                max_tokens=500,
+            )
+            caption = (r.choices[0].message.content or "").strip()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=422, detail="captioning failed") from e
+        out = {
+            "markdown": f"## Description\n\n{caption}" if caption else "",
+            "title": filename or "Image",
+        }
+        vu = _usage_dict(getattr(r, "usage", None), getattr(r, "model", None))
+        if vu:
+            out["usage"] = vu
+        if size:
+            out["image_size"] = size
+        return out
+
+    # Everything else → markitdown.
     stream_info = StreamInfo(mimetype=mimetype, filename=filename)
     try:
         result = md.convert_stream(io.BytesIO(body), stream_info=stream_info)
