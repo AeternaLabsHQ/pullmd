@@ -1139,13 +1139,13 @@ describe('GET /api/config - pdfOcr flag', () => {
     if (prevLlm !== undefined) process.env.PULLMD_LLM_API_KEY = prevLlm;
   });
 
-  it('reports pdfOcr:true when only PULLMD_LLM_API_KEY is set (shared key fallback)', async () => {
+  it('pdfOcr does NOT use the shared LLM key (reports false when only PULLMD_LLM_API_KEY is set)', async () => {
     const prevOcr = process.env.PULLMD_PDF_OCR_API_KEY;
     const prevLlm = process.env.PULLMD_LLM_API_KEY;
     delete process.env.PULLMD_PDF_OCR_API_KEY;
     process.env.PULLMD_LLM_API_KEY = 'shared-key';
     const res = await request(createApp({}), '/api/config');
-    assert.equal(JSON.parse(res.body).pdfOcr, true);
+    assert.equal(JSON.parse(res.body).pdfOcr, false);
     if (prevOcr !== undefined) process.env.PULLMD_PDF_OCR_API_KEY = prevOcr; else delete process.env.PULLMD_PDF_OCR_API_KEY;
     if (prevLlm !== undefined) process.env.PULLMD_LLM_API_KEY = prevLlm; else delete process.env.PULLMD_LLM_API_KEY;
   });

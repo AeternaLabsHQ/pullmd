@@ -31,6 +31,23 @@ describe('resolveProvider', () => {
     assert.equal(resolveProvider('VISION').apiKey, undefined);
     restore(s);
   });
+
+  it('sharedFallback:false ignores PULLMD_LLM_API_KEY for PDF_OCR', () => {
+    const s = save('PULLMD_PDF_OCR_API_KEY', 'PULLMD_PDF_OCR_BASE_URL', 'PULLMD_LLM_API_KEY', 'PULLMD_LLM_BASE_URL');
+    delete process.env.PULLMD_PDF_OCR_API_KEY; delete process.env.PULLMD_PDF_OCR_BASE_URL;
+    process.env.PULLMD_LLM_API_KEY = 'shared'; process.env.PULLMD_LLM_BASE_URL = 'https://shared/v1';
+    const result = resolveProvider('PDF_OCR', { sharedFallback: false });
+    assert.equal(result.apiKey, undefined);
+    assert.equal(result.baseUrl, undefined);
+    restore(s);
+  });
+
+  it('sharedFallback:false still returns own key when PULLMD_PDF_OCR_API_KEY is set', () => {
+    const s = save('PULLMD_PDF_OCR_API_KEY', 'PULLMD_PDF_OCR_BASE_URL', 'PULLMD_PDF_OCR_MODEL', 'PULLMD_LLM_API_KEY');
+    process.env.PULLMD_PDF_OCR_API_KEY = 'ocr-key'; process.env.PULLMD_PDF_OCR_BASE_URL = 'https://ocr/v1'; delete process.env.PULLMD_PDF_OCR_MODEL; delete process.env.PULLMD_LLM_API_KEY;
+    assert.deepEqual(resolveProvider('PDF_OCR', { sharedFallback: false }), { apiKey: 'ocr-key', baseUrl: 'https://ocr/v1', model: undefined });
+    restore(s);
+  });
 });
 
 describe('mapUsage', () => {

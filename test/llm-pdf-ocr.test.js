@@ -16,6 +16,14 @@ describe('ocrPdf', () => {
     restore(s);
   });
 
+  it('returns null when only PULLMD_LLM_API_KEY is set (no shared fallback for PDF-OCR)', async () => {
+    const s = save();
+    delete process.env.PULLMD_PDF_OCR_API_KEY;
+    process.env.PULLMD_LLM_API_KEY = 'shared-key';
+    assert.equal(await ocrPdf({ buffer: Buffer.from('%PDF'), fetch: async () => { throw new Error('should not call fetch'); } }), null);
+    restore(s);
+  });
+
   it('POSTs a base64 data-URI document and returns concatenated page markdown + pdfPages + model', async () => {
     const s = save(); process.env.PULLMD_PDF_OCR_API_KEY = 'k'; process.env.PULLMD_PDF_OCR_BASE_URL = 'https://ocr/v1'; delete process.env.PULLMD_PDF_OCR_MODEL; delete process.env.PULLMD_LLM_API_KEY;
     let captured;

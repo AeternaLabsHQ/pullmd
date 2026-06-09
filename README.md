@@ -520,6 +520,8 @@ By default, PullMD converts PDFs through the free markitdown path, which works w
 1. Set `PULLMD_PDF_OCR_API_KEY` to your OCR provider key (reference provider: Mistral OCR, ~$0.002/page).
 2. Request `?pdf=ocr` on any PDF URL, or set `fetch.pdf: ocr` as a recipe default.
 
+`PULLMD_PDF_OCR_API_KEY` (and optionally `PULLMD_PDF_OCR_BASE_URL`) must be set explicitly - unlike vision and STT, PDF-OCR does NOT fall back to the shared `PULLMD_LLM_*` key, because the OCR endpoint is typically a different provider (Mistral OCR vs. a chat LLM).
+
 On success, `source` becomes `pdf-ocr` and the frontmatter gains a `pdf_pages` field with the page count. If the OCR call fails or no key is configured, pullmd falls back to the standard markitdown conversion automatically - no error is returned to the caller.
 
 > **Note:** the OCR provider charges per page. Check your provider's pricing before enabling this on high-volume instances.

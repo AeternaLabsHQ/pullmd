@@ -740,7 +740,7 @@ export function createApp(overrides = {}) {
       markitdown: !!process.env.MARKITDOWN_URL,
       vision: !!(process.env.PULLMD_VISION_API_KEY || process.env.PULLMD_LLM_API_KEY),
       stt: !!(process.env.PULLMD_STT_API_KEY || process.env.PULLMD_LLM_API_KEY),
-      pdfOcr: !!(process.env.PULLMD_PDF_OCR_API_KEY || process.env.PULLMD_LLM_API_KEY),
+      pdfOcr: !!process.env.PULLMD_PDF_OCR_API_KEY,
       markitdownYoutube: !!process.env.MARKITDOWN_YOUTUBE,
     });
   });
