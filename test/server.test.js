@@ -663,6 +663,28 @@ describe('POST /mcp', () => {
     assert.match(text, /^source: trafilatura$/m);
   });
 
+  it('read_url forwards pdf_ocr to extractWeb and bypasses the cache', async () => {
+    const received = [];
+    const app = createApp({
+      cache: createCache(':memory:'),
+      extractWeb: async (url, opts) => {
+        received.push(opts);
+        return { markdown: '# OCR doc', title: 'D', source: 'pdf-ocr', metadata: { quality: 0.9, pdfPages: 3 } };
+      },
+    });
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
+    const body = (id) => JSON.stringify({
+      jsonrpc: '2.0', id, method: 'tools/call',
+      params: { name: 'read_url', arguments: { url: 'https://example.com/doc.pdf', pdf_ocr: true, frontmatter: true } },
+    });
+    await request(app, '/mcp', { method: 'POST', headers, body: body(1) });
+    const res2 = await request(app, '/mcp', { method: 'POST', headers, body: body(2) });
+    assert.equal(received.length, 2, 'pdf_ocr requests must bypass the cache (extractWeb runs every time)');
+    assert.equal(received[0].pdfOcr, true, 'pdfOcr option must be forwarded to extractWeb');
+    const text = parseSse(res2.body).result.content[0].text;
+    assert.match(text, /^pdf_pages: 3$/m);
+  });
+
   it('read_url rejects an invalid extractor value via Zod schema', async () => {
     const app = createApp({ cache: createCache(':memory:') });
     const res = await request(app, '/mcp', {

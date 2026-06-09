@@ -1,4 +1,5 @@
 """MarkItDown HTTP sidecar for PullMD: documents → Markdown."""
+import asyncio
 import io
 import os
 from urllib.parse import unquote, urlparse, parse_qs
@@ -8,7 +9,16 @@ import bs4  # YouTube metadata parsing (declared explicitly in requirements.txt)
 from fastapi import FastAPI, Request, HTTPException
 from markitdown import MarkItDown, StreamInfo
 
+from limits import run_guarded
+
 MAX_BODY_BYTES = 50 * 1024 * 1024  # 50 MB
+
+# Each conversion runs in a disposable child process so a decompression bomb or
+# pathological document can't pin CPU or OOM the long-lived server. Timeout is
+# the always-on guard; the memory cap is opt-in (RLIMIT_AS over-counts virtual
+# memory, so a container mem_limit is the recommended hard bound).
+CONVERT_TIMEOUT = float(os.environ.get("MARKITDOWN_CONVERT_TIMEOUT", "60") or 0)
+CONVERT_MEM_MB = int(os.environ.get("MARKITDOWN_MEM_LIMIT_MB", "0") or 0)
 
 YT_LANGS = [s.strip() for s in os.environ.get("MARKITDOWN_YT_LANGS", "").split(",") if s.strip()]
 YT_PROXY = os.environ.get("MARKITDOWN_YT_PROXY")
@@ -21,6 +31,12 @@ except ValueError:
 app = FastAPI(title="markitdown-sidecar")
 
 md = MarkItDown(enable_plugins=False)
+
+
+def _convert_doc(body, mimetype, filename):
+    """Top-level (picklable) conversion target run inside the guarded child."""
+    result = md.convert_stream(io.BytesIO(body), stream_info=StreamInfo(mimetype=mimetype, filename=filename))
+    return (result.text_content or "", getattr(result, "title", None))
 
 
 def _yt_video_id(url):
@@ -170,17 +186,22 @@ async def convert(request: Request):
     content_type = request.headers.get("content-type")
     mimetype = content_type.split(";")[0].strip() if content_type else None
 
-    # Everything → markitdown document conversion.
-    stream_info = StreamInfo(mimetype=mimetype, filename=filename)
+    # Everything → markitdown document conversion, sandboxed in a child process
+    # with a wall-clock timeout (+ optional memory cap) so a malicious document
+    # can't pin CPU or OOM the server. The blocking wait runs off the event loop.
     try:
-        result = md.convert_stream(io.BytesIO(body), stream_info=stream_info)
-    except Exception as e:  # noqa: BLE001 - surface any converter failure as 422
-        raise HTTPException(status_code=422, detail=f"conversion failed: {e}") from e
+        markdown, title = await asyncio.to_thread(
+            run_guarded, _convert_doc, (body, mimetype, filename),
+            timeout=CONVERT_TIMEOUT, mem_mb=CONVERT_MEM_MB,
+        )
+    except TimeoutError:
+        raise HTTPException(status_code=504, detail="conversion timed out")
+    except MemoryError:
+        raise HTTPException(status_code=413, detail="conversion exceeded the memory limit")
+    except RuntimeError as e:  # converter raised inside the child
+        raise HTTPException(status_code=422, detail=f"conversion failed: {e}")
 
-    return {
-        "markdown": result.text_content or "",
-        "title": getattr(result, "title", None),
-    }
+    return {"markdown": markdown, "title": title}
 
 
 @app.post("/youtube")

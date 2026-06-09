@@ -58,11 +58,19 @@ services:
     image: aeternalabshq/pullmd-markitdown:latest
     container_name: pullmd-markitdown
     restart: unless-stopped
+    # Hard memory bound: a decompression bomb only OOM-kills the sandboxed
+    # conversion child, the container stays under this cap and recovers.
+    mem_limit: ${MARKITDOWN_MEM_LIMIT:-1g}
     environment:
       - MARKITDOWN_YT_TIMECODES=${MARKITDOWN_YT_TIMECODES:-links}
       - MARKITDOWN_YT_CHUNK=${MARKITDOWN_YT_CHUNK:-30}
       - MARKITDOWN_YT_LANGS=${MARKITDOWN_YT_LANGS:-}
       - MARKITDOWN_YT_PROXY=${MARKITDOWN_YT_PROXY:-}
+      # Per-conversion wall-clock timeout (s); 0 disables. The conversion runs
+      # in a disposable child process so a timeout/OOM can't take the server down.
+      - MARKITDOWN_CONVERT_TIMEOUT=${MARKITDOWN_CONVERT_TIMEOUT:-60}
+      # Optional per-conversion address-space cap (MB); 0 = rely on mem_limit.
+      - MARKITDOWN_MEM_LIMIT_MB=${MARKITDOWN_MEM_LIMIT_MB:-0}
     networks:
       - pullmd-internal
 
