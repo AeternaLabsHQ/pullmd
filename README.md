@@ -19,6 +19,11 @@ available, runs Mozilla Readability + Trafilatura on static HTML,
 and as a last resort renders JavaScript-heavy pages via headless
 Chromium (Playwright sidecar) before extracting.
 
+As of **v3**, PullMD goes beyond web pages: it also converts documents
+(PDF, Office, EPUB), images, audio, and YouTube videos to Markdown, and
+emits a leaner, token-efficient body by default. See
+[What's new in v3](#whats-new-in-v3) below.
+
 It ships as:
 
 - a **PWA frontend** with raw/rendered view toggle, dark/paper themes, history, archive, share links, and conversion of local HTML files (drag-and-drop on desktop, file picker on desktop and mobile)
@@ -31,6 +36,24 @@ live-endpoint: `GET /s/:id` returns the cached markdown and
 re-fetches from the source if older than one hour. Use the share id
 as a fixed URL that always returns fresh content — useful for
 subreddit feeds and similar.
+
+---
+
+## What's new in v3
+
+PullMD v3 grows from a web-page reader into a general **anything-to-Markdown**
+service for agents, with a leaner default output. Everything beyond plain web
+extraction is **opt-in and degrades gracefully** - left unconfigured, v3 handles
+web pages exactly like v2, just with a cleaner body by default.
+
+- **Clean body by default** - the Markdown body is now just `# Title` + content. The source URL, fetch date, and all metadata moved into the YAML frontmatter, so nothing is duplicated and you spend fewer tokens. This is the one breaking change: set `PULLMD_SOURCE_HEADER=true` to restore the old inline header, and use [`PULLMD_FRONTMATTER_FIELDS`](#configuration) to trim which fields are emitted. See [`MIGRATION.md`](./MIGRATION.md).
+- **Documents → Markdown** - PDF, Word, PowerPoint, Excel, EPUB and more, [by URL or upload](#document-conversion) (`POST /api/file`, drag-and-drop in the PWA).
+- **High-quality PDF tables (OCR)** - an opt-in, vendor-neutral [OCR tier](#high-quality-pdf-ocr) (`?pdf=ocr`) for table-grade PDF conversion, with automatic fallback to the free path.
+- **Images & audio → Markdown** - opt-in [captioning and transcription](#media-tier-image-captions--audio-transcription) via any OpenAI-compatible or local model; runs inside pullmd, no extra container required.
+- **YouTube transcripts** - [title, description and transcript](#youtube-transcripts) with clickable timecodes, no API key required.
+- **Richer frontmatter** - extraction source, quality, and (for media/OCR) [model + token/page usage](#llm-usage-metadata-in-frontmatter) for cost tracking, plus a configurable field allowlist.
+
+> Self-hosters upgrading from v2.x: the clean-body change is the only breaking one - [`MIGRATION.md`](./MIGRATION.md) has the one-line opt-out. Everything else is additive.
 
 ---
 

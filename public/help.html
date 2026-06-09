@@ -262,6 +262,7 @@
         <span lang="de">Inhalt</span><span lang="en">Contents</span>
       </div>
       <ul lang="de">
+        <li><a href="#whats-new">Neu in v3</a></li>
         <li><a href="#what">Was macht PullMD?</a></li>
         <li><a href="#cache">Cache & TTL</a></li>
         <li><a href="#agent">In KI-Agenten einrichten</a></li>
@@ -272,6 +273,7 @@
         <li><a href="#clients">Client-Erkennung</a></li>
       </ul>
       <ul lang="en">
+        <li><a href="#whats-new">New in v3</a></li>
         <li><a href="#what">What PullMD does</a></li>
         <li><a href="#cache">Cache & TTL</a></li>
         <li><a href="#agent">Set up in AI agents</a></li>
@@ -282,6 +284,27 @@
         <li><a href="#clients">Client detection</a></li>
       </ul>
     </nav>
+
+    <!-- ===================================================== -->
+    <section id="whats-new">
+      <h2><span lang="de">Neu in v3</span><span lang="en">New in v3</span><span class="kicker">v3</span></h2>
+      <p lang="de">In v3 ist PullMD von einem reinen Web-Reader zu einem allgemeinen <strong>Alles-zu-Markdown</strong>-Dienst gewachsen. Alles über die normale Web-Extraktion hinaus ist optional und lässt sich einzeln aktivieren:</p>
+      <p lang="en">In v3, PullMD grew from a web-page reader into a general <strong>anything-to-Markdown</strong> service. Everything beyond plain web extraction is optional and enabled individually:</p>
+      <ul class="doc-list" lang="de">
+        <li><strong>Sauberer Body</strong> - der Markdown-Body ist standardmäßig nur noch <code># Titel</code> + Inhalt; Quell-URL, Datum und Metadaten liegen im YAML-Frontmatter, statt im Text wiederholt zu werden (spart Tokens).</li>
+        <li><strong>Dokumente</strong> - PDF, Word, PowerPoint, Excel, EPUB u. a. per URL oder Upload (Drag-and-drop in der Web-Oberfläche).</li>
+        <li><strong>PDF-Tabellen (OCR)</strong> - optionaler, hochwertiger PDF-Pfad mit <code>?pdf=ocr</code> für saubere Tabellen.</li>
+        <li><strong>Bilder & Audio</strong> - optionale Bildbeschreibung und Audio-Transkription.</li>
+        <li><strong>YouTube</strong> - Titel, Beschreibung und Transkript mit klickbaren Timecodes, ohne API-Key.</li>
+      </ul>
+      <ul class="doc-list" lang="en">
+        <li><strong>Clean body</strong> - the Markdown body is now just <code># Title</code> + content; the source URL, date and metadata live in the YAML frontmatter instead of being repeated in the text (saves tokens).</li>
+        <li><strong>Documents</strong> - PDF, Word, PowerPoint, Excel, EPUB and more, by URL or upload (drag-and-drop in the web UI).</li>
+        <li><strong>PDF tables (OCR)</strong> - an optional high-quality PDF path with <code>?pdf=ocr</code> for clean tables.</li>
+        <li><strong>Images & audio</strong> - optional image captioning and audio transcription.</li>
+        <li><strong>YouTube</strong> - title, description and transcript with clickable timecodes, no API key.</li>
+      </ul>
+    </section>
 
     <!-- ===================================================== -->
     <section id="what">
