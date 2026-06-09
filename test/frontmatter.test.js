@@ -112,7 +112,7 @@ describe('PULLMD_FRONTMATTER_FIELDS allowlist', () => {
     restore(p);
   });
 
-  it('valid field with no value this result → no empty block', () => {
+  it('valid field with no matching value → no empty block', () => {
     const p = save(); process.env.PULLMD_FRONTMATTER_FIELDS = 'llm_tokens';   // valid name, but no LLM usage here
     const fm = buildFrontmatter({ title: 'T', sourceUrl: 'https://e/x' }, { source: 'web' });
     assert.equal(fm, '', 'no fields to emit → empty string, not "---\\n---"');
