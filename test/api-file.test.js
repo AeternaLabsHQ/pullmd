@@ -90,6 +90,22 @@ describe('POST /api/file - happy paths', () => {
     assert.ok(res.body.includes('llm_completion_tokens: 19'));
     assert.ok(res.body.includes('image_size: 100x50'));
   });
+
+  it('sets X-Source: image-caption and emits llm_model + image_size in frontmatter for image-caption source', async () => {
+    const FAKE_IMAGE = {
+      markdown: '# pic.png\n\n## Description\n\nA cat.',
+      title: 'pic.png',
+      source: 'image-caption',
+      metadata: { quality: 0.5, imageSize: '1x1', llmModel: 'gpt-4o-mini', llmTokens: 50 },
+    };
+    const app = createApp({ extractFile: async () => FAKE_IMAGE });
+    const resPlain = await postFile(app, '/api/file', Buffer.from('\x89PNG'));
+    assert.equal(resPlain.headers['x-source'], 'image-caption');
+
+    const resFm = await postFile(app, '/api/file?frontmatter=true', Buffer.from('\x89PNG'));
+    assert.ok(resFm.body.includes('image_size:'), 'expected image_size in frontmatter');
+    assert.ok(resFm.body.includes('llm_model:'), 'expected llm_model in frontmatter');
+  });
 });
 
 describe('POST /api/file - errors', () => {

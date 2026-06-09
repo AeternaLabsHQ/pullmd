@@ -1992,7 +1992,7 @@
       fetch('/api/config').then(function (r) { return r.json(); })
         .then(function (c) {
           markitdownEnabled = !!c.markitdown;
-          markitdownMediaEnabled = !!c.markitdownMedia;
+          markitdownMediaEnabled = !!(c.vision || c.stt);
           if (markitdownEnabled) {
             var hint = document.querySelector('#drop-overlay .drop-box');
             if (hint) hint.setAttribute('data-i18n', 'drop.hintDoc');

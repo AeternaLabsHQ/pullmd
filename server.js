@@ -367,7 +367,7 @@ export function createApp(overrides = {}) {
       const finalMd = fm + result.markdown;
 
       let outMd = finalMd;
-      if (wantFrontmatter && (result.source === 'youtube' || result.source === 'markitdown')) {
+      if (wantFrontmatter && ['youtube', 'markitdown', 'image-caption', 'audio-transcript'].includes(result.source)) {
         const m = result.metadata || {};
         outMd = mergeFrontmatter(outMd, [
           ['duration', m.ytDuration],
@@ -520,7 +520,8 @@ export function createApp(overrides = {}) {
       const finalMd = fm + result.markdown;
 
       let outMd = finalMd;
-      if (wantFrontmatter && result.source === 'markitdown') {
+      const MEDIA_SOURCES = new Set(['markitdown', 'image-caption', 'audio-transcript']);
+      if (wantFrontmatter && MEDIA_SOURCES.has(result.source)) {
         const m = result.metadata || {};
         outMd = mergeFrontmatter(outMd, [
           ['image_size', m.imageSize],
@@ -673,7 +674,7 @@ export function createApp(overrides = {}) {
       const finalMd = fm + result.markdown;
 
       let outMd = finalMd;
-      if (wantFrontmatter && (result.source === 'youtube' || result.source === 'markitdown')) {
+      if (wantFrontmatter && ['youtube', 'markitdown', 'image-caption', 'audio-transcript'].includes(result.source)) {
         const m = result.metadata || {};
         outMd = mergeFrontmatter(outMd, [
           ['duration', m.ytDuration],
@@ -732,7 +733,8 @@ export function createApp(overrides = {}) {
       authMode: auth ? auth.mode : 'disabled',
       authMisconfigured: !!auth?.isMisconfigured,
       markitdown: !!process.env.MARKITDOWN_URL,
-      markitdownMedia: !!process.env.MARKITDOWN_MEDIA,
+      vision: !!(process.env.PULLMD_VISION_API_KEY || process.env.PULLMD_LLM_API_KEY),
+      stt: !!(process.env.PULLMD_STT_API_KEY || process.env.PULLMD_LLM_API_KEY),
       markitdownYoutube: !!process.env.MARKITDOWN_YOUTUBE,
     });
   });

@@ -1054,14 +1054,40 @@ describe('GET /api/config - markitdown flag', () => {
   });
 });
 
-describe('GET /api/config - markitdownMedia flag', () => {
-  it('reflects MARKITDOWN_MEDIA', async () => {
-    const prev = process.env.MARKITDOWN_MEDIA;
-    process.env.MARKITDOWN_MEDIA = 'true';
-    const app = createApp({});
-    const res = await request(app, '/api/config');
-    assert.equal(JSON.parse(res.body).markitdownMedia, true);
-    if (prev === undefined) delete process.env.MARKITDOWN_MEDIA; else process.env.MARKITDOWN_MEDIA = prev;
+describe('GET /api/config - vision and stt flags', () => {
+  it('reports vision:true when PULLMD_VISION_API_KEY is set', async () => {
+    const prev = process.env.PULLMD_VISION_API_KEY;
+    process.env.PULLMD_VISION_API_KEY = 'test-key';
+    delete process.env.PULLMD_LLM_API_KEY;
+    const res = await request(createApp({}), '/api/config');
+    assert.equal(JSON.parse(res.body).vision, true);
+    if (prev === undefined) delete process.env.PULLMD_VISION_API_KEY; else process.env.PULLMD_VISION_API_KEY = prev;
+  });
+
+  it('reports stt:true when PULLMD_STT_API_KEY is set', async () => {
+    const prev = process.env.PULLMD_STT_API_KEY;
+    process.env.PULLMD_STT_API_KEY = 'test-key';
+    delete process.env.PULLMD_LLM_API_KEY;
+    const res = await request(createApp({}), '/api/config');
+    assert.equal(JSON.parse(res.body).stt, true);
+    if (prev === undefined) delete process.env.PULLMD_STT_API_KEY; else process.env.PULLMD_STT_API_KEY = prev;
+  });
+
+  it('reports vision:false and stt:false when no media keys are set', async () => {
+    const prevV = process.env.PULLMD_VISION_API_KEY;
+    const prevS = process.env.PULLMD_STT_API_KEY;
+    const prevL = process.env.PULLMD_LLM_API_KEY;
+    delete process.env.PULLMD_VISION_API_KEY;
+    delete process.env.PULLMD_STT_API_KEY;
+    delete process.env.PULLMD_LLM_API_KEY;
+    const res = await request(createApp({}), '/api/config');
+    const body = JSON.parse(res.body);
+    assert.equal(body.vision, false);
+    assert.equal(body.stt, false);
+    assert.equal(body.markitdownMedia, undefined, 'markitdownMedia must not be present');
+    if (prevV !== undefined) process.env.PULLMD_VISION_API_KEY = prevV;
+    if (prevS !== undefined) process.env.PULLMD_STT_API_KEY = prevS;
+    if (prevL !== undefined) process.env.PULLMD_LLM_API_KEY = prevL;
   });
 });
 
