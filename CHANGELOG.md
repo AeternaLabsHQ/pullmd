@@ -9,6 +9,22 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.0.0] - 2026-06-09
+
+### Breaking
+
+- **Clean markdown body by default.** The inline source-attribution line (`**domain** · fetched` + url, or `**filename** · fetched` for local files) is no longer emitted in the response body. The body now starts with `# Title` and goes straight into content. Source URL, domain, and fetch date are unaffected - they remain in the YAML frontmatter as before. Set `PULLMD_SOURCE_HEADER=true` to restore the legacy inline header verbatim. Self-hosters upgrading from v2.x should review `MIGRATION.md`.
+
+### Added
+
+- **`PULLMD_FRONTMATTER_FIELDS` allowlist.** Comma-separated list of frontmatter field names to include in the YAML block (e.g. `title,url,source,llm_tokens`). Unset - all fields are emitted (backward-compatible). Unknown names are silently ignored with a one-time startup warning; if every listed name is unknown, the allowlist is ignored and all fields are emitted as a safe fallback.
+- **Document conversion via the MarkItDown sidecar** (`MARKITDOWN_URL`). New `POST /api/file` endpoint accepts raw document bytes (25 MB cap) for PDF, DOCX, PPTX, XLSX, EPUB, ZIP, CSV, JSON, XML, and more. Non-HTML URLs detected as documents are also routed through the sidecar automatically in `extractWeb`. Sidecar unset - document path disabled; `/api/file` returns `502`. These features were developed incrementally as versions 2.7.0-2.10.0 on the release branch but are first officially released here in 3.0.0.
+- **Opt-in media tier** (`MARKITDOWN_MEDIA=true`). Image captioning and audio transcription (Whisper STT) via per-provider or shared OpenAI-compatible credentials on the sidecar. The PWA accepts image and audio uploads when the tier is enabled. Off by default; cloud backends cost per call and send content off-host - point `*_BASE_URL` at a local server to keep everything on-host.
+- **Keyless YouTube transcripts** (`MARKITDOWN_YOUTUBE=true`). Routes YouTube URLs through the sidecar for title + description + full transcript. No API key required. Configurable timecodes (`yt_timecodes`: `links`/`plain`/`none`), block chunking (`yt_chunk`), preferred languages, and optional proxy. All options are also overridable per-request via query params on `/api` and the MCP `read_url` tool.
+- **LLM-usage and media metadata in frontmatter.** When media or LLM features run, the response frontmatter carries `llm_model`, `llm_tokens`, `llm_prompt_tokens`, `llm_completion_tokens`, `audio_seconds`, `image_size`, and (for YouTube) `duration` and `views`. Media and channel metadata is emitted frontmatter-only - consistent with the v3 clean-body direction.
+
+---
+
 ## [2.6.0] - 2026-06-08
 
 ### Added
@@ -224,6 +240,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.0.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.0.0
 [2.6.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v2.6.0
 [2.5.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v2.5.0
 [2.4.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v2.4.1

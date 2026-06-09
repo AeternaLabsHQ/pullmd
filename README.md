@@ -144,6 +144,8 @@ npm test              # node --test
 
 All variables go in `.env` (copy from `.env.example`):
 
+> **v3.0.0 output format change:** the markdown body is clean by default - just `# Title` followed by content. Source URL, domain, and fetch date moved to the YAML frontmatter (unchanged). Set `PULLMD_SOURCE_HEADER=true` to restore the old inline header. Use `PULLMD_FRONTMATTER_FIELDS` to pick which frontmatter fields are emitted (handy for trimming tokens in agent pipelines).
+
 | Variable               | Required | Purpose                                                                                              |
 | ---------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `HOST_DOMAIN`          | yes      | Public hostname without scheme. Used by Traefik routing and as fallback for `PUBLIC_URL`.           |
@@ -170,6 +172,8 @@ All variables go in `.env` (copy from `.env.example`):
 | `PULLMD_ADMIN_EMAIL`   | required when AUTH_MODE != disabled, on first startup | Bootstrap email for the first admin user.                            |
 | `PULLMD_ADMIN_PASSWORD` | required when AUTH_MODE != disabled, on first startup | Bootstrap password (min 8 chars).                                    |
 | `PULLMD_AUTH_TOKEN`    | no       | Legacy bearer token compat (single-admin mode only, deprecated).                                    |
+| `PULLMD_SOURCE_HEADER` | no       | Set to `true` to restore the legacy inline source header in the body (`# Title` + `**domain** · date` + url). Default (unset): clean body - just the H1 title; source/date live in the frontmatter. |
+| `PULLMD_FRONTMATTER_FIELDS` | no  | Comma-separated allowlist of frontmatter fields to emit (e.g. `title,url,source,llm_tokens`). Unset = all fields. Trims tokens. Unknown names are ignored with a startup warning. |
 
 `PUBLIC_URL` matters for self-hosting: the help page and downloadable
 skill embed it as the canonical endpoint. Set it correctly and your

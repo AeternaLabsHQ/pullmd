@@ -1,3 +1,38 @@
+# Migrating from v2.x to v3.0.0
+
+v3.0.0 is a major release with one breaking change to the response body format. No database schema changes are required - the upgrade is a drop-in image swap plus an optional `.env` tweak if you relied on the old body format.
+
+## Breaking change: clean body by default
+
+The inline source-attribution line that previously appeared at the top of the body (`**domain** · fetched` + url, or `**filename** · fetched` for local uploads) is no longer emitted. The body now opens with `# Title` and goes straight into content.
+
+Source URL, domain, and fetch date are still available - unchanged - in the YAML frontmatter (`source`, `domain`, `fetched`). No frontmatter fields were removed.
+
+**Keep the old behavior:** add `PULLMD_SOURCE_HEADER=true` to your `.env`. The legacy inline header is restored verbatim. No other configuration changes are needed.
+
+## New: frontmatter field allowlist
+
+`PULLMD_FRONTMATTER_FIELDS` accepts a comma-separated list of field names to include in the YAML block (e.g. `title,url,source,llm_tokens`). Leave it unset to emit all fields (the v2.x default). Useful for agent pipelines where you want to trim frontmatter to just the fields you use.
+
+## Pin tags
+
+Update your compose or k8s manifests to the new image tag:
+
+```yaml
+# Before
+image: aeternalabshq/pullmd:2.6.0
+# After
+image: aeternalabshq/pullmd:3.0.0
+```
+
+The MarkItDown sidecar is optional and only needed if you use document conversion, image captioning, audio transcription, or YouTube transcript features. Existing sidecar versions are compatible.
+
+## Rolling back to v2.x
+
+Stop the v3.0.0 container and pin back to `aeternalabshq/pullmd:2.6.0`. The database is unchanged - v2.x will work against the same `data/cache.db` without any restores.
+
+---
+
 # Migrating from v2.2.x to v2.3.0
 
 v2.3.0 ships the OAuth 2.1 Authorization Code flow for the claude.ai web custom connector and Claude Desktop's custom-connector dialog (#6, #10). Pure additive change — existing instances keep working unchanged unless you opt in by setting `OAUTH_JWT_SECRET`.
