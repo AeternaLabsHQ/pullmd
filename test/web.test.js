@@ -838,9 +838,13 @@ describe('extractWeb - YouTube routing', () => {
     assert.equal(received.sourceUrl, 'https://www.youtube.com/watch?v=abc123');
     assert.equal(received.timecodes, 'plain');
     assert.equal(received.chunk, 0);
+    assert.equal(result.source, 'youtube');
+    assert.equal(received.sourceUrl, 'https://www.youtube.com/watch?v=abc123');
     assert.ok(result.markdown.includes('# My Video'));
-    assert.ok(result.markdown.includes('Chan'));
+    assert.ok(!result.markdown.includes('**Channel:**'), 'meta line must not be in the body');
     assert.equal(result.metadata.author, 'Chan');
+    assert.equal(result.metadata.ytDuration, '12:34');
+    assert.equal(result.metadata.ytViews, '1000');
     if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
   });
 
