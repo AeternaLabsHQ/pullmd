@@ -89,4 +89,34 @@ describe('convertYoutubeViaSidecar', () => {
     assert.equal(cap.headers['X-YT-Timecodes'], undefined);
     assert.equal(cap.headers['X-YT-Chunk'], undefined);
   });
+
+  it('derives the /youtube endpoint when MARKITDOWN_URL has no /convert suffix', async () => {
+    let cap;
+    await convertYoutubeViaSidecar('<html>', {
+      url: 'http://markitdown:8003', sourceUrl: 'https://www.youtube.com/watch?v=x',
+      fetch: async (u) => { cap = u; return okResp({ markdown: 'x', title: 't' }); },
+    });
+    assert.equal(cap, 'http://markitdown:8003/youtube');
+  });
+
+  it('derives the /youtube endpoint when the base has a trailing slash', async () => {
+    let cap;
+    await convertYoutubeViaSidecar('<html>', {
+      url: 'http://markitdown:8003/convert/', sourceUrl: 'https://www.youtube.com/watch?v=x',
+      fetch: async (u) => { cap = u; return okResp({ markdown: 'x', title: 't' }); },
+    });
+    assert.equal(cap, 'http://markitdown:8003/youtube');
+  });
+
+  it('propagates an already-aborted signal to the fetch (no dangling request)', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    let abortedAtCall = null;
+    await convertYoutubeViaSidecar('<html>', {
+      url: 'http://m/convert', sourceUrl: 'https://www.youtube.com/watch?v=x',
+      signal: ctrl.signal,
+      fetch: async (u, o) => { abortedAtCall = o.signal.aborted; return okResp({ markdown: 'x', title: 't' }); },
+    });
+    assert.equal(abortedAtCall, true, 'internal signal must already be aborted when fetch is invoked');
+  });
 });
