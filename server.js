@@ -519,6 +519,19 @@ export function createApp(overrides = {}) {
         : '';
       const finalMd = fm + result.markdown;
 
+      let outMd = finalMd;
+      if (wantFrontmatter && result.source === 'markitdown') {
+        const m = result.metadata || {};
+        outMd = mergeFrontmatter(outMd, [
+          ['image_size', m.imageSize],
+          ['audio_seconds', m.audioSeconds],
+          ['llm_model', m.llmModel],
+          ['llm_tokens', m.llmTokens],
+          ['llm_prompt_tokens', m.llmPromptTokens],
+          ['llm_completion_tokens', m.llmCompletionTokens],
+        ]);
+      }
+
       res.set('X-Source', result.source);
       if (result.metadata?.quality !== undefined) {
         res.set('X-Quality', String(result.metadata.quality));
@@ -533,14 +546,14 @@ export function createApp(overrides = {}) {
         client, cached: false,
       });
       if (format === 'json') {
-        return res.json({ markdown: finalMd, metadata: result.metadata || null, source: result.source, shareId: null });
+        return res.json({ markdown: outMd, metadata: result.metadata || null, source: result.source, shareId: null });
       }
       if (format === 'text') {
         res.set('Content-Type', 'text/plain; charset=utf-8');
-        return res.send(stripMarkdown(finalMd));
+        return res.send(stripMarkdown(outMd));
       }
       res.set('Content-Type', 'text/markdown; charset=utf-8');
-      return res.send(finalMd);
+      return res.send(outMd);
     } catch (err) {
       console.error('File conversion error:', err);
       // 502: the markitdown sidecar is an upstream dependency (same as the web /api path).

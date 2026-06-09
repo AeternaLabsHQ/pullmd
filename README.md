@@ -517,7 +517,7 @@ When you request `?frontmatter=true`, media and YouTube results include usage fi
 
 | Field | Present when | Description |
 | ----- | ------------ | ----------- |
-| `duration` | YouTube | Video duration (ISO 8601, e.g. `PT12M34S`). |
+| `duration` | YouTube | Video duration (humanized, e.g. `12:34` or `H:MM:SS`). |
 | `views` | YouTube | View count at time of extraction. |
 | `image_size` | Image with caption | Dimensions of the source image: `WxH` pixels. |
 | `audio_seconds` | Audio transcription | Length of the audio file in seconds. |

@@ -23,6 +23,7 @@ from markitdown import MarkItDown, StreamInfo
 
 MAX_BODY_BYTES = 50 * 1024 * 1024  # 50 MB
 WHISPER_MAX_BYTES = 25 * 1024 * 1024  # OpenAI transcription hard limit
+IMAGE_MAX_BYTES = 20 * 1024 * 1024  # vision API rejects very large images
 
 YT_LANGS = [s.strip() for s in os.environ.get("MARKITDOWN_YT_LANGS", "").split(",") if s.strip()]
 YT_PROXY = os.environ.get("MARKITDOWN_YT_PROXY")
@@ -274,6 +275,8 @@ async def convert(request: Request):
 
     # Image → direct vision caption (only when a vision client is configured).
     if _is_image(mimetype, filename) and _vision_client:
+        if len(body) > IMAGE_MAX_BYTES:
+            raise HTTPException(status_code=413, detail="image too large for captioning (max 20 MB)")
         img_mime = mimetype if (mimetype or "").startswith("image/") else "image/jpeg"
         data_uri = "data:" + img_mime + ";base64," + base64.b64encode(body).decode("ascii")
         size = None

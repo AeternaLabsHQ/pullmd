@@ -80,6 +80,16 @@ describe('POST /api/file - happy paths', () => {
     assert.ok(res.body.startsWith('---\n'));
     assert.ok(res.body.includes('source: markitdown'));
   });
+
+  it('emits llm usage + image_size in frontmatter for markitdown source', async () => {
+    const app = createApp({ extractFile: async () => ({ markdown: '# I\n\ncaption', title: 'I', source: 'markitdown', metadata: { quality: 0.8, llmModel: 'gpt-4o-mini', llmTokens: 99, llmPromptTokens: 80, llmCompletionTokens: 19, imageSize: '100x50' } }) });
+    const res = await postFile(app, '/api/file?frontmatter=true', Buffer.from('%PDF'));
+    assert.ok(res.body.includes('llm_model: gpt-4o-mini'));
+    assert.ok(res.body.includes('llm_tokens: 99'));
+    assert.ok(res.body.includes('llm_prompt_tokens: 80'));
+    assert.ok(res.body.includes('llm_completion_tokens: 19'));
+    assert.ok(res.body.includes('image_size: 100x50'));
+  });
 });
 
 describe('POST /api/file - errors', () => {
