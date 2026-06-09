@@ -979,4 +979,22 @@ describe('extractWeb - media null-fallthrough single body read (regression)', ()
     assert.ok(r.markdown.startsWith('# '));
     if (sv === undefined) delete process.env.PULLMD_VISION_API_KEY; else process.env.PULLMD_VISION_API_KEY = sv;
   });
+
+  it('audio URL with no provider falls through to normal extraction without double-reading the body', async () => {
+    const sv = process.env.PULLMD_STT_API_KEY; delete process.env.PULLMD_STT_API_KEY;
+    const html = '<html><head><title>Audio Page</title></head><body><article><p>'
+      + 'Plenty of real article text well over the two hundred character minimum so Readability keeps this as the main content of the page, yes indeed it certainly does for sure.'
+      + '</p></article></body></html>';
+    let reads = 0;
+    const bytes = Buffer.from(html);
+    const onceFetch = async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'audio/mpeg' : null) },
+      arrayBuffer: async () => { if (reads++ > 0) throw new TypeError('body used already'); return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); },
+    });
+    // audio content-type, transcribeFn returns null (no provider) → must fall through, not crash
+    const r = await extractWeb('https://example.com/clip.mp3', { fetch: onceFetch, transcribeFn: async () => null });
+    assert.ok(r.markdown.startsWith('# '));
+    if (sv === undefined) delete process.env.PULLMD_STT_API_KEY; else process.env.PULLMD_STT_API_KEY = sv;
+  });
 });
