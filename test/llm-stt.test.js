@@ -40,9 +40,12 @@ describe('transcribeAudio', () => {
     restore(s);
   });
 
-  it('throws on a non-ok response', async () => {
+  it('throws on a non-ok response and surfaces the body', async () => {
     const s = save(); process.env.PULLMD_STT_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
-    await assert.rejects(() => transcribeAudio(Buffer.from('x'), { filename: 'a.mp3', fetch: async () => ({ ok: false, status: 500, json: async () => ({}) }) }), /transcription failed/);
+    await assert.rejects(
+      () => transcribeAudio(Buffer.from('x'), { filename: 'a.mp3', fetch: async () => ({ ok: false, status: 500, text: async () => 'upstream boom' }) }),
+      /transcription failed \(500\): upstream boom/
+    );
     restore(s);
   });
 });
