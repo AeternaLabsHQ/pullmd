@@ -511,6 +511,27 @@ Both params are also available on the MCP `read_url` tool.
 
 > **Note:** YouTube extraction requires the markitdown sidecar (`MARKITDOWN_URL`) to be configured. If `MARKITDOWN_URL` is unset, YouTube URLs are processed by the regular web pipeline (HTML extraction via Readability/Trafilatura), which does not include a transcript.
 
+### LLM-usage metadata in frontmatter
+
+When you request `?frontmatter=true`, media and YouTube results include usage fields in the YAML block that let agents compute cost or log telemetry. These fields appear **only in the frontmatter** and are never inserted into the body — without `?frontmatter=true` the body is pure content.
+
+| Field | Present when | Description |
+| ----- | ------------ | ----------- |
+| `duration` | YouTube | Video duration (ISO 8601, e.g. `PT12M34S`). |
+| `views` | YouTube | View count at time of extraction. |
+| `image_size` | Image with caption | Dimensions of the source image: `WxH` pixels. |
+| `audio_seconds` | Audio transcription | Length of the audio file in seconds. |
+| `llm_model` | Caption or transcription | Model name reported by the sidecar (e.g. `gpt-4o`, `whisper-1`). |
+| `llm_tokens` | Caption or transcription | Total tokens consumed (prompt + completion). |
+| `llm_prompt_tokens` | Vision caption | Prompt token count (vision calls only). |
+| `llm_completion_tokens` | Vision caption | Completion token count (vision calls only). |
+
+A few things worth noting:
+
+- PullMD reports **no computed cost**. Token counts and the model name are what the sidecar receives from the upstream API; multiply by the model's per-token rate on your end.
+- Image captioning is a **direct vision call** made by the markitdown sidecar itself — MarkItDown is not involved in that step.
+- Frontmatter fields for ordinary web pages (`title`, `url`, `source`, `quality`, …) are always present when `?frontmatter=true`; the LLM fields above are additive.
+
 ---
 
 ## Architecture
