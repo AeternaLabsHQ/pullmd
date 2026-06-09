@@ -3,7 +3,7 @@ import io
 import os
 from urllib.parse import unquote, urlparse, parse_qs
 
-import bs4  # markitdown core dependency (beautifulsoup4)
+import bs4  # YouTube metadata parsing (declared explicitly in requirements.txt)
 
 from fastapi import FastAPI, Request, HTTPException
 from markitdown import MarkItDown, StreamInfo
