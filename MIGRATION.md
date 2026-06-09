@@ -10,6 +10,8 @@ The source URL, fetch date, and all extraction metadata are still available - un
 
 **Keep the old behavior:** add `PULLMD_SOURCE_HEADER=true` to your `.env`. The legacy inline header is restored verbatim. No other configuration changes are needed.
 
+**Plain-text callers:** if you fetch with `format=text` and relied on the inline source URL appearing in the body, either request `frontmatter=true` (the URL is in the `url:` field) or set `PULLMD_SOURCE_HEADER=true` to keep the inline header.
+
 ## New: frontmatter field allowlist
 
 `PULLMD_FRONTMATTER_FIELDS` accepts a comma-separated list of field names to include in the YAML block (e.g. `title,url,source,llm_tokens`). Leave it unset to emit all fields (the v2.x default). Useful for agent pipelines where you want to trim frontmatter to just the fields you use.
