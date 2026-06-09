@@ -106,6 +106,22 @@ describe('POST /api/file - happy paths', () => {
     assert.ok(resFm.body.includes('image_size:'), 'expected image_size in frontmatter');
     assert.ok(resFm.body.includes('llm_model:'), 'expected llm_model in frontmatter');
   });
+
+  it('sets X-Source: audio-transcript and emits audio_seconds + llm_model in frontmatter for audio source', async () => {
+    const FAKE_AUDIO = {
+      markdown: '# clip.mp3\n\n### Audio Transcript\n\nHello.',
+      title: 'clip.mp3',
+      source: 'audio-transcript',
+      metadata: { quality: 0.5, audioSeconds: 4.2, llmModel: 'whisper-1' },
+    };
+    const app = createApp({ extractFile: async () => FAKE_AUDIO });
+    const resPlain = await postFile(app, '/api/file', Buffer.from('ID3'), { 'Content-Type': 'audio/mpeg' });
+    assert.equal(resPlain.headers['x-source'], 'audio-transcript');
+
+    const resFm = await postFile(app, '/api/file?frontmatter=true', Buffer.from('ID3'), { 'Content-Type': 'audio/mpeg' });
+    assert.ok(resFm.body.includes('audio_seconds:'), 'expected audio_seconds in frontmatter');
+    assert.ok(resFm.body.includes('llm_model:'), 'expected llm_model in frontmatter');
+  });
 });
 
 describe('POST /api/file - errors', () => {

@@ -1089,6 +1089,22 @@ describe('GET /api/config - vision and stt flags', () => {
     if (prevS !== undefined) process.env.PULLMD_STT_API_KEY = prevS;
     if (prevL !== undefined) process.env.PULLMD_LLM_API_KEY = prevL;
   });
+
+  it('reports vision:true and stt:true when only PULLMD_LLM_API_KEY is set (shared key fallback)', async () => {
+    const prevV = process.env.PULLMD_VISION_API_KEY;
+    const prevS = process.env.PULLMD_STT_API_KEY;
+    const prevL = process.env.PULLMD_LLM_API_KEY;
+    delete process.env.PULLMD_VISION_API_KEY;
+    delete process.env.PULLMD_STT_API_KEY;
+    process.env.PULLMD_LLM_API_KEY = 'shared-key';
+    const res = await request(createApp({}), '/api/config');
+    const body = JSON.parse(res.body);
+    assert.equal(body.vision, true);
+    assert.equal(body.stt, true);
+    if (prevV !== undefined) process.env.PULLMD_VISION_API_KEY = prevV; else delete process.env.PULLMD_VISION_API_KEY;
+    if (prevS !== undefined) process.env.PULLMD_STT_API_KEY = prevS; else delete process.env.PULLMD_STT_API_KEY;
+    if (prevL !== undefined) process.env.PULLMD_LLM_API_KEY = prevL; else delete process.env.PULLMD_LLM_API_KEY;
+  });
 });
 
 describe('GET /api/config - markitdownYoutube flag', () => {
@@ -1139,5 +1155,12 @@ describe('GET /api - LLM usage + meta frontmatter', () => {
     const res = await request(app, '/api?url=https://e/p.jpg');
     assert.ok(!res.body.includes('llm_model'), 'no meta without frontmatter');
     assert.ok(!res.body.includes('llm_tokens'));
+  });
+  it('emits image_size and llm_model in frontmatter for image-caption source via /api', async () => {
+    const app = createApp({ extractWeb: async () => ({ markdown: '# pic.jpg\n\nA sunny scene.', title: 'pic.jpg', source: 'image-caption', metadata: { quality: 0.5, sourceUrl: 'https://e/pic.jpg', imageSize: '2x2', llmModel: 'gpt-4o-mini', llmTokens: 99 } }) });
+    const res = await request(app, '/api?url=https://e/pic.jpg&frontmatter=true');
+    assert.ok(res.body.startsWith('---\n'));
+    assert.ok(res.body.includes('image_size: 2x2'), 'expected image_size in frontmatter');
+    assert.ok(res.body.includes('llm_model: gpt-4o-mini'), 'expected llm_model in frontmatter');
   });
 });
