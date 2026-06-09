@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Added
+
+- **Opt-in high-quality PDF tier** (`PULLMD_PDF_OCR_API_KEY` / `PULLMD_PDF_OCR_BASE_URL` / `PULLMD_PDF_OCR_MODEL`). Route PDFs through a vendor-neutral OCR provider that preserves tables - reference provider is Mistral OCR (`mistral-ocr-latest`, ~$0.002/page). Triggered per request with `?pdf=ocr` or a recipe `fetch.pdf: ocr` default. Default PDF handling is unchanged (free markitdown path). OCR failures fall back to markitdown automatically. New `source: pdf-ocr` value and `pdf_pages` frontmatter field.
+
 ### Changed
 
 - **Breaking (self-hosters):** Image captioning and audio transcription now run inside pullmd, not the markitdown sidecar, so media features no longer require the markitdown container. The `MARKITDOWN_MEDIA` / `MARKITDOWN_VISION_*` / `MARKITDOWN_STT_*` / `MARKITDOWN_LLM_*` env vars are replaced by `PULLMD_VISION_*` / `PULLMD_STT_*` / `PULLMD_LLM_*` (each modality enabled when its key is set; `PULLMD_LLM_*` is a shared fallback).
