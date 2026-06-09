@@ -998,3 +998,69 @@ describe('extractWeb - media null-fallthrough single body read (regression)', ()
     if (sv === undefined) delete process.env.PULLMD_STT_API_KEY; else process.env.PULLMD_STT_API_KEY = sv;
   });
 });
+
+describe('PDF-OCR routing (opt-in)', () => {
+  const PDF = Buffer.from('%PDF-1.4 fake');
+  const pdfFetch = (bytes = PDF) => async () => ({
+    ok: true, status: 200,
+    headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'application/pdf' : null) },
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+
+  it('extractFile routes a PDF to OCR when pdfOcr + provider (source=pdf-ocr)', async () => {
+    const r = await extractFile(PDF, {
+      filename: 'doc.pdf', contentType: 'application/pdf', pdfOcr: true,
+      ocrFn: async () => ({ markdown: '# Doc\n\n| a | b |', usage: { model: 'mistral-ocr-latest' }, pdfPages: 3 }),
+      markitdownClient: async () => { throw new Error('should not call markitdown'); },
+    });
+    assert.equal(r.source, 'pdf-ocr');
+    assert.ok(r.markdown.includes('| a | b |'));
+    assert.equal(r.metadata.pdfPages, 3);
+    assert.equal(r.metadata.llmModel, 'mistral-ocr-latest');
+  });
+
+  it('extractFile PDF falls back to markitdown when pdfOcr off', async () => {
+    const r = await extractFile(PDF, {
+      filename: 'doc.pdf', contentType: 'application/pdf',
+      ocrFn: async () => { throw new Error('should not OCR'); },
+      markitdownClient: async () => ({ markdown: 'plain doc', title: 'Doc' }),
+    });
+    assert.equal(r.source, 'markitdown');
+  });
+
+  it('extractFile PDF falls back to markitdown when OCR returns null (unconfigured)', async () => {
+    const r = await extractFile(PDF, {
+      filename: 'doc.pdf', contentType: 'application/pdf', pdfOcr: true,
+      ocrFn: async () => null,
+      markitdownClient: async () => ({ markdown: 'plain doc', title: 'Doc' }),
+    });
+    assert.equal(r.source, 'markitdown');
+  });
+
+  it('extractFile PDF falls back to markitdown when OCR throws', async () => {
+    const r = await extractFile(PDF, {
+      filename: 'doc.pdf', contentType: 'application/pdf', pdfOcr: true,
+      ocrFn: async () => { throw new Error('ocr 429'); },
+      markitdownClient: async () => ({ markdown: 'plain doc', title: 'Doc' }),
+    });
+    assert.equal(r.source, 'markitdown');
+  });
+
+  it('extractWeb routes a PDF URL to OCR when pdfOcr + provider (source=pdf-ocr)', async () => {
+    const r = await extractWeb('https://example.com/doc.pdf', {
+      fetch: pdfFetch(), pdfOcr: true,
+      ocrFn: async () => ({ markdown: '# Web Doc\n\ntable', usage: { model: 'mistral-ocr-latest' }, pdfPages: 1 }),
+    });
+    assert.equal(r.source, 'pdf-ocr');
+    assert.ok(r.markdown.includes('table'));
+  });
+
+  it('extractWeb PDF default via recipe fetch.pdf=ocr (no query opt-in)', async () => {
+    const recipes = [{ name: 'r', host: 'example.com', path: '/**', preprocess: [], select: { remove: [] }, fetch: { pdf: 'ocr' } }];
+    const r = await extractWeb('https://example.com/doc.pdf', {
+      fetch: pdfFetch(), recipes,
+      ocrFn: async () => ({ markdown: 'recipe ocr', usage: { model: 'mistral-ocr-latest' }, pdfPages: 1 }),
+    });
+    assert.equal(r.source, 'pdf-ocr');
+  });
+});
