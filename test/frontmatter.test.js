@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFrontmatter, mergeFrontmatter, KNOWN_FRONTMATTER_FIELDS, validateFrontmatterFields } from '../lib/frontmatter.js';
+import { buildFrontmatter, mergeFrontmatter, mergeMediaFrontmatter, KNOWN_FRONTMATTER_FIELDS, validateFrontmatterFields } from '../lib/frontmatter.js';
 
 describe('buildFrontmatter', () => {
   it('emits a YAML block with delimiters and trailing blank line', () => {
@@ -47,6 +47,17 @@ describe('buildFrontmatter', () => {
     assert.match(out, /title: "true"/);
   });
 
+  it('neutralizes carriage returns so a crafted title cannot inject a YAML line', () => {
+    const out = buildFrontmatter({ title: 'x\rinjected: pwned' });
+    assert.ok(!out.includes('\r'), 'raw carriage return must not survive in the frontmatter');
+    assert.match(out, /title: "x injected: pwned"/);
+  });
+
+  it('neutralizes a bare carriage return even without other special chars', () => {
+    const out = buildFrontmatter({ title: 'line1\rline2' });
+    assert.ok(!out.includes('\r'), 'raw carriage return must not survive in the frontmatter');
+  });
+
   it('emits ISO 8601 fetched timestamp', () => {
     const out = buildFrontmatter({ title: 'X' });
     assert.match(out, /fetched: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
@@ -72,6 +83,42 @@ describe('buildFrontmatter', () => {
     const out = buildFrontmatter({ title: 'X' }, { source: 'reddit', shareId: 'abc12345' });
     assert.match(out, /source: reddit/);
     assert.match(out, /share_id: abc12345/);
+  });
+});
+
+describe('mergeMediaFrontmatter', () => {
+  it('adds duration/views for a youtube source', () => {
+    const md = '---\ntitle: T\nsource: youtube\n---\n\nbody';
+    const out = mergeMediaFrontmatter(md, { ytDuration: '12:34', ytViews: '1000' }, 'youtube');
+    assert.match(out, /duration: 12:34/);
+    assert.match(out, /views: 1000/);
+  });
+
+  it('adds image_size + llm fields for an image-caption source', () => {
+    const md = '---\ntitle: P\nsource: image-caption\n---\n\nbody';
+    const out = mergeMediaFrontmatter(md, { imageSize: '800x600', llmModel: 'gpt-4o-mini', llmTokens: 42 }, 'image-caption');
+    assert.match(out, /image_size: 800x600/);
+    assert.match(out, /llm_model: gpt-4o-mini/);
+    assert.match(out, /llm_tokens: 42/);
+  });
+
+  it('adds pdf_pages for a pdf-ocr source', () => {
+    const md = '---\ntitle: D\nsource: pdf-ocr\n---\n\nbody';
+    const out = mergeMediaFrontmatter(md, { pdfPages: 7 }, 'pdf-ocr');
+    assert.match(out, /pdf_pages: 7/);
+  });
+
+  it('is a no-op for non-media sources', () => {
+    const md = '---\ntitle: T\nsource: readability\n---\n\nbody';
+    const out = mergeMediaFrontmatter(md, { ytDuration: '12:34' }, 'readability');
+    assert.equal(out, md);
+  });
+
+  it('does not duplicate a field already present in the block', () => {
+    const md = '---\ntitle: T\nsource: youtube\nduration: 99:99\n---\n\nbody';
+    const out = mergeMediaFrontmatter(md, { ytDuration: '12:34' }, 'youtube');
+    assert.match(out, /duration: 99:99/);
+    assert.doesNotMatch(out, /duration: 12:34/);
   });
 });
 

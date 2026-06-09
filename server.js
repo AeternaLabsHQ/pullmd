@@ -5,7 +5,7 @@ import { createCache } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
 import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
 import { qualityScore } from './lib/scoring.js';
-import { buildFrontmatter, mergeFrontmatter, validateFrontmatterFields } from './lib/frontmatter.js';
+import { buildFrontmatter, mergeMediaFrontmatter, validateFrontmatterFields } from './lib/frontmatter.js';
 import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
@@ -177,6 +177,7 @@ export function createApp(overrides = {}) {
       source: result.source,
       client,
       user_id: null,
+      metadata: result.metadata,
     });
     return result.markdown;
   }
@@ -255,7 +256,9 @@ export function createApp(overrides = {}) {
                 quality: cachedQuality,
               }, { source: cached.source, shareId: cached.share_id })
             : '';
-          const md = fm + baseMd;
+          const md = wantFrontmatter
+            ? mergeMediaFrontmatter(fm + baseMd, cached.metadata, cached.source)
+            : fm + baseMd;
           res.set('X-Source', cached.source);
           res.set('X-Quality', String(cachedQuality));
           if (cached.share_id) res.set('X-Share-Id', cached.share_id);
@@ -359,7 +362,7 @@ export function createApp(overrides = {}) {
 
       let shareId = null;
       if (cache) {
-        shareId = cache.put({ url, title: result.title, markdown: result.markdown, source: result.source, client, user_id: req.user?.id ?? null });
+        shareId = cache.put({ url, title: result.title, markdown: result.markdown, source: result.source, client, user_id: req.user?.id ?? null, metadata: result.metadata });
       }
 
       const fm = wantFrontmatter
@@ -367,21 +370,9 @@ export function createApp(overrides = {}) {
         : '';
       const finalMd = fm + result.markdown;
 
-      let outMd = finalMd;
-      if (wantFrontmatter && ['youtube', 'markitdown', 'image-caption', 'audio-transcript', 'pdf-ocr'].includes(result.source)) {
-        const m = result.metadata || {};
-        outMd = mergeFrontmatter(outMd, [
-          ['duration', m.ytDuration],
-          ['views', m.ytViews],
-          ['image_size', m.imageSize],
-          ['audio_seconds', m.audioSeconds],
-          ['pdf_pages', m.pdfPages],
-          ['llm_model', m.llmModel],
-          ['llm_tokens', m.llmTokens],
-          ['llm_prompt_tokens', m.llmPromptTokens],
-          ['llm_completion_tokens', m.llmCompletionTokens],
-        ]);
-      }
+      const outMd = wantFrontmatter
+        ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
+        : finalMd;
 
       res.set('X-Source', result.source);
       if (result.metadata?.quality !== undefined) {
@@ -521,20 +512,9 @@ export function createApp(overrides = {}) {
         : '';
       const finalMd = fm + result.markdown;
 
-      let outMd = finalMd;
-      const MEDIA_SOURCES = new Set(['markitdown', 'image-caption', 'audio-transcript', 'pdf-ocr']);
-      if (wantFrontmatter && MEDIA_SOURCES.has(result.source)) {
-        const m = result.metadata || {};
-        outMd = mergeFrontmatter(outMd, [
-          ['image_size', m.imageSize],
-          ['audio_seconds', m.audioSeconds],
-          ['pdf_pages', m.pdfPages],
-          ['llm_model', m.llmModel],
-          ['llm_tokens', m.llmTokens],
-          ['llm_prompt_tokens', m.llmPromptTokens],
-          ['llm_completion_tokens', m.llmCompletionTokens],
-        ]);
-      }
+      const outMd = wantFrontmatter
+        ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
+        : finalMd;
 
       res.set('X-Source', result.source);
       if (result.metadata?.quality !== undefined) {
@@ -616,7 +596,9 @@ export function createApp(overrides = {}) {
               ? buildFrontmatter({ title: titleMatchCached?.[1] || cached.title, sourceUrl: url, quality: cachedQuality }, { source: cached.source, shareId: cached.share_id })
               : '';
             send('result', {
-              markdown: fm + baseMd,
+              markdown: wantFrontmatter
+                ? mergeMediaFrontmatter(fm + baseMd, cached.metadata, cached.source)
+                : fm + baseMd,
               source: cached.source,
               shareId: cached.share_id || null,
             });
@@ -669,7 +651,7 @@ export function createApp(overrides = {}) {
 
       let shareId = null;
       if (cache) {
-        shareId = cache.put({ url, title: result.title, markdown: result.markdown, source: result.source, client, user_id: req.user?.id ?? null });
+        shareId = cache.put({ url, title: result.title, markdown: result.markdown, source: result.source, client, user_id: req.user?.id ?? null, metadata: result.metadata });
       }
 
       const fm = wantFrontmatter
@@ -677,21 +659,9 @@ export function createApp(overrides = {}) {
         : '';
       const finalMd = fm + result.markdown;
 
-      let outMd = finalMd;
-      if (wantFrontmatter && ['youtube', 'markitdown', 'image-caption', 'audio-transcript', 'pdf-ocr'].includes(result.source)) {
-        const m = result.metadata || {};
-        outMd = mergeFrontmatter(outMd, [
-          ['duration', m.ytDuration],
-          ['views', m.ytViews],
-          ['image_size', m.imageSize],
-          ['audio_seconds', m.audioSeconds],
-          ['pdf_pages', m.pdfPages],
-          ['llm_model', m.llmModel],
-          ['llm_tokens', m.llmTokens],
-          ['llm_prompt_tokens', m.llmPromptTokens],
-          ['llm_completion_tokens', m.llmCompletionTokens],
-        ]);
-      }
+      const outMd = wantFrontmatter
+        ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
+        : finalMd;
 
       send('result', { markdown: outMd, source: result.source, shareId: shareId || null });
       if (cache) cache.logExtraction({

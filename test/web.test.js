@@ -789,6 +789,18 @@ describe('extractFile - local document upload', () => {
     assert.equal(result.metadata.contentLength, 0);
     assert.equal(result.title, 'empty.pdf');
   });
+
+  it('falls back to markitdown when the vision provider throws on an uploaded image', async () => {
+    let called = false;
+    const result = await extractFile(Buffer.from('JPEGBYTES'), {
+      filename: 'photo.jpg',
+      contentType: 'image/jpeg',
+      captionFn: async () => { throw new Error('boom'); },
+      markitdownClient: async () => { called = true; return { markdown: 'exif only', title: 'photo' }; },
+    });
+    assert.equal(called, true, 'markitdown must be the fallback when captionFn throws');
+    assert.equal(result.source, 'markitdown');
+  });
 });
 
 describe('extractWeb - media routing via Node LLM layer', () => {
@@ -818,6 +830,15 @@ describe('extractWeb - media routing via Node LLM layer', () => {
     });
     assert.equal(result.source, 'image-caption');
     assert.ok(result.markdown.includes('A caption of the photo.'));
+  });
+
+  it('falls through to normal extraction when the vision provider throws (no 502)', async () => {
+    const result = await extractWeb('https://example.com/photo.jpg', {
+      fetch: imgFetch(),
+      captionFn: async () => { throw new Error('rate limited (429)'); },
+    });
+    assert.notEqual(result.source, 'image-caption');
+    assert.ok(result.source, 'extraction must resolve to some source, not reject');
   });
 });
 

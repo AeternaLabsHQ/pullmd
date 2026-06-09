@@ -101,6 +101,31 @@ describe('GET /api - web URLs', () => {
     assert.ok(res.body.includes('# Web Page'));
   });
 
+  it('serves media frontmatter fields (duration/views) from cache on a second request', async () => {
+    const cache = createCache(':memory:');
+    let calls = 0;
+    const app = createApp({
+      extractWeb: async () => {
+        calls++;
+        return {
+          markdown: '# Vid\n\n## Transcript\n\nhello',
+          title: 'Vid',
+          source: 'youtube',
+          metadata: { sourceUrl: 'https://youtu.be/x', quality: 0.9, ytDuration: '12:34', ytViews: '1000' },
+        };
+      },
+      cache,
+    });
+    const r1 = await request(app, '/api?url=https://youtu.be/x&frontmatter=true');
+    assert.match(r1.body, /duration: 12:34/);
+    assert.match(r1.body, /views: 1000/);
+
+    const r2 = await request(app, '/api?url=https://youtu.be/x&frontmatter=true');
+    assert.equal(calls, 1, 'second request must be served from cache');
+    assert.match(r2.body, /duration: 12:34/, 'cached serve must include duration');
+    assert.match(r2.body, /views: 1000/, 'cached serve must include views');
+  });
+
   it('forwards ?extractor= to extractWeb when valid (#17)', async () => {
     let received;
     const app = createApp({

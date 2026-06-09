@@ -123,6 +123,17 @@ describe('cache', () => {
     assert.equal(cache.getByShareId(shareId), null);
   });
 
+  it('round-trips structured metadata through put/get and getByShareId', () => {
+    const shareId = cache.put({ url: 'https://m.com', title: 'M', markdown: '# M', source: 'youtube', metadata: { ytDuration: '12:34', ytViews: '1000' } });
+    assert.deepEqual(cache.get('https://m.com').metadata, { ytDuration: '12:34', ytViews: '1000' });
+    assert.deepEqual(cache.getByShareId(shareId).metadata, { ytDuration: '12:34', ytViews: '1000' });
+  });
+
+  it('returns null metadata for rows stored without it', () => {
+    cache.put({ url: 'https://n.com', title: 'N', markdown: '# N', source: 'readability' });
+    assert.equal(cache.get('https://n.com').metadata, null);
+  });
+
   it('stores client field', () => {
     cache.put({ url: 'https://client.com', title: 'C', markdown: '# C', source: 'readability', client: 'claude' });
     const hit = cache.get('https://client.com');
