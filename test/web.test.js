@@ -1063,4 +1063,18 @@ describe('PDF-OCR routing (opt-in)', () => {
     });
     assert.equal(r.source, 'pdf-ocr');
   });
+
+  it('extractWeb routes a PDF URL with a query string + octet-stream content-type to OCR', async () => {
+    const bytes = Buffer.from('%PDF-1.4 fake');
+    const octetPdfFetch = async () => ({
+      ok: true, status: 200,
+      headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'application/octet-stream' : null) },
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    });
+    const r = await extractWeb('https://example.com/report.pdf?download=1', {
+      fetch: octetPdfFetch, pdfOcr: true,
+      ocrFn: async () => ({ markdown: 'ocr body', usage: { model: 'mistral-ocr-latest' }, pdfPages: 1 }),
+    });
+    assert.equal(r.source, 'pdf-ocr');
+  });
 });
