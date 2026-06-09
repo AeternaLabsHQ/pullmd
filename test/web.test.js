@@ -791,7 +791,7 @@ describe('extractFile - local document upload', () => {
   });
 });
 
-describe('extractWeb - gated media routing', () => {
+describe('extractWeb - media routing via Node LLM layer', () => {
   function imgFetch() {
     return async () => ({
       ok: true, status: 200,
@@ -800,27 +800,24 @@ describe('extractWeb - gated media routing', () => {
     });
   }
 
-  it('does NOT route images when MARKITDOWN_MEDIA is unset', async () => {
-    const prev = process.env.MARKITDOWN_MEDIA;
-    delete process.env.MARKITDOWN_MEDIA;
+  it('falls through to normal extraction when no vision provider is configured (captionFn returns null)', async () => {
     let called = false;
     const result = await extractWeb('https://example.com/photo.jpg', {
-      fetch: imgFetch(), markitdownClient: async () => { called = true; return { markdown: 'x', title: 'x' }; },
+      fetch: imgFetch(),
+      captionFn: async () => null,
+      markitdownClient: async () => { called = true; return { markdown: 'x', title: 'x' }; },
     });
-    assert.equal(called, false);
+    assert.equal(called, false, 'markitdown must not be called for an image when captionFn returns null');
     assert.notEqual(result.source, 'markitdown');
-    if (prev !== undefined) process.env.MARKITDOWN_MEDIA = prev;
   });
 
-  it('routes images to markitdown when MARKITDOWN_MEDIA=true', async () => {
-    const prev = process.env.MARKITDOWN_MEDIA;
-    process.env.MARKITDOWN_MEDIA = 'true';
+  it('routes images to the vision adapter (source=image-caption) when captionFn is set', async () => {
     const result = await extractWeb('https://example.com/photo.jpg', {
-      fetch: imgFetch(), markitdownClient: async () => ({ markdown: 'A caption of the photo.', title: 'photo.jpg' }),
+      fetch: imgFetch(),
+      captionFn: async () => ({ markdown: 'A caption of the photo.', usage: null }),
     });
-    assert.equal(result.source, 'markitdown');
+    assert.equal(result.source, 'image-caption');
     assert.ok(result.markdown.includes('A caption of the photo.'));
-    if (prev === undefined) delete process.env.MARKITDOWN_MEDIA; else process.env.MARKITDOWN_MEDIA = prev;
   });
 });
 
@@ -879,17 +876,15 @@ describe('extractWeb - LLM usage metadata', () => {
       arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
     });
   }
-  it('maps sidecar usage/imageSize into metadata (media)', async () => {
-    const prev = process.env.MARKITDOWN_MEDIA; process.env.MARKITDOWN_MEDIA = 'true';
+  it('maps vision adapter usage/imageSize into metadata (source=image-caption)', async () => {
     const result = await extractWeb('https://example.com/p.jpg', {
       fetch: imgFetch(),
-      markitdownClient: async () => ({ markdown: '## Description\n\na caption', title: 'P', usage: { model: 'gpt-4o-mini', total_tokens: 123 }, imageSize: '172x178' }),
+      captionFn: async () => ({ markdown: '## Description\n\na caption', usage: { model: 'gpt-4o-mini', total_tokens: 123 }, imageSize: '172x178' }),
     });
-    assert.equal(result.source, 'markitdown');
+    assert.equal(result.source, 'image-caption');
     assert.equal(result.metadata.llmModel, 'gpt-4o-mini');
     assert.equal(result.metadata.llmTokens, 123);
     assert.equal(result.metadata.imageSize, '172x178');
-    if (prev === undefined) delete process.env.MARKITDOWN_MEDIA; else process.env.MARKITDOWN_MEDIA = prev;
   });
 });
 
@@ -911,5 +906,54 @@ describe('formatHeader - clean body (default) vs legacy', () => {
     assert.ok(r.markdown.includes('example.com'));
     assert.ok(r.markdown.includes('https://example.com/x'));
     if (prev === undefined) delete process.env.PULLMD_SOURCE_HEADER; else process.env.PULLMD_SOURCE_HEADER = prev;
+  });
+});
+
+describe('media routing → Node LLM layer', () => {
+  const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000a49444154789c6360000002000154a24f3f0000000049454e44ae426082', 'hex');
+
+  it('extractFile routes an image to the vision adapter (source=image-caption)', async () => {
+    const r = await extractFile(PNG, {
+      filename: 'pic.png', contentType: 'image/png',
+      captionFn: async () => ({ markdown: '## Description\n\nA cat.', usage: { model: 'gpt-4o-mini', total_tokens: 50 }, imageSize: '1x1' }),
+      transcribeFn: async () => { throw new Error('should not transcribe'); },
+      markitdownClient: async () => { throw new Error('should not call markitdown'); },
+    });
+    assert.equal(r.source, 'image-caption');
+    assert.ok(r.markdown.startsWith('# '));
+    assert.ok(r.markdown.includes('A cat.'));
+    assert.equal(r.metadata.imageSize, '1x1');
+    assert.equal(r.metadata.llmModel, 'gpt-4o-mini');
+  });
+
+  it('extractFile routes audio to the STT adapter (source=audio-transcript)', async () => {
+    const r = await extractFile(Buffer.from('AUDIO'), {
+      filename: 'clip.mp3', contentType: 'audio/mpeg',
+      transcribeFn: async () => ({ markdown: '### Audio Transcript\n\nHi.', usage: { model: 'whisper-1' }, audioSeconds: 4.2 }),
+      captionFn: async () => { throw new Error('no'); },
+      markitdownClient: async () => { throw new Error('no'); },
+    });
+    assert.equal(r.source, 'audio-transcript');
+    assert.ok(r.markdown.includes('Hi.'));
+    assert.equal(r.metadata.audioSeconds, 4.2);
+  });
+
+  it('extractFile falls through to markitdown when the image adapter is unconfigured (returns null)', async () => {
+    const r = await extractFile(PNG, {
+      filename: 'pic.png', contentType: 'image/png',
+      captionFn: async () => null,
+      markitdownClient: async () => ({ markdown: 'EXIF only', title: 'pic' }),
+    });
+    assert.equal(r.source, 'markitdown');
+    assert.ok(r.markdown.includes('EXIF only'));
+  });
+
+  it('extractFile still routes a PDF to markitdown (source=markitdown)', async () => {
+    const r = await extractFile(Buffer.from('%PDF-1.4'), {
+      filename: 'doc.pdf', contentType: 'application/pdf',
+      captionFn: async () => { throw new Error('no'); },
+      markitdownClient: async () => ({ markdown: 'Doc body', title: 'Doc' }),
+    });
+    assert.equal(r.source, 'markitdown');
   });
 });
