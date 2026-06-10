@@ -408,7 +408,8 @@ Returns clean Markdown (text/markdown). Optional query params:
   lang=de|en            language for the comments section header
 
 Response headers worth checking:
-  X-Source       reddit | cloudflare | readability
+  X-Source       reddit | cloudflare | readability | trafilatura |
+                 playwright | markitdown | youtube | pdf-ocr | ...
   X-Quality      0.0-1.0 extraction confidence
   X-Share-Id     8-hex permalink, openable as /s/&lt;id&gt;
 
@@ -422,9 +423,9 @@ much cleaner and saves significant context window space.</pre>
       <p lang="de">Für Claude Code gibt es eine fertige Skill, die <code>WebFetch</code> automatisch durch PullMD ersetzt (mit Fallback). Lade sie als Zip und entpacke nach <code>~/.claude/skills/</code>:</p>
       <p lang="en">For Claude Code there's a ready-made skill that automatically routes <code>WebFetch</code> through PullMD (with fallback). Download the zip and unpack into <code>~/.claude/skills/</code>:</p>
 
-      <p><a class="download-btn" href="/web-reader.zip" download>
+      <p><a class="download-btn" href="/pullmd.zip" download>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        <span lang="de">web-reader.zip herunterladen</span><span lang="en">Download web-reader.zip</span>
+        <span lang="de">pullmd.zip herunterladen</span><span lang="en">Download pullmd.zip</span>
       </a></p>
 
       <div class="copybox">
@@ -434,9 +435,9 @@ much cleaner and saves significant context window space.</pre>
             <span lang="de">Kopieren</span><span lang="en">Copy</span>
           </button>
         </div>
-        <pre id="install-shell">curl -O __PULLMD_URL__/web-reader.zip
+        <pre id="install-shell">curl -O __PULLMD_URL__/pullmd.zip
 mkdir -p ~/.claude/skills
-unzip web-reader.zip -d ~/.claude/skills/
+unzip pullmd.zip -d ~/.claude/skills/
 # Restart Claude Code; the skill activates on web-reading requests.</pre>
       </div>
 

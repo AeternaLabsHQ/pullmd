@@ -256,7 +256,7 @@ docker compose exec pullmd node scripts/admin.js reset-password you@example.com
 
 | Endpoint                                                         | Auth required (when mode != disabled) |
 | ---------------------------------------------------------------- | :-----------------------------------: |
-| `/`, `/help`, static assets, `/web-reader.zip`                   |                  no                  |
+| `/`, `/help`, static assets, `/pullmd.zip`                   |                  no                  |
 | `/login`, `/signup`, `/api/me` (auth surface)                    |                  no                  |
 | `/s/:id` (share links)                                           |                  no                  |
 | `/api`, `/api/stream`                                            |                 yes                  |
@@ -342,12 +342,12 @@ much cleaner and saves significant context window space.
 
 ### 2. Claude Code skill
 
-`web-reader.zip` is auto-built with your URL embedded:
+`pullmd.zip` is auto-built with your URL embedded:
 
 ```bash
-curl -O ${PULLMD_URL}/web-reader.zip
+curl -O ${PULLMD_URL}/pullmd.zip
 mkdir -p ~/.claude/skills
-unzip web-reader.zip -d ~/.claude/skills/
+unzip pullmd.zip -d ~/.claude/skills/
 # Restart Claude Code; the skill activates on web-reading requests.
 ```
 
@@ -443,7 +443,7 @@ for it.
 | `GET /api/storage`     | Cache size / hit-rate stats.                                                     |
 | `GET /api/stats`       | Extraction telemetry (sources, quality, latency).                                |
 | `POST /mcp`            | Streamable-HTTP MCP endpoint (3 tools: `read_url`, `get_share`, `list_recent`). |
-| `GET /web-reader.zip`  | Claude Code skill bundle, with this instance's URL baked in.                     |
+| `GET /pullmd.zip`      | Claude Code skill bundle, with this instance's URL baked in (`/web-reader.zip` redirects here). |
 | `GET /help`            | Bilingual user/agent setup guide.                                                |
 
 ### `/api` parameters
@@ -600,7 +600,7 @@ A few things worth noting:
 - `lib/scoring.js` — Quality scoring used to pick between extractors and as a render-trigger heuristic.
 - `lib/cache.js` — SQLite cache (`better-sqlite3`) with 90-day TTL and 8-hex share ids.
 - `lib/mcp.js` — Stateless MCP server registering the three tools.
-- `lib/distrib.js` — Public-URL substitution in `/help` and `/web-reader.zip`.
+- `lib/distrib.js` — Public-URL substitution in `/help` and `/pullmd.zip`.
 - `trafilatura-sidecar/` — Python sidecar (FastAPI) wrapping Trafilatura.
 - `playwright-sidecar/` — Python sidecar (FastAPI + Playwright + Chromium) for JS-rendered pages.
 - `markitdown-sidecar/` — Python sidecar (FastAPI) wrapping MarkItDown for document conversion (PDF, Office, EPUB, …) plus the keyless `/youtube` transcript endpoint.
@@ -609,7 +609,7 @@ A few things worth noting:
 - `lib/llm/` — provider resolver + adapters for image captioning (vision), audio transcription (STT), and PDF OCR against OpenAI-compatible endpoints.
 - `lib/frontmatter.js` — YAML frontmatter builder with the `PULLMD_FRONTMATTER_FIELDS` allowlist.
 - `public/` — PWA frontend (vanilla JS, dark/paper themes, service worker, EventSource client for `/api/stream`).
-- `skill/web-reader/` — Claude Code skill source (templated with `__PULLMD_URL__`).
+- `skill/pullmd/` — Claude Code skill source (templated with `__PULLMD_URL__`).
 
 ---
 

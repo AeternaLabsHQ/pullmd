@@ -1,7 +1,0 @@
-{
-  "name": "web-reader",
-  "description": "Read web pages as clean Markdown via PullMD with WebFetch fallback",
-  "author": {
-    "name": "andie"
-  }
-}

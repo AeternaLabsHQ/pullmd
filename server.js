@@ -91,16 +91,21 @@ export function createApp(overrides = {}) {
     res.send(renderIndex(publicUrlFor(req), { disablePublicHistory }));
   });
 
-  app.get('/web-reader.zip', async (req, res, next) => {
+  app.get('/pullmd.zip', async (req, res, next) => {
     try {
       const buf = await getSkillZip(publicUrlFor(req));
       res.set('Content-Type', 'application/zip');
-      res.set('Content-Disposition', 'attachment; filename="web-reader.zip"');
+      res.set('Content-Disposition', 'attachment; filename="pullmd.zip"');
       res.set('Content-Length', String(buf.length));
       res.send(buf);
     } catch (err) {
       next(err);
     }
+  });
+
+  // Legacy path from pre-v3 docs and installed help pages.
+  app.get('/web-reader.zip', (req, res) => {
+    res.redirect(301, '/pullmd.zip');
   });
 
   // Service worker must never be cached so browsers pick up updates immediately.

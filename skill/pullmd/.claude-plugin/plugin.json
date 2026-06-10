@@ -1,0 +1,7 @@
+{
+  "name": "pullmd",
+  "description": "Read web pages, documents (PDF/Office/EPUB), and YouTube transcripts as clean Markdown via PullMD, with WebFetch fallback",
+  "author": {
+    "name": "andie"
+  }
+}
