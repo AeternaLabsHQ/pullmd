@@ -20,6 +20,19 @@ services:
       - PULLMD_STT_MODEL=${PULLMD_STT_MODEL:-}
       - PULLMD_LLM_API_KEY=${PULLMD_LLM_API_KEY:-}
       - PULLMD_LLM_BASE_URL=${PULLMD_LLM_BASE_URL:-}
+      # Opt-in PDF OCR tier (?pdf=ocr) — needs its OWN key, no PULLMD_LLM_* fallback.
+      - PULLMD_PDF_OCR_API_KEY=${PULLMD_PDF_OCR_API_KEY:-}
+      - PULLMD_PDF_OCR_BASE_URL=${PULLMD_PDF_OCR_BASE_URL:-}
+      - PULLMD_PDF_OCR_MODEL=${PULLMD_PDF_OCR_MODEL:-}
+      # Output shaping (v3): set PULLMD_SOURCE_HEADER=true to restore the legacy
+      # "Source:" body header; PULLMD_FRONTMATTER_FIELDS limits frontmatter keys.
+      - PULLMD_SOURCE_HEADER=${PULLMD_SOURCE_HEADER:-}
+      - PULLMD_FRONTMATTER_FIELDS=${PULLMD_FRONTMATTER_FIELDS:-}
+      # Outbound User-Agent overrides + custom site recipes (path inside the
+      # container; ./data is mounted at /data).
+      - PULLMD_USER_AGENT=${PULLMD_USER_AGENT:-}
+      - PULLMD_UA_FEED_URL=${PULLMD_UA_FEED_URL:-}
+      - PULLMD_SITE_RECIPES=${PULLMD_SITE_RECIPES:-}
       - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
       - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
       - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-}
@@ -30,6 +43,8 @@ services:
       - PULLMD_ADMIN_PASSWORD=${PULLMD_ADMIN_PASSWORD:-}
       # Legacy bearer token (single-admin mode only, deprecated; removed in v3).
       - PULLMD_AUTH_TOKEN=${PULLMD_AUTH_TOKEN:-}
+      # OAuth 2.1 for MCP clients (claude.ai web, Claude Desktop) — opt-in, see README.
+      - OAUTH_JWT_SECRET=${OAUTH_JWT_SECRET:-}
       - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data

@@ -7,6 +7,30 @@ services:
       - PUBLIC_URL=${PUBLIC_URL:-https://${HOST_DOMAIN}}
       - TRAFILATURA_URL=http://trafilatura:8001/extract
       - PLAYWRIGHT_URL=http://playwright:8002/render
+      - MARKITDOWN_URL=http://markitdown:8003/convert
+      - MARKITDOWN_YOUTUBE=${MARKITDOWN_YOUTUBE:-}
+      # Media tier (image captioning, audio transcription) — handled by pullmd, not the sidecar.
+      - PULLMD_VISION_API_KEY=${PULLMD_VISION_API_KEY:-}
+      - PULLMD_VISION_BASE_URL=${PULLMD_VISION_BASE_URL:-}
+      - PULLMD_VISION_MODEL=${PULLMD_VISION_MODEL:-}
+      - PULLMD_STT_API_KEY=${PULLMD_STT_API_KEY:-}
+      - PULLMD_STT_BASE_URL=${PULLMD_STT_BASE_URL:-}
+      - PULLMD_STT_MODEL=${PULLMD_STT_MODEL:-}
+      - PULLMD_LLM_API_KEY=${PULLMD_LLM_API_KEY:-}
+      - PULLMD_LLM_BASE_URL=${PULLMD_LLM_BASE_URL:-}
+      # Opt-in PDF OCR tier (?pdf=ocr) — needs its OWN key, no PULLMD_LLM_* fallback.
+      - PULLMD_PDF_OCR_API_KEY=${PULLMD_PDF_OCR_API_KEY:-}
+      - PULLMD_PDF_OCR_BASE_URL=${PULLMD_PDF_OCR_BASE_URL:-}
+      - PULLMD_PDF_OCR_MODEL=${PULLMD_PDF_OCR_MODEL:-}
+      # Output shaping (v3): set PULLMD_SOURCE_HEADER=true to restore the legacy
+      # "Source:" body header; PULLMD_FRONTMATTER_FIELDS limits frontmatter keys.
+      - PULLMD_SOURCE_HEADER=${PULLMD_SOURCE_HEADER:-}
+      - PULLMD_FRONTMATTER_FIELDS=${PULLMD_FRONTMATTER_FIELDS:-}
+      # Outbound User-Agent overrides + custom site recipes (path inside the
+      # container; ./data is mounted at /data).
+      - PULLMD_USER_AGENT=${PULLMD_USER_AGENT:-}
+      - PULLMD_UA_FEED_URL=${PULLMD_UA_FEED_URL:-}
+      - PULLMD_SITE_RECIPES=${PULLMD_SITE_RECIPES:-}
       - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
       - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
       - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-}
@@ -17,6 +41,8 @@ services:
       - PULLMD_ADMIN_PASSWORD=${PULLMD_ADMIN_PASSWORD:-}
       # Legacy bearer token (single-admin mode only, deprecated; removed in v3).
       - PULLMD_AUTH_TOKEN=${PULLMD_AUTH_TOKEN:-}
+      # OAuth 2.1 for MCP clients (claude.ai web, Claude Desktop) — opt-in, see README.
+      - OAUTH_JWT_SECRET=${OAUTH_JWT_SECRET:-}
       - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data
@@ -26,6 +52,7 @@ services:
     depends_on:
       - trafilatura
       - playwright
+      - markitdown
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.pullmd.entrypoints=http"
@@ -50,6 +77,26 @@ services:
     image: aeternalabshq/pullmd-playwright:latest
     container_name: pullmd-playwright
     restart: unless-stopped
+    networks:
+      - pullmd-internal
+
+  markitdown:
+    image: aeternalabshq/pullmd-markitdown:latest
+    container_name: pullmd-markitdown
+    restart: unless-stopped
+    # Hard memory bound: a decompression bomb only OOM-kills the sandboxed
+    # conversion child, the container stays under this cap and recovers.
+    mem_limit: ${MARKITDOWN_MEM_LIMIT:-1g}
+    environment:
+      - MARKITDOWN_YT_TIMECODES=${MARKITDOWN_YT_TIMECODES:-links}
+      - MARKITDOWN_YT_CHUNK=${MARKITDOWN_YT_CHUNK:-30}
+      - MARKITDOWN_YT_LANGS=${MARKITDOWN_YT_LANGS:-}
+      - MARKITDOWN_YT_PROXY=${MARKITDOWN_YT_PROXY:-}
+      # Per-conversion wall-clock timeout (s); 0 disables. The conversion runs
+      # in a disposable child process so a timeout/OOM can't take the server down.
+      - MARKITDOWN_CONVERT_TIMEOUT=${MARKITDOWN_CONVERT_TIMEOUT:-60}
+      # Optional per-conversion address-space cap (MB); 0 = rely on mem_limit.
+      - MARKITDOWN_MEM_LIMIT_MB=${MARKITDOWN_MEM_LIMIT_MB:-0}
     networks:
       - pullmd-internal
 
