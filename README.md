@@ -73,7 +73,7 @@ That's it. No `.env` needed: every variable has a sensible default
 and PullMD listens on port `3000`. Add a `.env` next to the compose
 file to override anything (see [Configuration](#configuration)).
 
-### `docker-compose.yml` (zero-config)
+### `docker-compose.yml` (zero-config, abridged)
 
 ```yaml
 services:
@@ -88,9 +88,7 @@ services:
       - TRAFILATURA_URL=http://trafilatura:8001/extract
       - PLAYWRIGHT_URL=http://playwright:8002/render
       - MARKITDOWN_URL=http://markitdown:8003/convert
-      - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
-      - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
-      - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-}
+      - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data
     networks:
@@ -118,6 +116,7 @@ services:
     image: aeternalabshq/pullmd-markitdown:latest
     container_name: pullmd-markitdown
     restart: unless-stopped
+    mem_limit: ${MARKITDOWN_MEM_LIMIT:-1g}
     networks:
       - pullmd-internal
 
@@ -125,6 +124,13 @@ networks:
   pullmd-internal:
     driver: bridge
 ```
+
+> **Abridged for readability** — the [`docker-compose.yml` in the repo](./docker-compose.yml)
+> additionally passes every optional `.env` variable through to the
+> containers (Reddit credentials, auth, media/OCR keys, YouTube options,
+> output shaping). Use the `curl -O` command above rather than copying
+> this block, or `.env` overrides beyond the basics won't reach the
+> containers.
 
 > **Note:** the Playwright sidecar adds **~3.7 GB** to your image cache
 > (Chromium + Firefox + WebKit binaries from the official Playwright
@@ -171,7 +177,7 @@ All variables go in `.env` (copy from `.env.example`):
 
 | Variable               | Required | Purpose                                                                                              |
 | ---------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
-| `HOST_DOMAIN`          | yes      | Public hostname without scheme. Used by Traefik routing and as fallback for `PUBLIC_URL`.           |
+| `HOST_DOMAIN`          | Traefik variant only | Public hostname without scheme. Used by Traefik routing and as fallback for `PUBLIC_URL`. Unused by the default compose. |
 | `PUBLIC_URL`           | no       | Full public origin embedded in `/help` and the skill zip. Defaults to `https://${HOST_DOMAIN}`.     |
 | `TRAFILATURA_URL`      | no       | URL of the Trafilatura sidecar's `/extract` endpoint. Unset → skip Trafilatura, Readability only.    |
 | `PLAYWRIGHT_URL`       | no       | URL of the Playwright sidecar's `/render` endpoint. Unset → skip Playwright fallback for JS pages.   |
@@ -222,14 +228,14 @@ lands.
 
 ## Authentication (v2.0+)
 
-> **Pulling v2.x:** Use the explicit `:2` tag (or `:2.0`, `:2.0.0`).
-> The `:latest` tag remains on v1.x for backward compatibility 
-> until v2.x has stabilized in real-world deployments.
-> 
+> **Version pinning:** `:latest` tracks the newest release (v3). v3's only
+> breaking change is the [clean-body output format](#whats-new-in-v3) — to
+> stay on the v2.x output format instead, pin the explicit major tag:
+>
 > ```yaml
 > services:
 >   pullmd:
->     image: aeternalabs/pullmd:2
+>     image: aeternalabshq/pullmd:2
 > ```
 
 PullMD ships with three auth modes. Pick one with `PULLMD_AUTH_MODE`:
@@ -254,6 +260,7 @@ docker compose exec pullmd node scripts/admin.js reset-password you@example.com
 | `/login`, `/signup`, `/api/me` (auth surface)                    |                  no                  |
 | `/s/:id` (share links)                                           |                  no                  |
 | `/api`, `/api/stream`                                            |                 yes                  |
+| `POST /api/html`, `POST /api/file`                               |                 yes                  |
 | `/mcp`                                                           |                 yes                  |
 | `/api/history`, `/api/archive`                                   |                 yes                  |
 | `/api/cache/:id`, `DELETE /api/cache`                            |                 yes                  |
@@ -261,9 +268,9 @@ docker compose exec pullmd node scripts/admin.js reset-password you@example.com
 
 ### Authentication paths
 
-1. **Session cookies** — `POST /login` sets `pullmd_session` (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS, 7-day TTL with sliding expiry). The PWA uses this automatically.
+1. **Session cookies** — `POST /login` sets `pullmd_session` (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS, 90-day TTL with sliding expiry). The PWA uses this automatically.
 2. **API keys** — generate at `/settings`, send via `Authorization: Bearer pmd_<32-char-base62>`. Stored as SHA-256 hashes; only shown once at creation.
-3. **Legacy `PULLMD_AUTH_TOKEN`** — deprecated. `single-admin` mode only. Maps to admin user. Kept for migration compatibility, removed in v3.0.
+3. **Legacy `PULLMD_AUTH_TOKEN`** — deprecated. `single-admin` mode only. Maps to admin user. Kept for migration compatibility; slated for removal in a future major release.
 
 ### Migration from v1.x
 
@@ -293,7 +300,7 @@ Revocation (RFC 7009).
 
 **Scope:** Currently a single `mcp:full` scope (URL conversion + history read). Granular scopes are tracked for a future minor release.
 
-**Issues #6 and #10** track this work and close on the v2.1.0 release.
+Shipped in v2.3.0 (issues [#6](https://github.com/AeternaLabsHQ/pullmd/issues/6) and [#10](https://github.com/AeternaLabsHQ/pullmd/issues/10)).
 
 ---
 
@@ -323,7 +330,8 @@ Returns clean Markdown (text/markdown). Optional query params:
   lang=de|en            language for the comments section header
 
 Response headers worth checking:
-  X-Source       reddit | cloudflare | readability | playwright
+  X-Source       reddit | cloudflare | readability | trafilatura |
+                 playwright | markitdown | youtube | pdf-ocr | ...
   X-Quality      0.0-1.0 extraction confidence
   X-Share-Id     8-hex permalink, openable as /s/<id>
 
@@ -371,18 +379,20 @@ claude mcp add --transport http pullmd ${PULLMD_URL}/mcp
 Once registered, the three tools surface natively in the agent — no prompt
 instructions needed, the LLM picks them up via their schema descriptions.
 
-### MCP client compatibility (updated for v2.0)
+### MCP client compatibility
 
-| Client          | Bearer (`Authorization: Bearer pmd_...`) | OAuth | Notes                                  |
-| --------------- | :--------------------------------------: | :---: | -------------------------------------- |
-| Claude Code CLI |                    ✅                    |   —   | Recommended. Generate a key at `/settings`. |
-| Cursor          |                    ✅                    |   —   | Same as CLI.                           |
-| Claude Desktop  |                    ❌                    | (#6)  | UI lacks header field. Phase 2 OAuth.  |
-| claude.ai (web) |                    ❌                    | (#6)  | Web requires OAuth. Phase 2.           |
+| Client          | Bearer (`Authorization: Bearer pmd_...`) | OAuth (v2.3+) | Notes                                  |
+| --------------- | :--------------------------------------: | :-----------: | -------------------------------------- |
+| Claude Code CLI |                    ✅                    |       ✅      | Recommended. Generate a key at `/settings`. |
+| Cursor          |                    ✅                    |       ✅      | Same as CLI.                           |
+| Claude Desktop  |                    ❌                    |       ✅      | Connector UI lacks a header field — use [OAuth](#oauth-21-claudeai-web-connector). |
+| claude.ai (web) |                    ❌                    |       ✅      | Requires [OAuth](#oauth-21-claudeai-web-connector). |
 
-For Phase 1, Claude Desktop / claude.ai users still need the OAuth/proxy workaround documented in [#10](https://github.com/AeternaLabsHQ/pullmd/issues/10). Phase 2 (#6) layers OAuth on top of this user system.
+OAuth shipped in v2.3.0 — enable it via `OAUTH_JWT_SECRET` (see above) and
+Claude Desktop / claude.ai connect natively. The reverse-proxy workaround
+below is only needed on instances that keep OAuth disabled.
 
-#### Claude Desktop limitation
+#### Claude Desktop limitation (without OAuth)
 
 The Claude Desktop "Add custom connector" UI accepts URL + OAuth
 Client ID/Secret but no custom-header field. Additionally,
@@ -390,10 +400,10 @@ Client ID/Secret but no custom-header field. Additionally,
 rewritten to `{}` after Desktop launches (current Desktop only honors
 stdio servers in that file).
 
-Until OAuth support lands (see [#6](https://github.com/AeternaLabsHQ/pullmd/issues/6)),
-the practical workaround for Claude Desktop users is a reverse proxy
-that accepts the auth token as either a bearer header (for CLI) or as a
-URL path prefix (for Desktop, which has no header field).
+If OAuth is not enabled on your instance, the practical workaround for
+Claude Desktop users is a reverse proxy that accepts the auth token as
+either a bearer header (for CLI) or as a URL path prefix (for Desktop,
+which has no header field).
 
 #### Caddy workaround for Claude Desktop
 
@@ -414,7 +424,7 @@ Then in Claude Desktop's connector dialog, use the URL with the token
 path prefix: `https://your-instance.com/<TOKEN>/mcp`. CLI clients keep
 using the `Authorization` header as normal.
 
-This is a stopgap pattern; native OAuth (Phase 2) will remove the need
+This is a stopgap pattern; enabling the built-in OAuth removes the need
 for it.
 
 ---
@@ -443,16 +453,19 @@ for it.
 | `url`           | —       | Required.                                                                          |
 | `comments`      | `true`  | Include Reddit comments. Ignored for non-Reddit URLs.                              |
 | `comment_depth` | `3`     | Max nesting depth (1–10).                                                          |
-| `comment_limit` | `15`    | Max top-level comments.                                                            |
+| `comment_limit` | none    | Max top-level comments (Reddit returns ~200 without a cap).                        |
 | `frontmatter`   | `false` | Prepend YAML metadata.                                                             |
 | `format`        | `md`    | `text` strips Markdown; `json` returns structured response.                        |
 | `nocache`       | `false` | Bypass the 1-hour cache.                                                           |
 | `render`        | auto    | `force` → always render via Playwright. `skip` → never render. Bypasses cache.     |
+| `extractor`     | auto    | Force `readability` / `trafilatura` / `playwright` and skip the quality pick. Bypasses cache. |
+| `pdf`           | —       | `ocr` → route PDFs through the [OCR tier](#high-quality-pdf-ocr). Bypasses cache.  |
+| `yt_timecodes` / `yt_chunk` | see [YouTube](#youtube-transcripts) | Transcript format overrides. Bypass cache when set. |
 | `lang`          | `de`    | Comments-section header language (`de` or `en`).                                   |
 
 ### Response headers
 
-- `X-Source` — `reddit` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright`
+- `X-Source` — `reddit` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
 - `X-Quality` — `0.0`–`1.0` extraction confidence
 - `X-Share-Id` — the 8-hex permalink id
 
@@ -541,7 +554,7 @@ Both params are also available on the MCP `read_url` tool.
 By default, PullMD converts PDFs through the free markitdown path, which works well for text-heavy files but loses complex tables. For table-grade output, enable the opt-in OCR tier:
 
 1. Set `PULLMD_PDF_OCR_API_KEY` to your OCR provider key (reference provider: Mistral OCR, ~$0.002/page).
-2. Request `?pdf=ocr` on any PDF URL, or set `fetch.pdf: ocr` as a recipe default.
+2. Request `?pdf=ocr` on any PDF URL (also on `/api/stream` and `POST /api/file` uploads), or set `fetch.pdf: ocr` as a recipe default.
 
 `PULLMD_PDF_OCR_API_KEY` (and optionally `PULLMD_PDF_OCR_BASE_URL`) must be set explicitly - unlike vision and STT, PDF-OCR does NOT fall back to the shared `PULLMD_LLM_*` key, because the OCR endpoint is typically a different provider (Mistral OCR vs. a chat LLM).
 
@@ -590,8 +603,11 @@ A few things worth noting:
 - `lib/distrib.js` — Public-URL substitution in `/help` and `/web-reader.zip`.
 - `trafilatura-sidecar/` — Python sidecar (FastAPI) wrapping Trafilatura.
 - `playwright-sidecar/` — Python sidecar (FastAPI + Playwright + Chromium) for JS-rendered pages.
-- `markitdown-sidecar/` — Python sidecar (FastAPI) wrapping MarkItDown for document conversion (PDF, Office, EPUB, …).
-- `lib/markitdown-client.js` — HTTP client for the markitdown sidecar.
+- `markitdown-sidecar/` — Python sidecar (FastAPI) wrapping MarkItDown for document conversion (PDF, Office, EPUB, …) plus the keyless `/youtube` transcript endpoint.
+- `lib/markitdown-client.js` — HTTP client for the markitdown sidecar (documents + YouTube).
+- `lib/youtube.js` — YouTube URL detection and normalization.
+- `lib/llm/` — provider resolver + adapters for image captioning (vision), audio transcription (STT), and PDF OCR against OpenAI-compatible endpoints.
+- `lib/frontmatter.js` — YAML frontmatter builder with the `PULLMD_FRONTMATTER_FIELDS` allowlist.
 - `public/` — PWA frontend (vanilla JS, dark/paper themes, service worker, EventSource client for `/api/stream`).
 - `skill/web-reader/` — Claude Code skill source (templated with `__PULLMD_URL__`).
 
