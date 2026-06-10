@@ -68,6 +68,41 @@ describe('GET /api', () => {
     assert.equal(receivedOptions.commentLimit, 10);
   });
 
+  it('serves a Hacker News item via the HN extractor with merged frontmatter', async () => {
+    const app = createApp({
+      extractHn: async () => ({ markdown: '# HN Story\n\n## Kommentare (1 von 1)\n\n**bob** · 1h ago: hi', meta: { author: 'sub', published: '2026-06-10T00:00:00.000Z', upvotes: 99 } }),
+      cache: createCache(':memory:'),
+    });
+    const res = await request(app, '/api?url=https://news.ycombinator.com/item?id=1&frontmatter=true');
+    assert.equal(res.status, 200);
+    assert.equal(res.headers['x-source'], 'hackernews');
+    assert.ok(res.body.includes('# HN Story'));
+    assert.ok(res.body.includes('upvotes: 99'));
+  });
+
+  it('passes comment params to the HN extractor', async () => {
+    let opts;
+    const app = createApp({
+      extractHn: async (url, o) => { opts = o; return '# HN'; },
+      cache: createCache(':memory:'),
+    });
+    await request(app, '/api?url=https://news.ycombinator.com/item?id=1&comment_depth=4&comment_limit=8');
+    assert.equal(opts.commentDepth, 4);
+    assert.equal(opts.commentLimit, 8);
+    assert.equal(opts.withMeta, true);
+  });
+
+  it('falls back to the web pipeline when the HN extractor throws', async () => {
+    const app = createApp({
+      extractHn: async () => { throw new Error('Item not found'); },
+      extractWeb: async () => ({ markdown: '# Web Fallback', title: 'Web', source: 'readability' }),
+      cache: createCache(':memory:'),
+    });
+    const res = await request(app, '/api?url=https://news.ycombinator.com/item?id=1');
+    assert.equal(res.status, 200);
+    assert.ok(res.body.includes('# Web Fallback'));
+  });
+
   it('returns 404 for post not found', async () => {
     const app = createApp({
       extractPost: async () => { throw new Error('Post not found'); },

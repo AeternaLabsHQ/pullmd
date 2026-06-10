@@ -1,5 +1,6 @@
 import express from 'express';
 import { extractPost, normalizeRedditUrl } from './lib/reddit.js';
+import { extractHn, normalizeHnUrl } from './lib/hackernews.js';
 import { extractWeb, extractHtml, extractFile } from './lib/web.js';
 import { createCache } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
@@ -37,6 +38,15 @@ function isRedditUrl(url) {
   }
 }
 
+function isHnUrl(url) {
+  try {
+    normalizeHnUrl(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function detectClient(ua, clientMode) {
   // Explicit client-mode header from the frontend trumps UA sniffing
   if (clientMode === 'pwa') return 'pwa';
@@ -58,6 +68,7 @@ function readDisablePublicHistoryEnv() {
 export function createApp(overrides = {}) {
   const app = express();
   const extract = overrides.extractPost || extractPost;
+  const extractHnFn = overrides.extractHn || extractHn;
   const extractWebFn = overrides.extractWeb || extractWeb;
   const extractHtmlFn = overrides.extractHtml || extractHtml;
   const extractFileFn = overrides.extractFile || extractFile;
@@ -179,6 +190,27 @@ export function createApp(overrides = {}) {
       });
       return baseMd;
     }
+    if (isHnUrl(entry.url)) {
+      const r = await extractHnFn(entry.url, {
+        comments: hadComments,
+        commentDepth: 3,
+        lang: inferredLang,
+        withMeta: true,
+      });
+      const baseMd = typeof r === 'string' ? r : r.markdown;
+      const hnMeta = typeof r === 'string' ? null : r.meta;
+      const titleMatch = baseMd.match(/^#\s+(.+)$/m);
+      cache.put({
+        url: entry.url,
+        title: titleMatch?.[1] || entry.title || 'Hacker News',
+        markdown: baseMd,
+        source: 'hackernews',
+        client,
+        user_id: null,
+        metadata: hnMeta,
+      });
+      return baseMd;
+    }
     const result = await extractWebFn(entry.url, { comments: false });
     cache.put({
       url: entry.url,
@@ -253,9 +285,9 @@ export function createApp(overrides = {}) {
     if (useCache) {
       const cached = cache.get(url);
       if (cached) {
-        const redditCached = isRedditUrl(url);
+        const structuredCached = isRedditUrl(url) || isHnUrl(url);
         const hasComments = cached.markdown.includes('\n## Kommentare') || cached.markdown.includes('\n## Comments');
-        if (!redditCached || !wantComments || hasComments) {
+        if (!structuredCached || !wantComments || hasComments) {
           const baseMd = cached.markdown;
           const cachedQuality = qualityScore(baseMd);
           const titleMatchCached = baseMd.match(/^#\s+(.+)$/m);
@@ -363,6 +395,58 @@ export function createApp(overrides = {}) {
         }
         console.error('API error:', err);
         return res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+
+    // Hacker News: dedicated Algolia-backed extractor. On any failure we fall
+    // through to the generic web pipeline below (worst case = today's output).
+    if (isHnUrl(url)) {
+      try {
+        const r = await extractHnFn(url, {
+          comments: wantComments,
+          commentDepth: comment_depth ? parseInt(comment_depth, 10) : 3,
+          commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
+          lang: reqLang,
+          withMeta: true,
+        });
+        const baseMd = typeof r === 'string' ? r : r.markdown;
+        const hnMeta = typeof r === 'string' ? null : r.meta;
+        const titleMatch = baseMd.match(/^#\s+(.+)$/m);
+        let shareId = null;
+        if (cache) {
+          shareId = cache.put({ url, title: titleMatch?.[1] || 'Hacker News', markdown: baseMd, source: 'hackernews', client, user_id: req.user?.id ?? null, metadata: hnMeta });
+        }
+        const quality = qualityScore(baseMd);
+        const fm = wantFrontmatter
+          ? buildFrontmatter({ title: titleMatch?.[1] || null, sourceUrl: url, quality }, { source: 'hackernews', shareId })
+          : '';
+        const markdown = wantFrontmatter
+          ? mergeMediaFrontmatter(fm + baseMd, hnMeta, 'hackernews')
+          : fm + baseMd;
+        res.set('X-Source', 'hackernews');
+        res.set('X-Quality', String(quality));
+        if (shareId) res.set('X-Share-Id', shareId);
+        if (cache) cache.logExtraction({
+          url, source: 'hackernews', quality, markdownLen: baseMd.length,
+          extractorReason: null, durationMs: Date.now() - t0, client, cached: false,
+        });
+        if (format === 'json') {
+          return res.json({
+            markdown,
+            metadata: { title: titleMatch?.[1] || null, sourceUrl: url, statusCode: 200, quality },
+            source: 'hackernews',
+            shareId: shareId || null,
+          });
+        }
+        if (format === 'text') {
+          res.set('Content-Type', 'text/plain; charset=utf-8');
+          return res.send(stripMarkdown(markdown));
+        }
+        res.set('Content-Type', 'text/markdown; charset=utf-8');
+        return res.send(markdown);
+      } catch (err) {
+        console.warn(`[hn] ${url} failed (${err.message}); falling back to web pipeline`);
+        // fall through to the generic web pipeline below
       }
     }
 
@@ -601,9 +685,9 @@ export function createApp(overrides = {}) {
       if (useCache) {
         const cached = cache.get(url);
         if (cached) {
-          const redditCached = isRedditUrl(url);
+          const structuredCached = isRedditUrl(url) || isHnUrl(url);
           const hasComments = cached.markdown.includes('\n## Kommentare') || cached.markdown.includes('\n## Comments');
-          if (!redditCached || !wantComments || hasComments) {
+          if (!structuredCached || !wantComments || hasComments) {
             emit('fetching', { url, cached: true });
             const baseMd = cached.markdown;
             const cachedQuality = qualityScore(baseMd);
@@ -658,6 +742,41 @@ export function createApp(overrides = {}) {
         send('result', { markdown: outMdReddit, source: 'reddit', shareId: shareId || null });
         if (cache) cache.logExtraction({ url, source: 'reddit', quality, markdownLen: baseMd.length, extractorReason: null, durationMs: Date.now() - t0, client, cached: false });
         return res.end();
+      }
+
+      // Hacker News: dedicated extractor; on failure fall through to the web path.
+      if (isHnUrl(url)) {
+        try {
+          emit('fetching', { url });
+          const r = await extractHnFn(url, {
+            comments: wantComments,
+            commentDepth: comment_depth ? parseInt(comment_depth, 10) : 3,
+            commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
+            lang: reqLang,
+            withMeta: true,
+          });
+          const baseMd = typeof r === 'string' ? r : r.markdown;
+          const hnMeta = typeof r === 'string' ? null : r.meta;
+          emit('extracting', { source: 'hackernews' });
+          const titleMatch = baseMd.match(/^#\s+(.+)$/m);
+          let shareId = null;
+          if (cache) {
+            shareId = cache.put({ url, title: titleMatch?.[1] || 'Hacker News', markdown: baseMd, source: 'hackernews', client, user_id: req.user?.id ?? null, metadata: hnMeta });
+          }
+          const quality = qualityScore(baseMd);
+          const fm = wantFrontmatter
+            ? buildFrontmatter({ title: titleMatch?.[1] || null, sourceUrl: url, quality }, { source: 'hackernews', shareId })
+            : '';
+          const outMdHn = wantFrontmatter
+            ? mergeMediaFrontmatter(fm + baseMd, hnMeta, 'hackernews')
+            : fm + baseMd;
+          send('result', { markdown: outMdHn, source: 'hackernews', shareId: shareId || null });
+          if (cache) cache.logExtraction({ url, source: 'hackernews', quality, markdownLen: baseMd.length, extractorReason: null, durationMs: Date.now() - t0, client, cached: false });
+          return res.end();
+        } catch (err) {
+          console.warn(`[hn] stream ${url} failed (${err.message}); falling back to web`);
+          // fall through to the web path below
+        }
       }
 
       // Web path with optional Playwright fallback inside extractWeb

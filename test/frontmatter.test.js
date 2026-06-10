@@ -180,3 +180,16 @@ describe('PULLMD_FRONTMATTER_FIELDS allowlist', () => {
     assert.ok(KNOWN_FRONTMATTER_FIELDS.has('llm_tokens') && KNOWN_FRONTMATTER_FIELDS.has('title'));
   });
 });
+
+describe('mergeMediaFrontmatter — hackernews', () => {
+  it('merges HN meta (author/published/upvotes) for source hackernews', () => {
+    const out = mergeMediaFrontmatter(
+      '---\ntitle: T\n---\n\n# T',
+      { author: 'pg', published: '2026-06-10T00:00:00.000Z', upvotes: 234 },
+      'hackernews',
+    );
+    assert.ok(out.includes('author: pg'));
+    assert.ok(out.includes('upvotes: 234'));
+    assert.ok(out.includes('published: 2026-06-10T00:00:00.000Z'));
+  });
+});
