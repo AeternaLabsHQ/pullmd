@@ -32,6 +32,18 @@ describe('formatItem', () => {
     const md = formatItem(comment({ author: 'pg', text: '<p>root</p>' }));
     assert.ok(md.startsWith('# Comment by pg'));
   });
+  it('excludes children of a dead node from the heading total (count matches render)', () => {
+    // A dead parent with a live child: formatCommentNode drops the whole dead
+    // subtree, so the live grandchild must be neither rendered nor counted —
+    // heading reads "1 von 1", not "1 von 2".
+    const md = formatItem(story({ children: [
+      comment({ author: 'alive', text: '<p>shown</p>' }),
+      comment({ author: null, text: null, children: [comment({ author: 'orphan', text: '<p>hidden</p>' })] }),
+    ] }), { commentDepth: 5 });
+    assert.ok(md.includes('## Kommentare (1 von 1)'));
+    assert.ok(md.includes('shown'));
+    assert.ok(!md.includes('hidden'));
+  });
 });
 
 describe('itemMeta', () => {
