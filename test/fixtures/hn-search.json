@@ -1,0 +1,28 @@
+{
+  "hits": [
+    {
+      "objectID": "48463808",
+      "title": "Claude Fable 5",
+      "url": "https://www.anthropic.com/news/claude-fable-5-mythos-5",
+      "author": "Philpax",
+      "points": 2457,
+      "num_comments": 1947
+    },
+    {
+      "objectID": "48469658",
+      "title": "macOS Container Machines",
+      "url": "https://github.com/apple/container/blob/main/docs/container-machine.md",
+      "author": "timsneath",
+      "points": 1026,
+      "num_comments": 356
+    },
+    {
+      "objectID": "48470248",
+      "title": "German ruling declares Google liable for false answers in AI Overviews",
+      "url": "https://the-decoder.com/landmark-german-ruling-declares-googles-ai-overviews-are-googles-own-words-and-makes-it-liable-for-false-answers/",
+      "author": "ahlCVA",
+      "points": 824,
+      "num_comments": 461
+    }
+  ]
+}

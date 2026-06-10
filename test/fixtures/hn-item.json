@@ -1,0 +1,37 @@
+{
+  "id": 48471048,
+  "type": "story",
+  "author": "dmckinno",
+  "title": "I used AI to automate infant mortality analytics",
+  "url": "https://www.example.com/infant-mortality-analytics",
+  "text": null,
+  "points": 312,
+  "created_at_i": 1781057000,
+  "children": [
+    {
+      "id": 48471116,
+      "type": "comment",
+      "author": "ungreased0675",
+      "text": "<p>Impressive work. General models are very cheap to get started with.</p>",
+      "created_at_i": 1781069624,
+      "children": [
+        {
+          "id": 48471846,
+          "type": "comment",
+          "author": "boxed",
+          "text": "<p>General models are very cheap to get started with though. So even if they are less than ideal, you can use them to get a company going and then make something more efficient.</p>",
+          "created_at_i": 1781069624,
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": 48471999,
+      "type": "comment",
+      "author": null,
+      "text": null,
+      "created_at_i": 1781070000,
+      "children": []
+    }
+  ]
+}
