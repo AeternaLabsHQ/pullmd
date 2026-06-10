@@ -13,8 +13,8 @@ Self-hosted URL-to-Markdown service for humans and AI agents.
 </p>
 
 PullMD takes any web URL and returns clean, readable Markdown — no
-navigation, no ads, no boilerplate. It auto-detects Reddit threads
-(with full comment trees), uses Cloudflare's native Markdown when
+navigation, no ads, no boilerplate. It auto-detects Reddit and
+Hacker News threads (with full comment trees), uses Cloudflare's native Markdown when
 available, runs Mozilla Readability + Trafilatura on static HTML,
 and as a last resort renders JavaScript-heavy pages via headless
 Chromium (Playwright sidecar) before extracting.
@@ -330,12 +330,14 @@ Returns clean Markdown (text/markdown). Optional query params:
   lang=de|en            language for the comments section header
 
 Response headers worth checking:
-  X-Source       reddit | cloudflare | readability | trafilatura |
+  X-Source       reddit | hackernews | cloudflare | readability | trafilatura |
                  playwright | markitdown | youtube | pdf-ocr | ...
   X-Quality      0.0-1.0 extraction confidence
   X-Share-Id     8-hex permalink, openable as /s/<id>
 
 Reddit URLs are auto-detected (incl. redd.it short links and /s/ shares).
+Hacker News URLs are auto-detected too — items, comment permalinks, and the
+front/newest/ask/show/jobs listings.
 Use this whenever you would otherwise fetch raw HTML — the markdown is
 much cleaner and saves significant context window space.
 ```
@@ -462,9 +464,9 @@ for it.
 | Param           | Default | Notes                                                                              |
 | --------------- | ------- | ---------------------------------------------------------------------------------- |
 | `url`           | —       | Required.                                                                          |
-| `comments`      | `true`  | Include Reddit comments. Ignored for non-Reddit URLs.                              |
-| `comment_depth` | `3`     | Max nesting depth (1–10).                                                          |
-| `comment_limit` | none    | Max top-level comments (Reddit returns ~200 without a cap).                        |
+| `comments`      | `true`  | Include Reddit / Hacker News comments. Ignored for other URLs.                     |
+| `comment_depth` | `3`     | Max nesting depth (1–10). Applies to Reddit and Hacker News.                       |
+| `comment_limit` | none    | Max top-level comments (uncapped by default).                                      |
 | `frontmatter`   | `false` | Prepend YAML metadata.                                                             |
 | `format`        | `md`    | `text` strips Markdown; `json` returns structured response.                        |
 | `nocache`       | `false` | Bypass the 1-hour cache.                                                           |

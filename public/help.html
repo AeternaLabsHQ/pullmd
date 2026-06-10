@@ -309,15 +309,17 @@
     <!-- ===================================================== -->
     <section id="what">
       <h2><span lang="de">Was macht PullMD?</span><span lang="en">What PullMD does</span><span class="kicker">/api</span></h2>
-      <p lang="de">PullMD ruft eine beliebige URL ab und liefert sie als sauberes Markdown zurück. Drei Extraktions-Pfade werden je nach Quelle gewählt:</p>
-      <p lang="en">PullMD fetches any URL and returns it as clean Markdown. It picks one of three extraction paths depending on the source:</p>
+      <p lang="de">PullMD ruft eine beliebige URL ab und liefert sie als sauberes Markdown zurück. Je nach Quelle wird der passende Extraktions-Pfad gewählt:</p>
+      <p lang="en">PullMD fetches any URL and returns it as clean Markdown. It picks the right extraction path depending on the source:</p>
       <ul class="doc-list" lang="de">
         <li><strong>Reddit</strong> — eigener Pipeline für Posts, Kommentare, Subreddit-Listings (mit Tiefe und Limit konfigurierbar).</li>
+        <li><strong>Hacker News</strong> — eigene Pipeline für Items, Kommentar-Permalinks und Listings (Front/Newest/Ask/Show/Jobs); verschachtelte Kommentare mit konfigurierbarer Tiefe.</li>
         <li><strong>Cloudflare-Markdown</strong> — wenn die Quelle <code>Accept: text/markdown</code> nativ unterstützt, wird das direkt durchgereicht (sauberster Output).</li>
         <li><strong>Readability + Turndown</strong> — Fallback für alles andere: Mozilla Readability extrahiert den Hauptinhalt, Turndown wandelt nach Markdown.</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li><strong>Reddit</strong> — dedicated pipeline for posts, comments, subreddit listings (configurable depth and limit).</li>
+        <li><strong>Hacker News</strong> — dedicated pipeline for items, comment permalinks, and listings (front/newest/ask/show/jobs); nested comments with configurable depth.</li>
         <li><strong>Cloudflare-Markdown</strong> — when the source supports <code>Accept: text/markdown</code> natively, that's passed through directly (cleanest output).</li>
         <li><strong>Readability + Turndown</strong> — fallback for everything else: Mozilla Readability pulls the main content, Turndown converts to Markdown.</li>
       </ul>
