@@ -51,7 +51,7 @@ web pages exactly like v2, just with a cleaner body by default.
 - **High-quality PDF tables (OCR)** - an opt-in, vendor-neutral [OCR tier](#high-quality-pdf-ocr) (`?pdf=ocr`) for table-grade PDF conversion, with automatic fallback to the free path.
 - **Images & audio → Markdown** - opt-in [captioning and transcription](#media-tier-image-captions--audio-transcription) via any OpenAI-compatible or local model; runs inside pullmd, no extra container required.
 - **YouTube transcripts** - [title, description and transcript](#youtube-transcripts) with clickable timecodes, no API key required.
-- **Richer frontmatter** - extraction source, quality, and (for media/OCR) [model + token/page usage](#llm-usage-metadata-in-frontmatter) for cost tracking, plus a configurable field allowlist.
+- **Richer frontmatter** - extraction source, quality, and (for media/OCR) [model + token/page usage](#source-specific-frontmatter-fields) for cost tracking, plus a configurable field allowlist.
 
 > Self-hosters upgrading from v2.x: the clean-body change is the only breaking one - [`MIGRATION.md`](./MIGRATION.md) has the one-line opt-out. Everything else is additive.
 
@@ -577,12 +577,16 @@ On success, `source` becomes `pdf-ocr` and the frontmatter gains a `pdf_pages` f
 
 `PULLMD_PDF_OCR_BASE_URL` can point at any compatible endpoint. Operators who want fully local OCR can run an engine such as [Docling](https://github.com/DS4SD/docling) themselves and set `_BASE_URL` to its address. Be aware that such engines are heavy - a multi-GB container image, and model cold-start times of tens of seconds on first request are typical. This is deliberate: pullmd does not bundle any heavy OCR engine. The reference Mistral OCR path uses a lightweight cloud API call; self-hosting a heavy local engine is an advanced operator choice.
 
-### LLM-usage metadata in frontmatter
+### Source-specific frontmatter fields
 
-When you request `?frontmatter=true`, media and YouTube results include usage fields in the YAML block that let agents compute cost or log telemetry. These fields appear **only in the frontmatter** and are never inserted into the body — without `?frontmatter=true` the body is pure content.
+When you request `?frontmatter=true`, Reddit, media, and YouTube results include extra fields in the YAML block - post metadata for Reddit, usage fields that let agents compute cost or log telemetry for media. These fields appear **only in the frontmatter** and are never inserted into the body — without `?frontmatter=true` the body is pure content.
 
 | Field | Present when | Description |
 | ----- | ------------ | ----------- |
+| `subreddit` | Reddit post | Subreddit, e.g. `r/selfhosted`. |
+| `author` | Reddit post (also web pages with author metadata) | Post author, e.g. `u/someone`. |
+| `published` | Reddit post (also web pages with publish date) | Post creation date (ISO 8601). |
+| `upvotes` | Reddit post | Score at time of extraction. |
 | `duration` | YouTube | Video duration (humanized, e.g. `12:34` or `H:MM:SS`). |
 | `views` | YouTube | View count at time of extraction. |
 | `image_size` | Image with caption | Dimensions of the source image: `WxH` pixels. |

@@ -617,8 +617,8 @@ language: en
 share_id: a3f9c2
 ---</pre>
       </div>
-      <p class="muted" lang="de">Felder: <code>title, url, source, fetched, quality, author, published, modified, description, language, image, site, extractor_reason, share_id</code>.</p>
-      <p class="muted" lang="en">Fields: <code>title, url, source, fetched, quality, author, published, modified, description, language, image, site, extractor_reason, share_id</code>.</p>
+      <p class="muted" lang="de">Basis-Felder: <code>title, url, source, fetched, quality, author, published, modified, description, language, image, site, extractor_reason, share_id</code>. Je nach Quelle zusätzlich: <code>subreddit, upvotes</code> (Reddit) · <code>duration, views</code> (YouTube) · <code>image_size, audio_seconds, llm_model, llm_tokens, llm_prompt_tokens, llm_completion_tokens</code> (Media) · <code>pdf_pages</code> (PDF-OCR). MCP-Antworten ergänzen <code>share_url, cached, refreshed, age_ms</code>. Mit <code>PULLMD_FRONTMATTER_FIELDS</code> lässt sich die Auswahl serverseitig einschränken.</p>
+      <p class="muted" lang="en">Base fields: <code>title, url, source, fetched, quality, author, published, modified, description, language, image, site, extractor_reason, share_id</code>. Depending on the source, additionally: <code>subreddit, upvotes</code> (Reddit) · <code>duration, views</code> (YouTube) · <code>image_size, audio_seconds, llm_model, llm_tokens, llm_prompt_tokens, llm_completion_tokens</code> (media) · <code>pdf_pages</code> (PDF OCR). MCP responses add <code>share_url, cached, refreshed, age_ms</code>. <code>PULLMD_FRONTMATTER_FIELDS</code> can trim the selection server-side.</p>
     </section>
 
     <!-- ===================================================== -->

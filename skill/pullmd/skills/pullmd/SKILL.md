@@ -128,6 +128,6 @@ Need to read a URL?
 - For pages with important comments or discussions (forums, HN, Reddit), add `comments=true` to include the discussion below the post.
 - For JS-rendered apps where the auto-fallback didn't fire (e.g. content lives in a tab the heuristic didn't reach), `render=force` re-extracts via headless Chromium.
 - Reddit URLs are automatically detected (incl. `redd.it` short links and `/r/<sub>/s/<id>` share links) and use a specialized extraction pipeline that handles posts, comments, galleries, and videos.
-- Add `frontmatter=true` when you want metadata: extraction source and quality always; for media/YouTube/OCR results also duration, image size, and LLM token usage (cost tracking).
+- Add `frontmatter=true` when you want metadata: extraction source and quality always; for Reddit posts also subreddit, author, upvotes, and publish date; for media/YouTube/OCR results duration, image size, and LLM token usage (cost tracking).
 - The `/api/history` endpoint shows recent conversions — useful for checking what's been fetched: `curl -s "__PULLMD_URL__/api/history?limit=5"`.
 - Persistent share links: every successful conversion gets an 8-hex `share_id`. `GET __PULLMD_URL__/s/<id>` returns the cached markdown and re-fetches from source if older than one hour — useful as a stable URL that always returns fresh content.
