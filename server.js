@@ -433,7 +433,16 @@ export function createApp(overrides = {}) {
         if (format === 'json') {
           return res.json({
             markdown,
-            metadata: { title: titleMatch?.[1] || null, sourceUrl: url, statusCode: 200, quality },
+            metadata: {
+              title: titleMatch?.[1] || null,
+              description: null, canonical: null, author: null,
+              publishedTime: null, modifiedTime: null,
+              ogTitle: null, ogDescription: null, ogImage: null,
+              ogSiteName: null, ogType: null,
+              twitterCard: null, twitterTitle: null, twitterDescription: null, twitterImage: null,
+              language: null, sourceUrl: url, statusCode: 200,
+              quality,
+            },
             source: 'hackernews',
             shareId: shareId || null,
           });

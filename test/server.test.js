@@ -1001,6 +1001,39 @@ describe('GET /api/stream', () => {
     const res = await request(app, '/api/stream');
     assert.equal(res.status, 400);
   });
+
+  it('streams a Hacker News item via the HN extractor', async () => {
+    const app = createApp({
+      extractHn: async () => ({ markdown: '# HN Story', meta: { author: 'sub', published: '2026-06-10T00:00:00.000Z', upvotes: 42 } }),
+      cache: createCache(':memory:'),
+    });
+    const res = await request(app, '/api/stream?url=https://news.ycombinator.com/item?id=1');
+    const events = parseSse(res.body);
+    const result = events.find(e => e.event === 'result');
+    assert.ok(result);
+    assert.equal(result.data.source, 'hackernews');
+    assert.match(result.data.markdown, /# HN Story/);
+    assert.ok(!events.find(e => e.event === 'error'));
+  });
+
+  it('falls back to the web path (no error event) when the HN extractor throws', async () => {
+    const app = createApp({
+      extractHn: async () => { throw new Error('Item not found'); },
+      extractWeb: async (url, { emit }) => {
+        emit('fetching', { url });
+        emit('extracting', { source: 'readability' });
+        return { markdown: '# Web Fallback', title: 'Web', source: 'readability', metadata: { quality: 1 } };
+      },
+      cache: createCache(':memory:'),
+    });
+    const res = await request(app, '/api/stream?url=https://news.ycombinator.com/item?id=1');
+    const events = parseSse(res.body);
+    assert.ok(!events.find(e => e.event === 'error'), 'HN failure must not emit an error event');
+    const result = events.find(e => e.event === 'result');
+    assert.ok(result);
+    assert.equal(result.data.source, 'readability');
+    assert.match(result.data.markdown, /# Web Fallback/);
+  });
 });
 
 describe('DISABLE_PUBLIC_HISTORY', () => {
