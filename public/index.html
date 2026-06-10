@@ -1230,6 +1230,11 @@
             <span class="toggle-track"></span>
             <span data-i18n="toggle.frontmatter">Frontmatter</span>
           </label>
+          <label class="toggle-label" id="ocr-label" style="display:none;">
+            <input type="checkbox" id="ocr-toggle">
+            <span class="toggle-track"></span>
+            <span data-i18n="toggle.ocr">PDF-OCR</span>
+          </label>
           <button id="go-btn">
             <span data-i18n="btn.pull">Pull</span>
             <span class="arrow" aria-hidden="true">→</span>
@@ -1381,6 +1386,7 @@
           'hero.p':            'Webseiten, Dokumente, Bilder, Audio und YouTube — sauber konvertiert zu Markdown. Per URL oder Upload, für Menschen und KI-Agenten.',
           'toggle.comments':   'Kommentare',
           'toggle.frontmatter':'Frontmatter',
+          'toggle.ocr':         'PDF-OCR',
           'toggle.depth':      'Tiefe',
           'btn.pull':          'Pull',
           'loading':           'Lade Seite…',
@@ -1436,6 +1442,7 @@
           'hero.p':            'Web pages, documents, images, audio and YouTube — converted to clean Markdown. By URL or upload, for humans and AI agents.',
           'toggle.comments':   'Comments',
           'toggle.frontmatter':'Frontmatter',
+          'toggle.ocr':         'PDF OCR',
           'toggle.depth':      'Depth',
           'btn.pull':          'Pull',
           'loading':           'Loading page…',
@@ -1611,6 +1618,7 @@
       const urlInput = document.getElementById('url-input');
       const commentsToggle = document.getElementById('comments-toggle');
       const frontmatterToggle = document.getElementById('frontmatter-toggle');
+      const ocrToggle = document.getElementById('ocr-toggle');
       const depthInput = document.getElementById('depth-input');
       const depthLabel = document.getElementById('depth-label');
       const goBtn = document.getElementById('go-btn');
@@ -1823,6 +1831,8 @@
           if (v !== null) commentsToggle.checked = v === 'true';
           v = localStorage.getItem('pullmd-frontmatter');
           if (v !== null) frontmatterToggle.checked = v === 'true';
+          v = localStorage.getItem('pullmd-pdf-ocr');
+          if (v !== null) ocrToggle.checked = v === 'true';
           v = localStorage.getItem('pullmd-comment-depth');
           if (v !== null) {
             var n = parseInt(v, 10);
@@ -1835,6 +1845,9 @@
       });
       frontmatterToggle.addEventListener('change', function () {
         try { localStorage.setItem('pullmd-frontmatter', String(frontmatterToggle.checked)); } catch (e) {}
+      });
+      ocrToggle.addEventListener('change', function () {
+        try { localStorage.setItem('pullmd-pdf-ocr', String(ocrToggle.checked)); } catch (e) {}
       });
       depthInput.addEventListener('change', function () {
         try { localStorage.setItem('pullmd-comment-depth', depthInput.value); } catch (e) {}
@@ -1852,6 +1865,7 @@
         const depth = parseInt(depthInput.value, 10);
         if (withComments && depth && depth !== 3) params.set('comment_depth', String(depth));
         if (frontmatterToggle.checked) params.set('frontmatter', 'true');
+        if (ocrToggle.checked) params.set('pdf', 'ocr');
         params.set('lang', getLang());
         if (clientMode) params.set('client_mode', clientMode);
 
@@ -1993,6 +2007,10 @@
         .then(function (c) {
           markitdownEnabled = !!c.markitdown;
           markitdownMediaEnabled = !!(c.vision || c.stt);
+          if (c.pdfOcr) {
+            var ocrLabel = document.getElementById('ocr-label');
+            if (ocrLabel) ocrLabel.style.display = '';
+          }
           if (markitdownEnabled) {
             var hint = document.querySelector('#drop-overlay .drop-box');
             if (hint) hint.setAttribute('data-i18n', 'drop.hintDoc');
@@ -2110,6 +2128,7 @@
           try {
             var params = new URLSearchParams({ format: 'json' });
             if (frontmatterToggle.checked) params.set('frontmatter', 'true');
+            if (ocrToggle.checked && /\.pdf$/i.test(file.name || '')) params.set('pdf', 'ocr');
             var res = await fetch('/api/file?' + params.toString(), {
               method: 'POST',
               headers: {
