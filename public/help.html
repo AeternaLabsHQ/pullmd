@@ -441,6 +441,9 @@ unzip pullmd.zip -d ~/.claude/skills/
 # Restart Claude Code; the skill activates on web-reading requests.</pre>
       </div>
 
+      <p lang="de"><strong>Upgrade von vor v3:</strong> Die Skill hieß früher <code>web-reader</code>. Das neue Zip ersetzt eine bestehende Installation <strong>nicht</strong> — erst die alte entfernen (<code>rm -rf ~/.claude/skills/web-reader</code>), sonst sind beide Skills parallel aktiv.</p>
+      <p lang="en"><strong>Upgrading from pre-v3:</strong> the skill used to be called <code>web-reader</code>. The new zip does <strong>not</strong> replace an existing install — remove the old one first (<code>rm -rf ~/.claude/skills/web-reader</code>), otherwise both skills stay active side by side.</p>
+
       <h3 lang="de">Option 3 — MCP-Server (remote)</h3>
       <h3 lang="en">Option 3 — MCP server (remote)</h3>
       <p lang="de">PullMD läuft als <strong>remote MCP-Server</strong> unter <code>__PULLMD_URL__/mcp</code> (Streamable-HTTP-Transport, stateless). Drei Tools: <code>read_url</code>, <code>get_share</code>, <code>list_recent</code>. Server-seitige Updates erreichen automatisch alle Clients — keine lokale Installation nötig.</p>

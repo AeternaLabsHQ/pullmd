@@ -351,6 +351,17 @@ unzip pullmd.zip -d ~/.claude/skills/
 # Restart Claude Code; the skill activates on web-reading requests.
 ```
 
+> **Upgrading from pre-v3?** The skill was renamed from `web-reader` to
+> `pullmd` in v3.0.0. Installing the new zip does **not** replace an
+> existing install — remove the old one first, or both skills will be
+> active side by side:
+>
+> ```bash
+> rm -rf ~/.claude/skills/web-reader
+> ```
+>
+> (The old download URL `/web-reader.zip` keeps working as a redirect.)
+
 ### 3. MCP server
 
 Remote MCP server at `${PULLMD_URL}/mcp` (Streamable-HTTP transport, stateless).

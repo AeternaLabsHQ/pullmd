@@ -16,6 +16,18 @@ The source URL, fetch date, and all extraction metadata are still available - un
 
 `PULLMD_FRONTMATTER_FIELDS` accepts a comma-separated list of field names to include in the YAML block (e.g. `title,url,source,llm_tokens`). Leave it unset to emit all fields (the v2.x default). Useful for agent pipelines where you want to trim frontmatter to just the fields you use.
 
+## Renamed: Claude Code skill bundle (`web-reader` → `pullmd`)
+
+The downloadable Claude Code skill is now named `pullmd` and served at `GET /pullmd.zip`. The old `/web-reader.zip` URL keeps working as a permanent redirect, so existing docs and scripts don't break.
+
+**If you have the old skill installed**, installing the new zip does not replace it — Claude Code would load both side by side. Remove the old one first:
+
+```bash
+rm -rf ~/.claude/skills/web-reader
+curl -O https://your-instance.example.com/pullmd.zip
+unzip pullmd.zip -d ~/.claude/skills/
+```
+
 ## Pin tags
 
 Update your compose or k8s manifests to the new image tag:

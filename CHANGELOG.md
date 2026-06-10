@@ -9,20 +9,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
-## [Unreleased]
-
-### Added
-
-- **Opt-in high-quality PDF tier** (`PULLMD_PDF_OCR_API_KEY` / `PULLMD_PDF_OCR_BASE_URL` / `PULLMD_PDF_OCR_MODEL`). Route PDFs through a vendor-neutral OCR provider that preserves tables - reference provider is Mistral OCR (`mistral-ocr-latest`, ~$0.002/page). Triggered per request with `?pdf=ocr` or a recipe `fetch.pdf: ocr` default. Default PDF handling is unchanged (free markitdown path). OCR failures fall back to markitdown automatically. New `source: pdf-ocr` value and `pdf_pages` frontmatter field.
-
-### Changed
-
-- **Breaking (self-hosters):** Image captioning and audio transcription now run inside pullmd, not the markitdown sidecar, so media features no longer require the markitdown container. The `MARKITDOWN_MEDIA` / `MARKITDOWN_VISION_*` / `MARKITDOWN_STT_*` / `MARKITDOWN_LLM_*` env vars are replaced by `PULLMD_VISION_*` / `PULLMD_STT_*` / `PULLMD_LLM_*` (each modality enabled when its key is set; `PULLMD_LLM_*` is a shared fallback).
-- The `source` field of converted media results is now `image-caption` / `audio-transcript` (previously `markitdown`).
-
----
-
-## [3.0.0] - 2026-06-09
+## [3.0.0] - 2026-06-10
 
 ### Breaking
 
@@ -34,7 +21,20 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 - **Document conversion via the MarkItDown sidecar** (`MARKITDOWN_URL`). New `POST /api/file` endpoint accepts raw document bytes (25 MB cap) for PDF, DOCX, PPTX, XLSX, EPUB, ZIP, CSV, JSON, XML, and more. Non-HTML URLs detected as documents are also routed through the sidecar automatically in `extractWeb`. If `MARKITDOWN_URL` is unset, the document path is disabled and `/api/file` returns `502`. These features were developed incrementally as versions 2.7.0-2.10.0 on the release branch but are first officially released here in 3.0.0.
 - **Opt-in media tier** (`PULLMD_VISION_*` / `PULLMD_STT_*`). Image captioning and audio transcription (Whisper STT) run inside pullmd itself - no markitdown container needed. Per-modality or shared OpenAI-compatible credentials; each modality is enabled when its key is set. The PWA accepts image and audio uploads when the tier is enabled. Off by default; cloud backends cost per call and send content off-host - point `*_BASE_URL` at a local server to keep everything on-host.
 - **Keyless YouTube transcripts** (`MARKITDOWN_YOUTUBE=true`). Routes YouTube URLs through the sidecar for title + description + full transcript. No API key required. Configurable timecodes (`yt_timecodes`: `links`/`plain`/`none`), block chunking (`yt_chunk`), preferred languages, and optional proxy. All options are also overridable per-request via query params on `/api` and the MCP `read_url` tool.
+- **Opt-in high-quality PDF tier** (`PULLMD_PDF_OCR_API_KEY` / `PULLMD_PDF_OCR_BASE_URL` / `PULLMD_PDF_OCR_MODEL`). Route PDFs through a vendor-neutral OCR provider that preserves tables - reference provider is Mistral OCR (`mistral-ocr-latest`, ~$0.002/page). Triggered per request with `?pdf=ocr` (on `/api`, `/api/stream`, `/api/file`, and the MCP `read_url` tool via `pdf_ocr`) or a recipe `fetch.pdf: ocr` default. Default PDF handling is unchanged (free markitdown path). OCR failures fall back to markitdown automatically. New `source: pdf-ocr` value and `pdf_pages` frontmatter field.
 - **LLM-usage and media metadata in frontmatter.** When media or LLM features run, the response frontmatter carries `llm_model`, `llm_tokens`, `llm_prompt_tokens`, `llm_completion_tokens`, `audio_seconds`, `image_size`, and (for YouTube) `duration` and `views`. Media and channel metadata is emitted frontmatter-only - consistent with the v3 clean-body direction.
+
+### Changed
+
+- **Claude Code skill bundle renamed `web-reader` → `pullmd`.** Now served at `GET /pullmd.zip`; the old `/web-reader.zip` URL responds with a permanent redirect. **Existing installs are not replaced by the new zip** - remove the old skill first (`rm -rf ~/.claude/skills/web-reader`) or both will be active side by side. See `MIGRATION.md`.
+- The MCP `read_url` tool description and the skill instructions now cover the v3 capabilities (documents, YouTube transcripts, media captioning/transcription, PDF OCR), and the MCP server reports the real package version.
+- Media conversion results carry per-modality `source` labels (`image-caption` / `audio-transcript`) instead of a generic `markitdown`.
+
+### Fixed
+
+- **Relative image and link URLs are now resolved against the source page** before extraction. Previously, root-relative paths (e.g. `/images/photo.webp`) survived into the markdown verbatim and rendered as broken images on share pages.
+- Document conversions in the markitdown sidecar run in a sandboxed child process with a wall-clock timeout and optional memory cap, so a pathological file can't pin the sidecar (DoS hardening).
+- Media frontmatter (image size, LLM usage, YouTube meta) survives the cache - cached responses now carry the same fields as the first request.
 
 ---
 
