@@ -20,8 +20,16 @@ const makePostData = (overrides = {}) => ({
   ...overrides,
 });
 
+// The inline meta line (**r/sub** · u/user · N ↑ · …) is legacy behavior,
+// emitted only with PULLMD_SOURCE_HEADER set (clean body is the v3 default —
+// the meta lives in the frontmatter; see reddit-frontmatter.test.js).
+function withSourceHeader(fn) {
+  process.env.PULLMD_SOURCE_HEADER = 'true';
+  try { return fn(); } finally { delete process.env.PULLMD_SOURCE_HEADER; }
+}
+
 describe('formatPost', () => {
-  it('formats a self-text post correctly', () => {
+  it('formats a self-text post correctly (legacy header)', () => withSourceHeader(() => {
     const result = formatPost(makePostData(), 'https://www.reddit.com/r/javascript/comments/abc123/test_post/');
     assert.ok(result.startsWith('# Test Post Title\n'));
     assert.ok(result.includes('u/testuser'));
@@ -30,7 +38,7 @@ describe('formatPost', () => {
     assert.ok(result.includes('This is the post body.'));
     assert.ok(result.includes('With multiple paragraphs.'));
     assert.ok(result.includes('https://www.reddit.com/r/javascript/comments/abc123/test_post/'));
-  });
+  }));
 
   it('formats a link post with the URL', () => {
     const result = formatPost(makePostData({
@@ -63,17 +71,17 @@ describe('formatPost', () => {
     assert.ok(result.includes('https://v.redd.it/abc123/DASH_720.mp4'));
   });
 
-  it('shows relative time for recent posts', () => {
+  it('shows relative time for recent posts (legacy header)', () => withSourceHeader(() => {
     const result = formatPost(makePostData({
       created_utc: Math.floor(Date.now() / 1000) - 7200,
     }));
     assert.ok(result.includes('2h ago'));
-  });
+  }));
 
-  it('handles deleted author', () => {
+  it('handles deleted author (legacy header)', () => withSourceHeader(() => {
     const result = formatPost(makePostData({ author: '[deleted]' }));
     assert.ok(result.includes('u/[deleted]'));
-  });
+  }));
 
   it('formats a gallery post with multiple images', () => {
     const result = formatPost(makePostData({

@@ -4,7 +4,7 @@ v3.0.0 is a major release with one breaking change to the response body format. 
 
 ## Breaking change: clean body by default
 
-The inline source-attribution line that previously appeared at the top of the body (`**domain** · fetched` + url, or `**filename** · fetched` for local uploads) is no longer emitted. The body now opens with `# Title` and goes straight into content.
+The inline source-attribution line that previously appeared at the top of the body (`**domain** · fetched` + url, or `**filename** · fetched` for local uploads) is no longer emitted. The same applies to Reddit posts: the meta line (`**r/sub** · u/user · N ↑ · age · date` + url) is gone from the body; subreddit, author, upvotes, and publish date are available in the frontmatter instead (`subreddit`, `author`, `upvotes`, `published`). The body now opens with `# Title` and goes straight into content.
 
 The source URL, fetch date, and all extraction metadata are still available - unchanged - in the YAML frontmatter (e.g. `url`, `fetched`, `source`, `quality`). No frontmatter fields were removed.
 
@@ -138,7 +138,7 @@ If you don't set `PULLMD_AUTH_MODE`, nothing changes. Skip the rest.
 
 ## Legacy `PULLMD_AUTH_TOKEN`
 
-If you were using the Caddy workaround (or any other reverse-proxy bearer-token gate) with a fixed token, you can preserve it during migration by setting both `PULLMD_AUTH_MODE=single-admin` and `PULLMD_AUTH_TOKEN=<your-token>`. Requests with `Authorization: Bearer <your-token>` resolve to the admin user. This compat is **deprecated** and will be removed in v3.0 — generate a fresh `pmd_*` API key from `/settings` and migrate clients off the legacy token.
+If you were using the Caddy workaround (or any other reverse-proxy bearer-token gate) with a fixed token, you can preserve it during migration by setting both `PULLMD_AUTH_MODE=single-admin` and `PULLMD_AUTH_TOKEN=<your-token>`. Requests with `Authorization: Bearer <your-token>` resolve to the admin user. This compat is **deprecated** and slated for removal in a future major release — generate a fresh `pmd_*` API key from `/settings` and migrate clients off the legacy token.
 
 ## Resetting an admin password
 

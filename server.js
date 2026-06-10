@@ -158,11 +158,15 @@ export function createApp(overrides = {}) {
     const hadComments = md.includes('\n## Kommentare') || md.includes('\n## Comments');
     const inferredLang = md.includes('\n## Comments') ? 'en' : 'de';
     if (isRedditUrl(entry.url)) {
-      const baseMd = await extract(entry.url, {
+      const r = await extract(entry.url, {
         comments: hadComments,
         commentDepth: 3,
         lang: inferredLang,
+        withMeta: true,
       });
+      // Test doubles may return a bare string; production returns { markdown, meta }.
+      const baseMd = typeof r === 'string' ? r : r.markdown;
+      const redditMeta = typeof r === 'string' ? null : r.meta;
       const titleMatch = baseMd.match(/^#\s+(.+)$/m);
       cache.put({
         url: entry.url,
@@ -171,6 +175,7 @@ export function createApp(overrides = {}) {
         source: 'reddit',
         client,
         user_id: null,
+        metadata: redditMeta,
       });
       return baseMd;
     }
@@ -291,24 +296,30 @@ export function createApp(overrides = {}) {
 
     if (isRedditUrl(url)) {
       try {
-        const baseMd = await extract(url, {
+        const r = await extract(url, {
           comments: wantComments,
           commentDepth: comment_depth ? parseInt(comment_depth, 10) : 3,
           commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
           lang: reqLang,
+          withMeta: true,
         });
+        // Test doubles may return a bare string; production returns { markdown, meta }.
+        const baseMd = typeof r === 'string' ? r : r.markdown;
+        const redditMeta = typeof r === 'string' ? null : r.meta;
 
         let shareId = null;
         const titleMatch = baseMd.match(/^#\s+(.+)$/m);
         if (cache) {
-          shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null });
+          shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null, metadata: redditMeta });
         }
 
         const quality = qualityScore(baseMd);
         const fm = wantFrontmatter
           ? buildFrontmatter({ title: titleMatch?.[1] || null, sourceUrl: url, quality }, { source: 'reddit', shareId })
           : '';
-        const markdown = fm + baseMd;
+        const markdown = wantFrontmatter
+          ? mergeMediaFrontmatter(fm + baseMd, redditMeta, 'reddit')
+          : fm + baseMd;
 
         res.set('X-Source', 'reddit');
         res.set('X-Quality', String(quality));
@@ -621,23 +632,30 @@ export function createApp(overrides = {}) {
       // which lib/reddit.js already populates with user-readable strings.
       if (isRedditUrl(url)) {
         emit('fetching', { url });
-        const baseMd = await extract(url, {
+        const r = await extract(url, {
           comments: wantComments,
           commentDepth: comment_depth ? parseInt(comment_depth, 10) : 3,
           commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
           lang: reqLang,
+          withMeta: true,
         });
+        // Test doubles may return a bare string; production returns { markdown, meta }.
+        const baseMd = typeof r === 'string' ? r : r.markdown;
+        const redditMeta = typeof r === 'string' ? null : r.meta;
         emit('extracting', { source: 'reddit' });
         const titleMatch = baseMd.match(/^#\s+(.+)$/m);
         let shareId = null;
         if (cache) {
-          shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null });
+          shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null, metadata: redditMeta });
         }
         const quality = qualityScore(baseMd);
         const fm = wantFrontmatter
           ? buildFrontmatter({ title: titleMatch?.[1] || null, sourceUrl: url, quality }, { source: 'reddit', shareId })
           : '';
-        send('result', { markdown: fm + baseMd, source: 'reddit', shareId: shareId || null });
+        const outMdReddit = wantFrontmatter
+          ? mergeMediaFrontmatter(fm + baseMd, redditMeta, 'reddit')
+          : fm + baseMd;
+        send('result', { markdown: outMdReddit, source: 'reddit', shareId: shareId || null });
         if (cache) cache.logExtraction({ url, source: 'reddit', quality, markdownLen: baseMd.length, extractorReason: null, durationMs: Date.now() - t0, client, cached: false });
         return res.end();
       }
