@@ -458,7 +458,7 @@
     }
     .badge.neutral { background: var(--border); color: var(--fg-muted); }
 
-    #copy-btn, #permalink-copy-btn {
+    #copy-btn, #permalink-copy-btn, #share-btn {
       padding: 0.4375rem 0.875rem;
       font-size: 0.8125rem;
       font-weight: 500;
@@ -474,16 +474,17 @@
       align-items: center;
       gap: 0.375rem;
     }
-    #copy-btn:hover, #permalink-copy-btn:hover {
+    #copy-btn:hover, #permalink-copy-btn:hover, #share-btn:hover {
       border-color: var(--accent);
       color: var(--accent);
     }
-    #copy-btn:active, #permalink-copy-btn:active { transform: scale(0.97); }
-    #copy-btn.copied, #permalink-copy-btn.copied {
+    #copy-btn:active, #permalink-copy-btn:active, #share-btn:active { transform: scale(0.97); }
+    #copy-btn.copied, #permalink-copy-btn.copied, #share-btn.copied {
       background: var(--good-bg);
       border-color: var(--good);
       color: var(--good);
     }
+    .result-actions { display: inline-flex; align-items: center; gap: 0.375rem; }
 
     .permalink-bar {
       display: none;
@@ -1269,10 +1270,16 @@
           <button type="button" data-mode="raw" class="active" role="tab" aria-selected="true">Raw</button>
           <button type="button" data-mode="rendered" role="tab" aria-selected="false">Rendered</button>
         </div>
-        <button id="copy-btn">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-          <span class="label" data-i18n="copy">Kopieren</span>
-        </button>
+        <div class="result-actions">
+          <button id="copy-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            <span class="label" data-i18n="copy">Kopieren</span>
+          </button>
+          <button id="share-btn" type="button" style="display:none;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+            <span class="label" data-i18n="share.btn">Teilen</span>
+          </button>
+        </div>
       </div>
       <pre id="result"></pre>
       <div id="result-rendered" class="hidden"></div>
@@ -1393,6 +1400,8 @@
           'share':             'Share',
           'copy':              'Kopieren',
           'copied':            'Kopiert!',
+          'share.btn':         'Teilen',
+          'shared':            'Geteilt!',
           'hint':              'URL einfügen, dann',
           'section.recent':    'Letzte Abrufe',
           'archive.link':      'Archiv →',
@@ -1449,6 +1458,8 @@
           'share':             'Share',
           'copy':              'Copy',
           'copied':            'Copied!',
+          'share.btn':         'Share',
+          'shared':            'Shared!',
           'hint':              'Paste URL, then',
           'section.recent':    'Recent fetches',
           'archive.link':      'Archive →',
@@ -1629,6 +1640,7 @@
       const resultRenderedEl = document.getElementById('result-rendered');
       const viewToggleEl = document.getElementById('view-toggle');
       const copyBtn = document.getElementById('copy-btn');
+      const shareBtn = document.getElementById('share-btn');
       const permalinkBar = document.getElementById('permalink-bar');
       const permalinkUrlEl = document.getElementById('permalink-url');
       const permalinkCopyBtn = document.getElementById('permalink-copy-btn');
@@ -1792,6 +1804,8 @@
         }
         copyBtn.querySelector('.label').textContent = t('copy');
         copyBtn.classList.remove('copied');
+        shareBtn.querySelector('.label').textContent = t('share.btn');
+        shareBtn.classList.remove('copied');
         if (source) {
           var sc = sourceColors[source] || { bg: 'var(--border)', color: 'var(--fg-muted)' };
           sourceBadge.textContent = source;
@@ -2192,6 +2206,36 @@
           sel.addRange(range);
         });
       });
+
+      // Web Share API: reveal + wire the share button only where supported
+      // (e.g. mobile, Safari, Chrome on Win/ChromeOS). Elsewhere (Firefox
+      // desktop) it stays hidden; the copy button beside it remains.
+      if (navigator.share) {
+        shareBtn.style.display = '';
+        var flashShare = function (doneKey) {
+          shareBtn.querySelector('.label').textContent = t(doneKey);
+          shareBtn.classList.add('copied');
+          setTimeout(function () {
+            shareBtn.querySelector('.label').textContent = t('share.btn');
+            shareBtn.classList.remove('copied');
+          }, 2000);
+        };
+        shareBtn.addEventListener('click', function () {
+          if (!rawMarkdown) return;
+          navigator.share({ text: rawMarkdown }).then(function () {
+            flashShare('shared');
+          }).catch(function (err) {
+            // AbortError = user dismissed the share sheet → nothing to do.
+            // Any other rejection (blocked by permissions policy, payload
+            // refused, OS failure) → fall back to clipboard so the content
+            // is never silently lost.
+            if (err && err.name === 'AbortError') return;
+            navigator.clipboard.writeText(rawMarkdown)
+              .then(function () { flashShare('copied'); })
+              .catch(function () {});
+          });
+        });
+      }
 
       permalinkCopyBtn.addEventListener('click', function () {
         var url = permalinkUrlEl.textContent;
