@@ -9,6 +9,19 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.1.0] - 2026-06-15
+
+### Added
+
+- **Dedicated Hacker News pipeline.** Hacker News URLs - item pages, individual comment permalinks, and listings (`/`, `/news`, `/newest`, `/ask`, `/show`, `/jobs`, `/best`) - are now extracted through a purpose-built converter (via the HN API) instead of the generic HTML path. The result is a clean nested comment tree with per-comment permalinks and a `## Comments (N of M)` heading, replacing the layout-table soup the old path produced. Comment depth honors the existing `comment_depth` control, and extraction failures fall back to the generic web pipeline. New `source: hackernews` value and an HN-orange source badge in the PWA.
+- **PWA: share the converted Markdown** (Web Share API). A share button next to Copy hands the current Markdown - exactly what is shown and copied, including the frontmatter block when the toggle is on - to the native OS/app share sheet. It appears only where the browser supports Web Share (e.g. mobile, Safari); on a non-cancel failure it falls back to copying so the content is never lost.
+
+### Changed
+
+- **PWA: the Frontmatter toggle updates the output instantly.** Flipping the Frontmatter switch now adds or removes the YAML block immediately, with no second Pull. The Copy and Share buttons and the character count follow the toggle.
+
+---
+
 ## [3.0.0] - 2026-06-10
 
 ### Breaking
