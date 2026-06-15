@@ -1647,6 +1647,8 @@
 
       var PERMALINK_BASE = window.location.origin + '/s/';
       var rawMarkdown = '';
+      var rawBody = '';
+      var rawFrontmatter = '';
 
       var VIEW_MODE_KEY = 'pullmd-view-mode';
       var viewMode = 'raw';
@@ -1789,13 +1791,46 @@
         }
       }
 
+      // Frontmatter is a pure leading YAML block; the body after it is identical
+      // whether or not frontmatter was requested. The PWA always fetches WITH it,
+      // keeps body + block apart, and lets the toggle swap the view client-side —
+      // no re-pull. Mirrors the server's own block regex (lib/frontmatter.js).
+      function splitFrontmatter(md) {
+        var m = /^---\n([\s\S]*?)\n---\n+/.exec(md);
+        // Require the first inner line to look like a YAML key, so a body that
+        // merely opens with a `---` rule is never mis-detected as frontmatter.
+        if (m && /^[A-Za-z_][\w-]*\s*:/.test(m[1])) {
+          return { frontmatter: m[0], body: md.slice(m[0].length) };
+        }
+        return { frontmatter: '', body: md };
+      }
+
+      function setCharsBadge(len) {
+        charsBadge.textContent = len >= 1000
+          ? t('badge.charsK', { n: (len / 1000).toFixed(1) })
+          : t('badge.chars', { n: len });
+        charsBadge.style.display = 'inline-block';
+      }
+
+      // Recompute the visible output from the stored body + frontmatter for the
+      // current toggle state. Runs on initial render and on every toggle flip.
+      function applyFrontmatterView() {
+        rawMarkdown = (frontmatterToggle.checked && rawFrontmatter)
+          ? rawFrontmatter + rawBody
+          : rawBody;
+        renderMarkdownWithImages(resultEl, rawMarkdown);
+        renderedStale = true;
+        applyViewMode();
+        setCharsBadge(rawMarkdown.length);
+      }
+
       function showResult(text, source, shareId) {
         hideLoading();
         errorEl.classList.remove('visible');
-        rawMarkdown = text;
-        renderMarkdownWithImages(resultEl, text);
-        renderedStale = true;
-        applyViewMode();
+        var parts = splitFrontmatter(text);
+        rawFrontmatter = parts.frontmatter;
+        rawBody = parts.body;
+        applyFrontmatterView();
         resultContainer.classList.add('visible');
         // Bring the result into view when triggered from a list entry deeper
         // down the page (history / archive). No-op when already scrolled top.
@@ -1815,13 +1850,8 @@
         } else {
           sourceBadge.style.display = 'none';
         }
-        var len = text.length;
-        charsBadge.textContent = len >= 1000
-          ? t('badge.charsK', { n: (len / 1000).toFixed(1) })
-          : t('badge.chars', { n: len });
-        charsBadge.style.display = 'inline-block';
 
-        var commentsMatch = text.match(/## (?:Kommentare|Comments) \((\d+) (?:von|of) (\d+)\)/);
+        var commentsMatch = rawBody.match(/## (?:Kommentare|Comments) \((\d+) (?:von|of) (\d+)\)/);
         if (commentsMatch) {
           commentsBadge.textContent = t('badge.comments', { shown: commentsMatch[1], total: commentsMatch[2] });
           commentsBadge.style.display = 'inline-block';
@@ -1860,6 +1890,11 @@
       });
       frontmatterToggle.addEventListener('change', function () {
         try { localStorage.setItem('pullmd-frontmatter', String(frontmatterToggle.checked)); } catch (e) {}
+        // Instantly re-render an already-shown result with/without frontmatter —
+        // no re-pull needed (body + block are already in memory). Skip when no
+        // result is shown, or when there's no frontmatter block to add/remove
+        // (toggling would be a byte-identical no-op). Preference still persists.
+        if (rawFrontmatter && resultContainer.classList.contains('visible')) applyFrontmatterView();
       });
       ocrToggle.addEventListener('change', function () {
         try { localStorage.setItem('pullmd-pdf-ocr', String(ocrToggle.checked)); } catch (e) {}
@@ -1879,7 +1914,9 @@
         if (!withComments) params.set('comments', 'false');
         const depth = parseInt(depthInput.value, 10);
         if (withComments && depth && depth !== 3) params.set('comment_depth', String(depth));
-        if (frontmatterToggle.checked) params.set('frontmatter', 'true');
+        // Always fetch WITH frontmatter; the toggle only controls client-side
+        // display (applyFrontmatterView), so flipping it needs no re-pull.
+        params.set('frontmatter', 'true');
         if (ocrToggle.checked) params.set('pdf', 'ocr');
         params.set('lang', getLang());
         if (clientMode) params.set('client_mode', clientMode);
@@ -2102,7 +2139,8 @@
         reader.onload = async function () {
           try {
             var params = new URLSearchParams({ format: 'json' });
-            if (frontmatterToggle.checked) params.set('frontmatter', 'true');
+            // Always fetch WITH frontmatter; the toggle swaps the view client-side.
+            params.set('frontmatter', 'true');
             var res = await fetch('/api/html?' + params.toString(), {
               method: 'POST',
               headers: { 'Content-Type': 'text/html', 'X-Client-Mode': clientMode, 'X-Filename': encodeURIComponent(file.name) },
@@ -2142,7 +2180,8 @@
         reader.onload = async function () {
           try {
             var params = new URLSearchParams({ format: 'json' });
-            if (frontmatterToggle.checked) params.set('frontmatter', 'true');
+            // Always fetch WITH frontmatter; the toggle swaps the view client-side.
+            params.set('frontmatter', 'true');
             if (ocrToggle.checked && /\.pdf$/i.test(file.name || '')) params.set('pdf', 'ocr');
             var res = await fetch('/api/file?' + params.toString(), {
               method: 'POST',
