@@ -80,6 +80,14 @@ describe('convertYoutubeViaSidecar', () => {
     assert.equal(cap.o.headers['X-YT-Chunk'], '0');
   });
 
+  it('passes transcript_status through as transcriptStatus', async () => {
+    const out = await convertYoutubeViaSidecar('<html>', {
+      url: 'http://m/convert', sourceUrl: 'https://www.youtube.com/watch?v=x',
+      fetch: async () => okResp({ markdown: '## Transcript\n\n_x_', title: 'V', fields: {}, transcript_status: 'blocked' }),
+    });
+    assert.equal(out.transcriptStatus, 'blocked');
+  });
+
   it('omits format headers when not given', async () => {
     let cap;
     await convertYoutubeViaSidecar('<html>', {

@@ -872,6 +872,42 @@ describe('extractWeb - YouTube routing', () => {
     if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
   });
 
+  it('flags the result noStore when the transcript fetch was blocked (transient 429)', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'true';
+    const result = await extractWeb('https://www.youtube.com/watch?v=abc123', {
+      fetch: ytFetch(),
+      youtubeClient: async () => ({ markdown: '## Transcript\n\n_blocked_', title: 'V', fields: {}, transcriptStatus: 'blocked' }),
+    });
+    assert.equal(result.source, 'youtube');
+    assert.equal(result.noStore, true, 'a transient block must not be cached');
+    if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
+  });
+
+  it('flags the result noStore when the transcript fetch errored', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'true';
+    const result = await extractWeb('https://www.youtube.com/watch?v=abc123', {
+      fetch: ytFetch(),
+      youtubeClient: async () => ({ markdown: '## Transcript\n\n_err_', title: 'V', fields: {}, transcriptStatus: 'error' }),
+    });
+    assert.equal(result.noStore, true);
+    if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
+  });
+
+  it('does NOT flag noStore for a normal transcript (status ok) or a genuinely absent one (none)', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'true';
+    const ok = await extractWeb('https://www.youtube.com/watch?v=abc123', {
+      fetch: ytFetch(),
+      youtubeClient: async () => ({ markdown: '## Transcript\n\nhi', title: 'V', fields: {}, transcriptStatus: 'ok' }),
+    });
+    assert.ok(!ok.noStore, 'a successful transcript must be cacheable');
+    const none = await extractWeb('https://www.youtube.com/watch?v=abc123', {
+      fetch: ytFetch(),
+      youtubeClient: async () => ({ markdown: '## Transcript\n\n_No transcript available._', title: 'V', fields: {}, transcriptStatus: 'none' }),
+    });
+    assert.ok(!none.noStore, 'a genuinely absent transcript is a stable fact and stays cacheable');
+    if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
+  });
+
   it('falls back to the HTML pipeline when the youtube sidecar is down', async () => {
     const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'true';
     const result = await extractWeb('https://www.youtube.com/watch?v=abc123', { fetch: ytFetch(), youtubeClient: async () => null });

@@ -212,6 +212,9 @@ export function createApp(overrides = {}) {
       return baseMd;
     }
     const result = await extractWebFn(entry.url, { comments: false });
+    // Transient failure (e.g. YouTube 429): keep the existing good snapshot
+    // instead of overwriting it with a "couldn't retrieve" placeholder.
+    if (result.noStore) return entry.markdown;
     cache.put({
       url: entry.url,
       title: result.title,
@@ -470,7 +473,7 @@ export function createApp(overrides = {}) {
       });
 
       let shareId = null;
-      if (cache) {
+      if (cache && !result.noStore) {
         shareId = cache.put({ url, title: result.title, markdown: result.markdown, source: result.source, client, user_id: req.user?.id ?? null, metadata: result.metadata });
       }
 
@@ -801,7 +804,7 @@ export function createApp(overrides = {}) {
       });
 
       let shareId = null;
-      if (cache) {
+      if (cache && !result.noStore) {
         shareId = cache.put({ url, title: result.title, markdown: result.markdown, source: result.source, client, user_id: req.user?.id ?? null, metadata: result.metadata });
       }
 

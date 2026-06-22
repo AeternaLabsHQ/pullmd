@@ -161,6 +161,28 @@ describe('GET /api - web URLs', () => {
     assert.match(r2.body, /views: 1000/, 'cached serve must include views');
   });
 
+  it('does NOT cache a noStore result (transient 429) — re-extracts on each request', async () => {
+    let calls = 0;
+    const cache = createCache(':memory:');
+    const app = createApp({
+      extractWeb: async () => {
+        calls++;
+        return {
+          markdown: '# Vid\n\n## Transcript\n\n_blocked_',
+          title: 'Vid',
+          source: 'youtube',
+          noStore: true,
+          metadata: { sourceUrl: 'https://youtu.be/blocked', quality: 0.4 },
+        };
+      },
+      cache,
+    });
+    const r1 = await request(app, '/api?url=https://youtu.be/blocked');
+    await request(app, '/api?url=https://youtu.be/blocked');
+    assert.equal(calls, 2, 'noStore result must not be cached; each request must re-extract');
+    assert.equal(r1.headers['x-share-id'], undefined, 'no share id when the result is not stored');
+  });
+
   it('forwards ?extractor= to extractWeb when valid (#17)', async () => {
     let received;
     const app = createApp({

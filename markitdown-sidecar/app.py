@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request, HTTPException
 from markitdown import MarkItDown, StreamInfo
 
 from limits import run_guarded
+from yt_transcript import fetch_snippets, _format_transcript
 
 MAX_BODY_BYTES = 50 * 1024 * 1024  # 50 MB
 
@@ -62,65 +63,12 @@ def _yt_api():
 
 
 def _fetch_snippets(video_id):
-    """List of (start_seconds, text). [] on any failure (never raises)."""
+    """List of (start_seconds, text), status. [] on any failure (never raises)."""
     try:
         api = _yt_api()
-
-        def to_list(ft):
-            return [(float(s.start), s.text) for s in ft]
-
-        if YT_LANGS:
-            try:
-                return to_list(api.fetch(video_id, languages=YT_LANGS))
-            except Exception:
-                pass
-        for t in api.list(video_id):
-            try:
-                return to_list(t.fetch())
-            except Exception:
-                continue
     except Exception:
-        pass
-    return []
-
-
-def _fmt_ts(seconds):
-    s = int(seconds)
-    h, rem = divmod(s, 3600)
-    m, sec = divmod(rem, 60)
-    return f"{h}:{m:02d}:{sec:02d}" if h else f"{m:02d}:{sec:02d}"
-
-
-def _format_transcript(snippets, video_id, timecodes, chunk):
-    if not snippets:
-        return ""
-    blocks = []
-    if chunk <= 0:
-        blocks = list(snippets)
-    else:
-        start, texts = None, []
-        for st, tx in snippets:
-            if start is not None and st - start >= chunk:
-                blocks.append((start, " ".join(texts)))
-                start, texts = None, []
-            if start is None:
-                start = st
-            texts.append(tx)
-        if texts:
-            blocks.append((start or 0, " ".join(texts)))
-
-    lines = []
-    for st, tx in blocks:
-        tx = " ".join(tx.split())
-        if not tx:
-            continue
-        if timecodes == "none":
-            lines.append(tx)
-        elif timecodes == "plain":
-            lines.append(f"[{_fmt_ts(st)}] {tx}")
-        else:  # links
-            lines.append(f"[{_fmt_ts(st)}](https://www.youtube.com/watch?v={video_id}&t={int(st)}s) {tx}")
-    return "\n\n".join(lines)
+        return [], "error"
+    return fetch_snippets(api, video_id, YT_LANGS)
 
 
 def _yt_metadata(body):
@@ -221,17 +169,34 @@ async def youtube(request: Request):
         chunk = YT_CHUNK_DEFAULT
 
     meta = _yt_metadata(body)
-    snippets = _fetch_snippets(video_id)
+    snippets, status = _fetch_snippets(video_id)
     transcript = _format_transcript(snippets, video_id, timecodes, chunk)
+
+    if transcript:
+        transcript_md = f"## Transcript\n\n{transcript}\n"
+    elif status == "blocked":
+        # A transcript exists but YouTube rate-limited the content fetch (HTTP 429).
+        # Be honest instead of claiming none exists, and let the caller skip caching
+        # so a later retry can succeed once the rate-limit window clears.
+        transcript_md = (
+            "## Transcript\n\n_A transcript exists for this video but could not be "
+            "retrieved right now: YouTube rate-limited the request (HTTP 429). "
+            "Please try again later._\n"
+        )
+    elif status == "error":
+        transcript_md = "## Transcript\n\n_Transcript could not be retrieved._\n"
+    else:  # none
+        transcript_md = "## Transcript\n\n_No transcript available._\n"
 
     markdown_body = ""
     if meta["description"]:
         markdown_body += f"## Description\n\n{meta['description']}\n\n"
-    markdown_body += f"## Transcript\n\n{transcript}\n" if transcript else "## Transcript\n\n_No transcript available._\n"
+    markdown_body += transcript_md
 
     return {
         "markdown": markdown_body.strip(),
         "title": meta["title"] or "YouTube video",
+        "transcript_status": status,
         "fields": {
             "channel": meta["channel"],
             "duration": _humanize_iso_duration(meta["duration"]),
