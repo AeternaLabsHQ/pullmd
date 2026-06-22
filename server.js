@@ -487,6 +487,7 @@ export function createApp(overrides = {}) {
         : finalMd;
 
       res.set('X-Source', result.source);
+      if (result.transcriptStatus) res.set('X-Transcript-Status', result.transcriptStatus);
       if (result.metadata?.quality !== undefined) {
         res.set('X-Quality', String(result.metadata.quality));
       }
@@ -817,7 +818,7 @@ export function createApp(overrides = {}) {
         ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
         : finalMd;
 
-      send('result', { markdown: outMd, source: result.source, shareId: shareId || null });
+      send('result', { markdown: outMd, source: result.source, shareId: shareId || null, transcriptStatus: result.transcriptStatus || null });
       if (cache) cache.logExtraction({
         url, source: result.source,
         quality: result.metadata?.quality,

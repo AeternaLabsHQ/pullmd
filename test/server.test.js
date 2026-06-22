@@ -161,6 +161,31 @@ describe('GET /api - web URLs', () => {
     assert.match(r2.body, /views: 1000/, 'cached serve must include views');
   });
 
+  it('sets the X-Transcript-Status header from the extraction result', async () => {
+    const app = createApp({
+      extractWeb: async () => ({
+        markdown: '# V\n\n## Transcript\n\n_blocked_',
+        title: 'V',
+        source: 'youtube',
+        transcriptStatus: 'blocked',
+        noStore: true,
+        metadata: { sourceUrl: 'https://youtu.be/x', quality: 0.4 },
+      }),
+      cache: createCache(':memory:'),
+    });
+    const r = await request(app, '/api?url=https://youtu.be/x');
+    assert.equal(r.headers['x-transcript-status'], 'blocked');
+  });
+
+  it('omits X-Transcript-Status when the result has no transcript status', async () => {
+    const app = createApp({
+      extractWeb: async () => ({ markdown: '# Page', title: 'Page', source: 'readability', metadata: {} }),
+      cache: createCache(':memory:'),
+    });
+    const r = await request(app, '/api?url=https://example.com/plain');
+    assert.equal(r.headers['x-transcript-status'], undefined);
+  });
+
   it('does NOT cache a noStore result (transient 429) — re-extracts on each request', async () => {
     let calls = 0;
     const cache = createCache(':memory:');

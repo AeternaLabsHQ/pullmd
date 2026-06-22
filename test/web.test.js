@@ -872,6 +872,16 @@ describe('extractWeb - YouTube routing', () => {
     if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
   });
 
+  it('surfaces the youtube transcriptStatus on the result', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'true';
+    const r = await extractWeb('https://www.youtube.com/watch?v=abc123', {
+      fetch: ytFetch(),
+      youtubeClient: async () => ({ markdown: '## Transcript\n\nhi', title: 'V', fields: {}, transcriptStatus: 'ok' }),
+    });
+    assert.equal(r.transcriptStatus, 'ok');
+    if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
+  });
+
   it('flags the result noStore when the transcript fetch was blocked (transient 429)', async () => {
     const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'true';
     const result = await extractWeb('https://www.youtube.com/watch?v=abc123', {

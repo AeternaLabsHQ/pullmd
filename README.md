@@ -334,6 +334,8 @@ Response headers worth checking:
                  playwright | markitdown | youtube | pdf-ocr | ...
   X-Quality      0.0-1.0 extraction confidence
   X-Share-Id     8-hex permalink, openable as /s/<id>
+  X-Transcript-Status  youtube only: ok | none | blocked | error
+                 (blocked/error = transient, not cached — retry later)
 
 Reddit URLs are auto-detected (incl. redd.it short links and /s/ shares).
 Hacker News URLs are auto-detected too — items, comment permalinks, and the
@@ -481,6 +483,7 @@ for it.
 - `X-Source` — `reddit` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
 - `X-Quality` — `0.0`–`1.0` extraction confidence
 - `X-Share-Id` — the 8-hex permalink id
+- `X-Transcript-Status` — YouTube only: `ok` · `none` · `blocked` · `error`. `blocked` (YouTube rate-limited the transcript fetch, HTTP 429) and `error` are transient and not cached — retry later; `none` means the video genuinely has no transcript
 
 ---
 
