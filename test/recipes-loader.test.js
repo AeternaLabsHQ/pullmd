@@ -153,3 +153,20 @@ describe('loadRecipes — user overlay', () => {
     assert.equal(status.sources[1].rejected, 1);
   });
 });
+
+describe('shipped site-recipes.default.json', () => {
+  const shippedPath = path.resolve(here, '..', 'site-recipes.default.json');
+
+  it('loads with zero rejections (every entry passes RecipeSchema)', () => {
+    const { recipes, status } = loadRecipes({ defaultPath: shippedPath, userPath: null });
+    assert.equal(status.rejected, 0, 'a shipped recipe failed schema validation');
+    assert.ok(recipes.length >= 1);
+  });
+
+  it('includes the sciencedaily lead-image recipe', () => {
+    const { recipes } = loadRecipes({ defaultPath: shippedPath, userPath: null });
+    const sd = recipes.find((r) => r.name === 'sciencedaily-lead-image');
+    assert.ok(sd, 'sciencedaily-lead-image recipe is present');
+    assert.deepEqual(sd.preprocess, [{ action: 'unwrap', selector: '#text' }]);
+  });
+});

@@ -562,6 +562,26 @@ describe('cleanDom CMS-pattern preprocessing', () => {
     const result = await extractWeb('https://example.com/photos', { fetch: fetchHtml(html) });
     assert.match(result.markdown, /A red sunset over mountains/);
   });
+
+  it('strips 1x1 tracking-pixel images but keeps real content images', async () => {
+    const html = `<!doctype html><html><body><article><h1>Tracked</h1>
+      ${Array.from({ length: 8 }, () => '<p>This is a paragraph that is comfortably long enough to count as a real paragraph for the metrics regex used in scoring and pickBest decisions.</p>').join('')}
+      <p>End of article.<img src="https://counter.example.com/count.gif?d=lightbox" alt="Tracker" width="1" height="1" style="opacity:0"></p>
+      <p>A real photo <img src="https://example.com/lead.jpg" alt="A real lead image" width="1200" height="675"> sits inline here.</p>
+    </article></body></html>`;
+    const result = await extractWeb('https://example.com/tracked', { fetch: fetchHtml(html) });
+    assert.doesNotMatch(result.markdown, /count\.gif/, '1x1 tracking pixel must be removed');
+    assert.match(result.markdown, /example\.com\/lead\.jpg/, 'real content image must survive');
+  });
+
+  it('keeps images that declare only one tiny dimension (not a 1x1 beacon)', async () => {
+    const html = `<!doctype html><html><body><article><h1>Banner</h1>
+      ${Array.from({ length: 8 }, () => '<p>This is a paragraph that is comfortably long enough to count as a real paragraph for the metrics regex used in scoring and pickBest decisions.</p>').join('')}
+      <p>Wide banner <img src="https://example.com/banner.png" alt="Banner" width="1200" height="1"> here.</p>
+    </article></body></html>`;
+    const result = await extractWeb('https://example.com/banner', { fetch: fetchHtml(html) });
+    assert.match(result.markdown, /example\.com\/banner\.png/, 'a 1200x1 image is not a tracking pixel');
+  });
 });
 
 describe('extractWeb — recipe integration (Hook 0+1)', () => {

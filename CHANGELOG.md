@@ -9,6 +9,21 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.2.0] - 2026-06-25
+
+### Added
+
+- **`X-Transcript-Status` response header** (#37, closes #36). YouTube conversions now expose the transcript state (`ok` / `none` / `blocked` / `error`) as a response header, so programmatic consumers can tell a transient block from a genuinely absent transcript without parsing the body.
+- **ScienceDaily lead-image recipe.** A shipped site recipe for `*.sciencedaily.com/releases/**` unwraps the article's `#text` container so the lead image survives extraction. Without it, Readability picks the paragraph-dense inner block as the article and drops the sibling `<figure>` that holds the real lead image. General sites should still rely on the `image` frontmatter field (from `og:image`) for a robust lead-image source.
+
+### Fixed
+
+- **Tracking pixels no longer leak into the Markdown.** 1x1 invisible beacon images (e.g. republish/analytics counters embedded inline in article text) were kept by Readability and rendered as bogus Markdown images. `cleanDom` now drops any `<img>` whose declared width and height are both ≤ 1; genuine wide/tall banners (only one tiny dimension) are spared.
+- **YouTube: transient 429 distinguished from a missing transcript** (#34, closes #33). A per-IP 429 on the timedtext endpoint was mislabeled as a permanent block; it is now classified honestly and not cached, so a later retry can pick up the now-available transcript.
+- **Sidecar: bundle `yt_transcript.py` in the markitdown image** (#35). The YouTube transcript helper was missing from the built image; it is now copied explicitly.
+
+---
+
 ## [3.1.0] - 2026-06-15
 
 ### Added
