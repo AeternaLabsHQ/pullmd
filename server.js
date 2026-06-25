@@ -294,15 +294,28 @@ export function createApp(overrides = {}) {
           const baseMd = cached.markdown;
           const cachedQuality = qualityScore(baseMd);
           const titleMatchCached = baseMd.match(/^#\s+(.+)$/m);
+          // Serve the full metadata persisted at extraction time (image/og:image,
+          // description, author, language, site, …) instead of rebuilding a
+          // minimal {title,url,quality} object — those fields were silently
+          // dropped on cache hits before. title/url/quality are renormalized from
+          // the cached row (markdown H1 + live quality) so they stay authoritative.
+          const cachedMeta = cached.metadata || {};
+          const outMeta = {
+            ...cachedMeta,
+            title: titleMatchCached?.[1] || cached.title || cachedMeta.title || null,
+            sourceUrl: url,
+            quality: cachedQuality,
+          };
+          // Reddit/HN mirror their fresh paths: a minimal frontmatter object plus
+          // mergeMediaFrontmatter for the structured fields (subreddit/author/…).
+          const fmInput = structuredCached
+            ? { title: outMeta.title, sourceUrl: url, quality: cachedQuality }
+            : outMeta;
           const fm = wantFrontmatter
-            ? buildFrontmatter({
-                title: titleMatchCached?.[1] || cached.title,
-                sourceUrl: url,
-                quality: cachedQuality,
-              }, { source: cached.source, shareId: cached.share_id })
+            ? buildFrontmatter(fmInput, { source: cached.source, shareId: cached.share_id })
             : '';
           const md = wantFrontmatter
-            ? mergeMediaFrontmatter(fm + baseMd, cached.metadata, cached.source)
+            ? mergeMediaFrontmatter(fm + baseMd, cachedMeta, cached.source)
             : fm + baseMd;
           res.set('X-Source', cached.source);
           res.set('X-Quality', String(cachedQuality));
@@ -314,7 +327,7 @@ export function createApp(overrides = {}) {
           if (format === 'json') {
             return res.json({
               markdown: md,
-              metadata: null,
+              metadata: outMeta,
               source: cached.source,
               shareId: cached.share_id || null,
             });

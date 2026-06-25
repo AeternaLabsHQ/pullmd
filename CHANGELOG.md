@@ -18,6 +18,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ### Fixed
 
+- **Cache hits now serve complete metadata.** The cached-response path rebuilt a minimal `{title, url, quality}` object, so on a cache hit the frontmatter lost `image` (`og:image`/`twitter:image`), `description`, `author`, `language`, and `site`, and `format=json` returned `metadata: null`. The full metadata persisted at extraction time (in the existing `metadata` column) is now served on cache hits in both the frontmatter and the `format=json` response - no schema change needed. Consumers reading `metadata.ogImage` / `metadata.twitterImage` (e.g. for an article lead image) now get it on cached pages too.
 - **Tracking pixels no longer leak into the Markdown.** 1x1 invisible beacon images (e.g. republish/analytics counters embedded inline in article text) were kept by Readability and rendered as bogus Markdown images. `cleanDom` now drops any `<img>` whose declared width and height are both ≤ 1; genuine wide/tall banners (only one tiny dimension) are spared.
 - **YouTube: transient 429 distinguished from a missing transcript** (#34, closes #33). A per-IP 429 on the timedtext endpoint was mislabeled as a permanent block; it is now classified honestly and not cached, so a later retry can pick up the now-available transcript.
 - **Sidecar: bundle `yt_transcript.py` in the markitdown image** (#35). The YouTube transcript helper was missing from the built image; it is now copied explicitly.

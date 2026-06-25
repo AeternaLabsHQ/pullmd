@@ -366,6 +366,50 @@ describe('GET /api with frontmatter=true', () => {
   });
 });
 
+describe('GET /api - cache-hit metadata completeness', () => {
+  function webApp(cache, metadata) {
+    let calls = 0;
+    const app = createApp({
+      extractWeb: async () => {
+        calls++;
+        return { markdown: '# Leopards\n\nBody content here.', title: 'Leopards', source: 'readability', metadata };
+      },
+      cache,
+    });
+    return { app, calls: () => calls };
+  }
+
+  const META = {
+    title: 'Leopards', sourceUrl: 'https://example.com/lp', quality: 1,
+    ogImage: 'https://example.com/lead.webp', twitterImage: 'https://example.com/tw.jpg',
+    description: 'A leopard story', author: 'Jane Doe', ogSiteName: 'Example', language: 'en',
+  };
+
+  it('surfaces image/description/author from cached metadata in frontmatter', async () => {
+    const cache = createCache(':memory:');
+    const { app, calls } = webApp(cache, META);
+    await request(app, '/api?url=https://example.com/lp&frontmatter=true');     // fresh: stores metadata
+    const r2 = await request(app, '/api?url=https://example.com/lp&frontmatter=true'); // cache hit
+    assert.equal(calls(), 1, 'second request must be served from cache');
+    assert.match(r2.body, /image: https:\/\/example\.com\/lead\.webp/, 'image must survive cache');
+    assert.match(r2.body, /description: A leopard story/, 'description must survive cache');
+    assert.match(r2.body, /author: Jane Doe/, 'author must survive cache');
+  });
+
+  it('returns full metadata (not null) with og/twitter image in format=json on cache hits', async () => {
+    const cache = createCache(':memory:');
+    const { app, calls } = webApp(cache, META);
+    await request(app, '/api?url=https://example.com/lp&format=json');           // fresh
+    const r2 = await request(app, '/api?url=https://example.com/lp&format=json'); // cache hit
+    assert.equal(calls(), 1, 'second request must be served from cache');
+    const body = JSON.parse(r2.body);
+    assert.ok(body.metadata, 'cache-hit json metadata must not be null');
+    assert.equal(body.metadata.ogImage, 'https://example.com/lead.webp');
+    assert.equal(body.metadata.twitterImage, 'https://example.com/tw.jpg');
+    assert.equal(body.metadata.sourceUrl, 'https://example.com/lp');
+  });
+});
+
 describe('GET /api/stats', () => {
   it('returns extraction stats from logged events', async () => {
     const cache = createCache(':memory:');
