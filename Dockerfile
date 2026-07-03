@@ -35,5 +35,5 @@ RUN mkdir -p /data && chown -R app:app /app /data
 # volumes that the Docker daemon may have created as root, then drops to
 # the unprivileged app user via su-exec.
 EXPOSE 3000
-ENTRYPOINT ["docker-entrypoint.sh"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "server.js"]
