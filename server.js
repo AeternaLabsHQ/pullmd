@@ -10,6 +10,7 @@ import { buildFrontmatter, mergeMediaFrontmatter, validateFrontmatterFields } fr
 import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
+import { assertUrlAllowed, SsrfError } from './lib/ssrf.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -272,6 +273,15 @@ export function createApp(overrides = {}) {
 
     if (!url) {
       return res.status(400).json({ error: 'Missing required parameter: url' });
+    }
+
+    try {
+      await assertUrlAllowed(url);
+    } catch (err) {
+      if (err instanceof SsrfError) {
+        return res.status(403).json({ error: `URL not allowed: ${err.message}` });
+      }
+      throw err;
     }
 
     const client = detectClient(req.headers['user-agent'], req.headers['x-client-mode'] || req.query.client_mode);
