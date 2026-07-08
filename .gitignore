@@ -15,3 +15,6 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Local session notes (never committed to public repo)
+SESSION_LOG.md
