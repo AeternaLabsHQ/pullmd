@@ -262,10 +262,10 @@ describe('integration: per-user history', () => {
       const otherU = await auth.createUser({ email: 'other@x.y', password: 'pw1234567' });
       const { fullKey: otherKey } = auth.createApiKey(otherU.id, 'other');
 
-      await fetch(base + '/api?url=https://admin-only.com&nocache=1', {
+      await fetch(base + '/api?url=https://8.8.8.8/&nocache=1', {
         headers: { Authorization: `Bearer ${adminKey}` },
       });
-      await fetch(base + '/api?url=https://other-only.com&nocache=1', {
+      await fetch(base + '/api?url=https://8.8.4.4/&nocache=1', {
         headers: { Authorization: `Bearer ${otherKey}` },
       });
 
@@ -275,8 +275,8 @@ describe('integration: per-user history', () => {
       const otherHist = await (await fetch(base + '/api/history', {
         headers: { Authorization: `Bearer ${otherKey}` },
       })).json();
-      assert.deepEqual(adminHist.map(h => h.url), ['https://admin-only.com']);
-      assert.deepEqual(otherHist.map(h => h.url), ['https://other-only.com']);
+      assert.deepEqual(adminHist.map(h => h.url), ['https://8.8.8.8/']);
+      assert.deepEqual(otherHist.map(h => h.url), ['https://8.8.4.4/']);
     });
   });
 });

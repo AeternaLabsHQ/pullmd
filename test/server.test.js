@@ -1412,26 +1412,26 @@ describe('GET /api - YouTube format params', () => {
 describe('GET /api - LLM usage + meta frontmatter', () => {
   it('emits llm token + model + image_size in frontmatter for media source', async () => {
     const app = createApp({ extractWeb: async () => ({ markdown: '# I\n\ncaption', title: 'I', source: 'markitdown', metadata: { quality: 0.8, sourceUrl: 'https://e/p.jpg', llmModel: 'gpt-4o-mini', llmTokens: 123, imageSize: '172x178' } }) });
-    const res = await request(app, '/api?url=https://e/p.jpg&frontmatter=true');
+    const res = await request(app, '/api?url=https://8.8.8.8/p.jpg&frontmatter=true');
     assert.ok(res.body.includes('llm_model: gpt-4o-mini'));
     assert.ok(res.body.includes('llm_tokens: 123'));
     assert.ok(res.body.includes('image_size: 172x178'));
   });
   it('emits audio_seconds for transcription results', async () => {
     const app = createApp({ extractWeb: async () => ({ markdown: '# A\n\nx', title: 'A', source: 'markitdown', metadata: { quality: 0.8, sourceUrl: 'https://e/a.mp3', llmModel: 'whisper-1', audioSeconds: 12.3 } }) });
-    const res = await request(app, '/api?url=https://e/a.mp3&frontmatter=true');
+    const res = await request(app, '/api?url=https://8.8.8.8/a.mp3&frontmatter=true');
     assert.ok(res.body.includes('audio_seconds: 12.3'));
     assert.ok(res.body.includes('llm_model: whisper-1'));
   });
   it('emits NO meta in the body or without frontmatter', async () => {
     const app = createApp({ extractWeb: async () => ({ markdown: '# I\n\ncaption', title: 'I', source: 'markitdown', metadata: { quality: 0.8, llmModel: 'gpt-4o-mini', llmTokens: 123 } }) });
-    const res = await request(app, '/api?url=https://e/p.jpg');
+    const res = await request(app, '/api?url=https://8.8.8.8/p.jpg');
     assert.ok(!res.body.includes('llm_model'), 'no meta without frontmatter');
     assert.ok(!res.body.includes('llm_tokens'));
   });
   it('emits image_size and llm_model in frontmatter for image-caption source via /api', async () => {
     const app = createApp({ extractWeb: async () => ({ markdown: '# pic.jpg\n\nA sunny scene.', title: 'pic.jpg', source: 'image-caption', metadata: { quality: 0.5, sourceUrl: 'https://e/pic.jpg', imageSize: '2x2', llmModel: 'gpt-4o-mini', llmTokens: 99 } }) });
-    const res = await request(app, '/api?url=https://e/pic.jpg&frontmatter=true');
+    const res = await request(app, '/api?url=https://8.8.8.8/pic.jpg&frontmatter=true');
     assert.ok(res.body.startsWith('---\n'));
     assert.ok(res.body.includes('image_size: 2x2'), 'expected image_size in frontmatter');
     assert.ok(res.body.includes('llm_model: gpt-4o-mini'), 'expected llm_model in frontmatter');
