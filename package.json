@@ -1,6 +1,6 @@
 {
   "name": "pullmd",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "type": "module",
   "main": "server.js",
   "license": "AGPL-3.0-or-later",

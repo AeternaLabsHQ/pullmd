@@ -9,6 +9,16 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.3.0] - 2026-07-08
+
+### Security
+
+- **Block Server-Side Request Forgery (SSRF)** (closes #41). The URL-fetch endpoints (`GET /api`, the MCP `read_url` tool, and the Reddit/web/Playwright fetch paths behind them) now resolve the target host and reject any resolved address in the private, loopback, link-local, CGNAT or cloud-metadata ranges - including `169.254.169.254` and `100.100.100.200`, the addresses used by the reported exploit. Each redirect hop is re-checked before it is followed, and the Playwright sidecar path is validated Node-side before dispatch. Requests to a blocked host return HTTP 403.
+- Self-hosters who intentionally need an internal host (e.g. an intranet wiki) can allowlist specific CIDRs and/or exact hostnames via the new `PULLMD_ALLOWED_HOSTS` env var (comma-separated, empty by default = block all internal targets). See `.env.example`.
+- **Known residual:** the guard checks resolved IPs at request time but does not pin the outbound socket to the checked address, so a DNS-rebinding attack (where the name resolves differently between the check and the actual connection) is not fully closed by this fix. When running behind an outbound HTTP proxy, the proxy performs its own name resolution, so its egress filtering - not this guard - is the authoritative layer for traffic it forwards.
+
+---
+
 ## [3.2.0] - 2026-06-25
 
 ### Added

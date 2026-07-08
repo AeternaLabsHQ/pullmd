@@ -557,6 +557,8 @@ Then: claude mcp list to verify.</pre>
           </tr>
         </tbody>
       </table>
+      <p class="muted" lang="de">Zum Schutz vor Server-Side Request Forgery (SSRF) werden Anfragen an private, loopback-, link-local-, CGNAT- und Cloud-Metadata-Adressen (z. B. <code>169.254.169.254</code>, <code>100.100.100.200</code>) standardmäßig mit <code>403</code> abgelehnt - auch wenn eine URL erst per Redirect dorthin führt. Selbst-Hoster können mit <code>PULLMD_ALLOWED_HOSTS</code> (kommagetrennte CIDRs und/oder Hostnamen) gezielt interne Ziele freigeben.</p>
+      <p class="muted" lang="en">To guard against Server-Side Request Forgery (SSRF), requests to private, loopback, link-local, CGNAT and cloud-metadata addresses (e.g. <code>169.254.169.254</code>, <code>100.100.100.200</code>) are rejected with <code>403</code> by default - including when a URL only reaches them via redirect. Self-hosters can allow specific internal targets via <code>PULLMD_ALLOWED_HOSTS</code> (comma-separated CIDRs and/or hostnames).</p>
     </section>
 
     <!-- ===================================================== -->
