@@ -25,6 +25,31 @@ test('isBlockedIp allows public addresses', () => {
   }
 });
 
+test('isBlockedIp flags blocked v4 ranges embedded in IPv6 transition addressing', () => {
+  for (const ip of [
+    '64:ff9b::a9fe:a9fe', // NAT64 of 169.254.169.254 (metadata)
+    '64:ff9b::a00:1', // NAT64 of 10.0.0.1 (private)
+    '2002:a9fe:0::', // 6to4 of 169.254.0.0 (link-local)
+    '::a9fe:a9fe', // IPv4-compatible of 169.254.169.254 (metadata)
+  ]) {
+    assert.equal(isBlockedIp(ip), true, `${ip} should be blocked`);
+  }
+});
+
+test('isBlockedIp allows legit public v4 embedded in IPv6 transition addressing', () => {
+  for (const ip of [
+    '64:ff9b::808:808', // NAT64 of 8.8.8.8 (public)
+    '2002:808:808::', // 6to4 of 8.8.8.8 (public)
+    '2606:4700:4700::1111', // Cloudflare, unrelated to transition addressing
+  ]) {
+    assert.equal(isBlockedIp(ip), false, `${ip} should be allowed`);
+  }
+});
+
+test('isBlockedIp handles dotted-quad textual form of NAT64 metadata embedding', () => {
+  assert.equal(isBlockedIp('64:ff9b::169.254.169.254'), true);
+});
+
 test('assertUrlAllowed rejects non-http(s) schemes', async () => {
   await assert.rejects(() => assertUrlAllowed('file:///etc/passwd', { env: {} }), SsrfError);
   await assert.rejects(() => assertUrlAllowed('gopher://x/', { env: {} }), SsrfError);
@@ -55,6 +80,11 @@ test('PULLMD_ALLOWED_HOSTS CIDR permits an otherwise-blocked address', async () 
   const env = { PULLMD_ALLOWED_HOSTS: '10.0.5.0/24' };
   const { url } = await assertUrlAllowed('http://wiki.internal/', { lookup, env });
   assert.equal(url.hostname, 'wiki.internal');
+});
+
+test('PULLMD_ALLOWED_HOSTS with an out-of-range CIDR prefix is skipped, not fatal', async () => {
+  const env = { PULLMD_ALLOWED_HOSTS: '10.0.0.0/99' };
+  await assert.rejects(() => assertUrlAllowed('http://10.0.0.5/', { env }), SsrfError);
 });
 
 test('PULLMD_ALLOWED_HOSTS hostname entry permits an otherwise-blocked host', async () => {
