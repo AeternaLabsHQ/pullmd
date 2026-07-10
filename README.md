@@ -477,6 +477,10 @@ for it.
 | `pdf`           | —       | `ocr` → route PDFs through the [OCR tier](#high-quality-pdf-ocr). Bypasses cache.  |
 | `yt_timecodes` / `yt_chunk` | see [YouTube](#youtube-transcripts) | Transcript format overrides. Bypass cache when set. |
 | `lang`          | `de`    | Comments-section header language (`de` or `en`).                                   |
+| `query`         | —       | Return only the sections relevant to this text instead of the full page (see [Query-scoped extraction](#query-scoped-extraction)). Empty/whitespace-only is treated as absent — output is unchanged. |
+| `max_tokens`    | `600`   | Token budget for `query` extraction (`64`–`20000`). Only validated when `query` is non-empty; an invalid value returns `400`. |
+
+Both `query` and `max_tokens` are also available on the MCP `read_url` tool.
 
 ### Response headers
 
@@ -484,6 +488,50 @@ for it.
 - `X-Quality` — `0.0`–`1.0` extraction confidence
 - `X-Share-Id` — the 8-hex permalink id
 - `X-Transcript-Status` — YouTube only: `ok` · `none` · `blocked` · `error`. `blocked` (YouTube rate-limited the transcript fetch, HTTP 429) and `error` are transient and not cached — retry later; `none` means the video genuinely has no transcript
+- `X-Extracted` — `true` / `false`. Present only when `query` is active.
+- `X-Extract-Confidence` — `high` · `medium` · `low`. Present whenever `X-Extracted` is present, except when the page was already small enough that extraction was skipped.
+- `X-Extract-Sections` — number of sections/regions included in the returned markdown.
+- `X-Extract-Original-Tokens` / `X-Extract-Returned-Tokens` — estimated token counts (`chars / 4`) of the full page and of the returned markdown.
+
+### Query-scoped extraction
+
+Pass `?query=<text>` on `GET /api` (or the `query` param on the MCP `read_url`
+tool) to get back only the sections of the page relevant to that text instead
+of the full Markdown body:
+
+```
+GET /api?url=https://example.com/long-article&query=how+does+caching+work
+```
+
+It's a BM25 ranking over the page's heading-based sections (falling back to
+paragraph-level blocks for pages with fewer than two headings) — no network
+calls, no LLM involved.
+
+- **Budget** — `max_tokens` caps the returned size (default `600`, range
+  `64`–`20000`, estimated as `chars / 4`).
+- **Whole-page fallback** — the full page is returned unchanged when either
+  the page is already small enough that extraction wouldn't help (estimated
+  tokens ≤ `max(800, 1.25 × max_tokens)`), or nothing in the page scores
+  against the query's terms. In both cases `extracted` is `false`; the
+  no-match case reports `confidence: low`, the small-page case omits
+  `confidence`.
+- **Atomic blocks** — code fences, tables, lists, and blockquotes are never
+  split; if any part of one is relevant, the whole block is kept.
+  Non-contiguous output regions are joined by an elision marker (`<!-- … -->`).
+- `?frontmatter=true` adds `extracted`, `extract_confidence`,
+  `sections_selected`, `original_tokens`, `returned_tokens` to the YAML block.
+  `format=json` adds a top-level `extract` object with the same data
+  (`extracted`, `confidence`, `sectionsSelected`, `originalTokens`,
+  `returnedTokens`).
+- Extraction runs on the already-cached full page — the cache always stores
+  the complete Markdown, so several different `query` values against the same
+  URL cost one fetch (within the normal 1-hour cache TTL), not one per query.
+- Omitting `query` (or passing an empty/whitespace-only string) leaves `/api`
+  behavior completely unchanged — no extra headers, no extra JSON or
+  frontmatter fields.
+- MCP `read_url` has no response headers; when nothing matches, it prepends an
+  in-band comment (`<!-- query-extract: no match; returning full page -->`) to
+  the returned markdown instead.
 
 ---
 
@@ -628,6 +676,7 @@ A few things worth noting:
 - `lib/youtube.js` — YouTube URL detection and normalization.
 - `lib/llm/` — provider resolver + adapters for image captioning (vision), audio transcription (STT), and PDF OCR against OpenAI-compatible endpoints.
 - `lib/frontmatter.js` — YAML frontmatter builder with the `PULLMD_FRONTMATTER_FIELDS` allowlist.
+- `lib/query-extract.js` — Opt-in query-scoped extraction (`?query=`): BM25 over heading-based sections of the converted markdown, returning only the relevant sections/blocks. Composes `lib/markdown-sections.js` (block/section parser) and `lib/bm25.js` (tokenizer + scorer).
 - `public/` — PWA frontend (vanilla JS, dark/paper themes, service worker, EventSource client for `/api/stream`).
 - `skill/pullmd/` — Claude Code skill source (templated with `__PULLMD_URL__`).
 

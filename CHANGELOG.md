@@ -9,6 +9,14 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.4.0] - 2026-07-10
+
+### Added
+
+- **Query-scoped extraction** (`?query=`). `GET /api` and the MCP `read_url` tool accept an optional `query` param that returns only the sections of the page relevant to that text - a BM25 ranking over heading-based sections of the converted markdown (paragraph-level fallback for pages with fewer than two headings), with no network calls and no LLM involved. Budget via `max_tokens` (default `600`, range `64`-`20000`). Falls back to the whole page (`confidence: low`) when nothing in the page scores against the query, or when the page is already small enough that extraction wouldn't help. New response headers (`X-Extracted`, `X-Extract-Confidence`, `X-Extract-Sections`, `X-Extract-Original-Tokens`, `X-Extract-Returned-Tokens`), a `format=json` `extract` object, and `?frontmatter=true` fields (`extracted`, `extract_confidence`, `sections_selected`, `original_tokens`, `returned_tokens`) expose the result. Extraction runs on the already-cached full page, so multiple `query` values against one URL cost a single fetch within the normal cache TTL. Omitting `query` (or passing an empty/whitespace-only value) leaves `/api` output byte-identical to pre-3.4 behavior.
+
+---
+
 ## [3.3.0] - 2026-07-08
 
 ### Security

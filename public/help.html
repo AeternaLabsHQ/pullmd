@@ -555,6 +555,10 @@ Then: claude mcp list to verify.</pre>
             <td lang="de">Sprache des Kommentar-Headers (<code>de</code> oder <code>en</code>).</td>
             <td lang="en">Language for the comments header (<code>de</code> or <code>en</code>).</td>
           </tr>
+          <tr><td><code>query</code></td><td>—</td>
+            <td lang="de">Filtert die Antwort per BM25 auf die zur Anfrage passenden Abschnitte (Extraktion) - Token-Budget mit <code>max_tokens</code> steuerbar (Default <code>600</code>, 64–20000). Leer/nur Leerzeichen = Verhalten unverändert. Auch im MCP-Tool <code>read_url</code> verfügbar.</td>
+            <td lang="en">Filters the response to the sections relevant to this text via BM25 (extraction) - token budget configurable via <code>max_tokens</code> (default <code>600</code>, 64-20000). Empty/whitespace-only = behavior unchanged. Also available on the MCP <code>read_url</code> tool.</td>
+          </tr>
         </tbody>
       </table>
       <p class="muted" lang="de">Zum Schutz vor Server-Side Request Forgery (SSRF) werden Anfragen an private, loopback-, link-local-, CGNAT- und Cloud-Metadata-Adressen (z. B. <code>169.254.169.254</code>, <code>100.100.100.200</code>) standardmäßig mit <code>403</code> abgelehnt - auch wenn eine URL erst per Redirect dorthin führt. Selbst-Hoster können mit <code>PULLMD_ALLOWED_HOSTS</code> (kommagetrennte CIDRs und/oder Hostnamen) gezielt interne Ziele freigeben.</p>
