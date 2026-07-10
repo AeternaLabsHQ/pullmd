@@ -40,6 +40,12 @@ describe('parseBlocks — headings', () => {
     const blocks = parseBlocks(md);
     assert.equal(blocks[0].type, 'paragraph');
   });
+
+  it('a line with 7+ # characters is not a heading (ATX caps at 6)', () => {
+    const md = '####### too many text';
+    const blocks = parseBlocks(md);
+    assert.equal(blocks[0].type, 'paragraph');
+  });
 });
 
 describe('parseBlocks — code fences', () => {
@@ -195,6 +201,31 @@ describe('parseBlocks — lists', () => {
     assert.equal(blocks[1].type, 'code');
     assert.equal(blocks[1].startLine, 1);
     assert.equal(blocks[1].endLine, 3);
+  });
+
+  it('a closing fence indented 4+ spaces inside a list item still closes the fence, so a following heading is not swallowed', () => {
+    const md = [
+      '10. item',
+      '    ```js',
+      '    code',
+      '    ```',
+      '',
+      '# Next Heading',
+      '',
+      'body text',
+    ].join('\n');
+    const blocks = parseBlocks(md);
+    assert.equal(blocks.length, 3);
+    assert.equal(blocks[0].type, 'list');
+    assert.equal(blocks[0].startLine, 0);
+    assert.equal(blocks[0].endLine, 3);
+    assert.equal(blocks[1].type, 'heading');
+    assert.equal(blocks[1].text, '# Next Heading');
+    assert.equal(blocks[2].type, 'paragraph');
+    assert.equal(blocks[2].text, 'body text');
+
+    const { headingCount } = buildSectionTree(blocks);
+    assert.equal(headingCount, 1);
   });
 });
 
