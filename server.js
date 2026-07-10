@@ -393,7 +393,7 @@ export function createApp(overrides = {}) {
           if (cached.share_id) res.set('X-Share-Id', cached.share_id);
           if (ex) setExtractHeaders(res, ex);
           if (cache) cache.logExtraction({
-            url, source: cached.source, quality: cachedQuality, markdownLen: md.length,
+            url, source: cached.source, quality: cachedQuality, markdownLen: baseMd.length,
             extractorReason: null, durationMs: Date.now() - t0, client, cached: true,
           });
           if (format === 'json') {

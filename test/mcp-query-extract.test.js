@@ -132,6 +132,23 @@ describe('MCP read_url - query-extract: byte-identical without query', () => {
   });
 });
 
+describe('MCP read_url - query-extract: whitespace-only query is inactive', () => {
+  it('query: " " is byte-identical to no query at all (no marker, no extract fields)', async () => {
+    const app = createApp({
+      extractWeb: async () => ({ markdown: bigMarkdown(), title: 'Big Article', source: 'readability', metadata: { quality: 0.8 } }),
+      cache: createCache(':memory:'),
+    });
+    // Prime the cache, then compare two subsequent cache-hit calls (both
+    // cached:true) so the diff isolates the whitespace-query gate rather than
+    // the unrelated fresh-vs-cached-hit `cached` field.
+    await callTool(app, 'read_url', { url: 'https://example.com/article' }, 1);
+    const noQuery = await callTool(app, 'read_url', { url: 'https://example.com/article' }, 2);
+    const whitespaceQuery = await callTool(app, 'read_url', { url: 'https://example.com/article', query: ' ' }, 3);
+    assert.equal(normalizePort(whitespaceQuery.result.content[0].text), normalizePort(noQuery.result.content[0].text));
+    assert.ok(!whitespaceQuery.result.content[0].text.includes('query-extract'));
+  });
+});
+
 describe('MCP read_url - query-extract: fresh web path with query', () => {
   it('extracts the relevant section only', async () => {
     const app = createApp({

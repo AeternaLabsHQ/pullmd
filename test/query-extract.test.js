@@ -273,4 +273,19 @@ describe('queryExtract — invariants', () => {
     const res = queryExtract(md, 'quokka'); // single term, fully covered -> coverage 1
     assert.equal(res.confidence, 'high');
   });
+
+  it('caps deduped query terms at 64: a matching term beyond position 64 is ignored', () => {
+    const md = twoFarApartPage();
+    // 64 unique, non-matching filler terms, followed by a 65th term ('quokka')
+    // that DOES match the fixture. If the cap truncates to the first 64
+    // deduped terms, 'quokka' never participates in scoring, so the query
+    // with it appended must be byte-identical to the query without it.
+    const filler64 = [];
+    for (let i = 0; i < 64; i++) filler64.push(`queryterm${i}`);
+    const truncatedQuery = filler64.join(' ');
+    const fullQuery = truncatedQuery + ' quokka';
+    const a = queryExtract(md, fullQuery);
+    const b = queryExtract(md, truncatedQuery);
+    assert.deepEqual(a, b);
+  });
 });
