@@ -6,7 +6,8 @@ import { createCache } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
 import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
 import { qualityScore } from './lib/scoring.js';
-import { buildFrontmatter, mergeMediaFrontmatter, validateFrontmatterFields } from './lib/frontmatter.js';
+import { buildFrontmatter, mergeMediaFrontmatter, mergeFrontmatter, validateFrontmatterFields } from './lib/frontmatter.js';
+import { queryExtract } from './lib/query-extract.js';
 import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
@@ -46,6 +47,40 @@ function isHnUrl(url) {
   } catch {
     return false;
   }
+}
+
+// query-extract: gated helpers shared by all four GET /api body-producing
+// paths. Never called unless a non-empty `query` param is present.
+function setExtractHeaders(res, ex) {
+  res.set('X-Extracted', ex.extracted ? 'true' : 'false');
+  if (ex.confidence != null) res.set('X-Extract-Confidence', ex.confidence);
+  res.set('X-Extract-Sections', String(ex.sectionsSelected));
+  res.set('X-Extract-Original-Tokens', String(ex.originalTokens));
+  res.set('X-Extract-Returned-Tokens', String(ex.returnedTokens));
+}
+
+function extractJson(ex) {
+  return {
+    extracted: ex.extracted,
+    confidence: ex.confidence,
+    sectionsSelected: ex.sectionsSelected,
+    originalTokens: ex.originalTokens,
+    returnedTokens: ex.returnedTokens,
+  };
+}
+
+function extractFrontmatterFields(ex) {
+  return [
+    ['extracted', ex.extracted],
+    ['extract_confidence', ex.confidence],
+    ['sections_selected', ex.sectionsSelected],
+    ['original_tokens', ex.originalTokens],
+    ['returned_tokens', ex.returnedTokens],
+  ];
+}
+
+function logQueryExtract(url, query, ex) {
+  console.log(`[query-extract] ${url} q="${query}" ${ex.originalTokens}->${ex.returnedTokens} tokens, ${ex.sectionsSelected} sections, confidence=${ex.confidence}`);
 }
 
 function detectClient(ua, clientMode) {
@@ -262,7 +297,7 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api', gate, async (req, res) => {
-    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor, yt_timecodes, yt_chunk, pdf } = req.query;
+    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor, yt_timecodes, yt_chunk, pdf, query, max_tokens } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const reqLang = lang === 'en' ? 'en' : 'de';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura' || extractor === 'playwright')
@@ -270,9 +305,25 @@ export function createApp(overrides = {}) {
     const validYtTimecodes = (yt_timecodes === 'links' || yt_timecodes === 'plain' || yt_timecodes === 'none') ? yt_timecodes : undefined;
     const validYtChunk = (yt_chunk !== undefined && /^\d+$/.test(yt_chunk)) ? parseInt(yt_chunk, 10) : undefined;
     const explicitYtParams = validYtTimecodes !== undefined || validYtChunk !== undefined;
+    // query-extract: gated feature. `queryActive` decides everything below —
+    // an empty/absent query must leave every byte of the response untouched.
+    const trimmedQuery = typeof query === 'string' ? query.trim() : '';
+    const queryActive = trimmedQuery.length > 0;
 
     if (!url) {
       return res.status(400).json({ error: 'Missing required parameter: url' });
+    }
+
+    // max_tokens is only meaningful (and only validated) when query-extract is
+    // actually active — validating it unconditionally would 400 requests that
+    // pass max_tokens without a query, which is a behavior change on the
+    // byte-identical default path.
+    let maxTokens = 600;
+    if (queryActive && max_tokens !== undefined) {
+      if (!/^\d+$/.test(max_tokens) || Number(max_tokens) < 64 || Number(max_tokens) > 20000) {
+        return res.status(400).json({ error: 'Invalid max_tokens parameter: must be an integer between 64 and 20000' });
+      }
+      maxTokens = Number(max_tokens);
     }
 
     try {
@@ -321,15 +372,26 @@ export function createApp(overrides = {}) {
           const fmInput = structuredCached
             ? { title: outMeta.title, sourceUrl: url, quality: cachedQuality }
             : outMeta;
+
+          let bodyMd = baseMd;
+          let ex = null;
+          if (queryActive) {
+            ex = queryExtract(bodyMd, trimmedQuery, { maxTokens });
+            bodyMd = ex.markdown;
+            logQueryExtract(url, trimmedQuery, ex);
+          }
+
           const fm = wantFrontmatter
             ? buildFrontmatter(fmInput, { source: cached.source, shareId: cached.share_id })
             : '';
-          const md = wantFrontmatter
-            ? mergeMediaFrontmatter(fm + baseMd, cachedMeta, cached.source)
-            : fm + baseMd;
+          let md = wantFrontmatter
+            ? mergeMediaFrontmatter(fm + bodyMd, cachedMeta, cached.source)
+            : fm + bodyMd;
+          if (ex && wantFrontmatter) md = mergeFrontmatter(md, extractFrontmatterFields(ex));
           res.set('X-Source', cached.source);
           res.set('X-Quality', String(cachedQuality));
           if (cached.share_id) res.set('X-Share-Id', cached.share_id);
+          if (ex) setExtractHeaders(res, ex);
           if (cache) cache.logExtraction({
             url, source: cached.source, quality: cachedQuality, markdownLen: md.length,
             extractorReason: null, durationMs: Date.now() - t0, client, cached: true,
@@ -340,6 +402,7 @@ export function createApp(overrides = {}) {
               metadata: outMeta,
               source: cached.source,
               shareId: cached.share_id || null,
+              ...(ex ? { extract: extractJson(ex) } : {}),
             });
           }
           if (format === 'text') {
@@ -371,17 +434,27 @@ export function createApp(overrides = {}) {
           shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null, metadata: redditMeta });
         }
 
+        let bodyMd = baseMd;
+        let ex = null;
+        if (queryActive) {
+          ex = queryExtract(bodyMd, trimmedQuery, { maxTokens });
+          bodyMd = ex.markdown;
+          logQueryExtract(url, trimmedQuery, ex);
+        }
+
         const quality = qualityScore(baseMd);
         const fm = wantFrontmatter
           ? buildFrontmatter({ title: titleMatch?.[1] || null, sourceUrl: url, quality }, { source: 'reddit', shareId })
           : '';
-        const markdown = wantFrontmatter
-          ? mergeMediaFrontmatter(fm + baseMd, redditMeta, 'reddit')
-          : fm + baseMd;
+        let markdown = wantFrontmatter
+          ? mergeMediaFrontmatter(fm + bodyMd, redditMeta, 'reddit')
+          : fm + bodyMd;
+        if (ex && wantFrontmatter) markdown = mergeFrontmatter(markdown, extractFrontmatterFields(ex));
 
         res.set('X-Source', 'reddit');
         res.set('X-Quality', String(quality));
         if (shareId) res.set('X-Share-Id', shareId);
+        if (ex) setExtractHeaders(res, ex);
         if (cache) cache.logExtraction({
           url, source: 'reddit', quality, markdownLen: baseMd.length,
           extractorReason: null, durationMs: Date.now() - t0, client, cached: false,
@@ -401,6 +474,7 @@ export function createApp(overrides = {}) {
             },
             source: 'reddit',
             shareId: shareId || null,
+            ...(ex ? { extract: extractJson(ex) } : {}),
           });
         }
         if (format === 'text') {
@@ -442,16 +516,27 @@ export function createApp(overrides = {}) {
         if (cache) {
           shareId = cache.put({ url, title: titleMatch?.[1] || 'Hacker News', markdown: baseMd, source: 'hackernews', client, user_id: req.user?.id ?? null, metadata: hnMeta });
         }
+
+        let bodyMd = baseMd;
+        let ex = null;
+        if (queryActive) {
+          ex = queryExtract(bodyMd, trimmedQuery, { maxTokens });
+          bodyMd = ex.markdown;
+          logQueryExtract(url, trimmedQuery, ex);
+        }
+
         const quality = qualityScore(baseMd);
         const fm = wantFrontmatter
           ? buildFrontmatter({ title: titleMatch?.[1] || null, sourceUrl: url, quality }, { source: 'hackernews', shareId })
           : '';
-        const markdown = wantFrontmatter
-          ? mergeMediaFrontmatter(fm + baseMd, hnMeta, 'hackernews')
-          : fm + baseMd;
+        let markdown = wantFrontmatter
+          ? mergeMediaFrontmatter(fm + bodyMd, hnMeta, 'hackernews')
+          : fm + bodyMd;
+        if (ex && wantFrontmatter) markdown = mergeFrontmatter(markdown, extractFrontmatterFields(ex));
         res.set('X-Source', 'hackernews');
         res.set('X-Quality', String(quality));
         if (shareId) res.set('X-Share-Id', shareId);
+        if (ex) setExtractHeaders(res, ex);
         if (cache) cache.logExtraction({
           url, source: 'hackernews', quality, markdownLen: baseMd.length,
           extractorReason: null, durationMs: Date.now() - t0, client, cached: false,
@@ -471,6 +556,7 @@ export function createApp(overrides = {}) {
             },
             source: 'hackernews',
             shareId: shareId || null,
+            ...(ex ? { extract: extractJson(ex) } : {}),
           });
         }
         if (format === 'text') {
@@ -500,14 +586,23 @@ export function createApp(overrides = {}) {
         shareId = cache.put({ url, title: result.title, markdown: result.markdown, source: result.source, client, user_id: req.user?.id ?? null, metadata: result.metadata });
       }
 
+      let bodyMd = result.markdown;
+      let ex = null;
+      if (queryActive) {
+        ex = queryExtract(bodyMd, trimmedQuery, { maxTokens });
+        bodyMd = ex.markdown;
+        logQueryExtract(url, trimmedQuery, ex);
+      }
+
       const fm = wantFrontmatter
         ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId })
         : '';
-      const finalMd = fm + result.markdown;
+      const finalMd = fm + bodyMd;
 
-      const outMd = wantFrontmatter
+      let outMd = wantFrontmatter
         ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
         : finalMd;
+      if (ex && wantFrontmatter) outMd = mergeFrontmatter(outMd, extractFrontmatterFields(ex));
 
       res.set('X-Source', result.source);
       if (result.transcriptStatus) res.set('X-Transcript-Status', result.transcriptStatus);
@@ -515,6 +610,7 @@ export function createApp(overrides = {}) {
         res.set('X-Quality', String(result.metadata.quality));
       }
       if (shareId) res.set('X-Share-Id', shareId);
+      if (ex) setExtractHeaders(res, ex);
       if (cache) cache.logExtraction({
         url, source: result.source,
         quality: result.metadata?.quality,
@@ -529,6 +625,7 @@ export function createApp(overrides = {}) {
           metadata: result.metadata || null,
           source: result.source,
           shareId: shareId || null,
+          ...(ex ? { extract: extractJson(ex) } : {}),
         });
       }
       if (format === 'text') {
