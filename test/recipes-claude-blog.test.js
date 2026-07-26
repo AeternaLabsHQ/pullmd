@@ -9,12 +9,13 @@ import fs from 'node:fs';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const defaultFile = path.join(here, '..', 'site-recipes.default.json');
 
-// Webflow wraps the article body in two separate `.blog_post_content_wrap`
-// branches with an in-article CTA card wedged between them. Readability scores
-// one branch as its top candidate; the other is not a sibling, so the whole
-// lead section is silently dropped (issue #44). Fixture is the real page's DOM
-// skeleton with the prose replaced by same-length filler — the structure is
-// what triggers the bug, the wording is not.
+// The CMS wraps the article body in two separate branches with an in-article
+// CTA card wedged between them. Readability scores one branch as its top
+// candidate; the other is not a sibling, so the whole lead section is silently
+// dropped (issue #44). The recipe names both body blocks outright via
+// select.content. Fixture is the real page's DOM skeleton with the prose
+// replaced by same-length filler — the structure is what triggers the bug, the
+// wording is not.
 const FIXTURE = fs.readFileSync(
   path.join(here, 'fixtures', 'claude-blog-split-body.html'),
   'utf8',
@@ -37,6 +38,7 @@ describe('claude.com blog built-in recipe (issue #44)', () => {
     assert.ok(recipe, 'claude-blog-split-body must ship in site-recipes.default.json');
     assert.deepEqual(recipe.host, ['claude.com', 'www.claude.com']);
     assert.equal(recipe.path, '/blog/**');
+    assert.deepEqual(recipe.select.content, ['.u-rich-text-blog']);
   });
 
   it('without the recipe Readability drops the lead block', async () => {
@@ -55,6 +57,7 @@ describe('claude.com blog built-in recipe (issue #44)', () => {
       recipes: shippedRecipes(),
       extractor: 'readability',
     });
+    assert.equal(result.source, 'recipe-content');
     assert.match(result.markdown, /LEAD BLOCK/);
     assert.match(result.markdown, /REST BLOCK/);
     assert.match(result.markdown, /^## Then and now$/m);
