@@ -9,6 +9,14 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Blog posts whose body is split across sibling containers lost everything outside the winning block** (closes #44). Some CMS templates wedge an in-article call-to-action between two separate body containers; Readability scores a single top candidate and keeps only that candidate plus its direct siblings, so the entire lead section was dropped while the output still looked well-formed. A shipped recipe (`claude-blog-split-body`) unwraps the intervening wrapper layers so both containers become siblings. The Trafilatura auto-pick could not catch this on its own: its output carried the full text but no markdown headings, and `pickBest` requires at least one heading before preferring the longer candidate.
+
+---
+
 ## [3.5.0] - 2026-07-10
 
 ### Added

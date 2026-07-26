@@ -561,6 +561,7 @@ recipes. Each demonstrates a different feature:
 | `future-plc-recommendations` | `select.remove` — deletes recommendation rails on the same hosts. Split from the paywall recipe to keep one concern per recipe (they merge at match time). |
 | `github-issues` | `fetch.render: "force"` + `wait_for` + `wait_timeout_ms` and a multi-segment `path` glob (`/*/*/issues/*`) — renders JS-loaded issue comments. |
 | `sciencedaily-lead-image` | `preprocess` with `unwrap` and a `path` glob (`/releases/**`) — unwraps a `#text` container so Readability keeps the lead image instead of dropping it. |
+| `claude-blog-split-body` | `preprocess` with `unwrap` — flattens two CMS wrapper layers so the article's two body containers become siblings. Readability picks a single top candidate plus its siblings, so a body split across separate branches loses everything outside the winning branch. |
 
 ---
 
