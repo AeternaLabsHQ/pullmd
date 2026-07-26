@@ -22,7 +22,7 @@ document and the repository.
 6. [Structured data (JSON-LD) into frontmatter](#6-structured-data-json-ld-into-frontmatter)
 7. [Cleaning noisy output](#7-cleaning-noisy-output)
 8. [A complete annotated example](#8-a-complete-annotated-example)
-9. [The four built-in recipes](#9-the-four-built-in-recipes)
+9. [The five built-in recipes](#9-the-five-built-in-recipes)
 10. [Testing your recipe](#10-testing-your-recipe)
 11. [Contributing checklist](#11-contributing-checklist)
 
@@ -40,8 +40,9 @@ would not address. Typical signals:
 - A recommendation rail, "you may also like" block, or paywall scaffold keeps
   leaking into the Markdown. → remove those elements.
 - The extractor picks the wrong container as the article (e.g. it grabs a
-  paragraph-dense inner block and drops the lead image). → unwrap or restructure
-  the offending element.
+  paragraph-dense inner block and drops the lead image, or keeps only one half
+  of a body split across two containers). → name the body with `select.content`,
+  or unwrap the offending element.
 - The page embeds clean structured data (author, publish date, rating) that you
   want promoted into the frontmatter. → map JSON-LD or selectors into frontmatter
   fields.
@@ -176,6 +177,7 @@ match is collected and **merged** into one effective recipe. The merge rules:
 | ----- | -------------- |
 | `preprocess` | Arrays **concatenate**, in recipe order. |
 | `select.remove` | Arrays **concatenate**. |
+| `select.content` | Arrays **concatenate**. |
 | `extractor` | Scalar, **last-wins**. |
 | each `fetch.*` key (`render`, `wait_for`, `wait_timeout_ms`, `mobile_ua`, `pdf`) | Merged **per key**, last-wins on a per-key collision. Setting `wait_for` in one recipe and `mobile_ua` in another gives you both. |
 | `frontmatter.jsonld` | Scalar, **last-wins**. |
@@ -206,7 +208,7 @@ unknown key rejects the whole recipe.
 | `host` | string, or non-empty array of strings | — (required) | Host glob(s) the recipe applies to. See [§3](#3-matching-and-merge-semantics). |
 | `path` | string (non-empty) | `/**` | Restrict to a path glob (e.g. articles only). |
 | `preprocess` | array of action objects | `[]` | Structural HTML edits before extraction (see below). |
-| `select` | object `{ remove: string[] }` | `{ remove: [] }` | CSS selectors of elements to delete before extraction. |
+| `select` | object `{ remove: string[], content: string[] }` | `{ remove: [], content: [] }` | `remove`: CSS selectors of elements to delete before extraction. `content`: CSS selectors that *are* the article body (see [below](#naming-the-article-body-with-selectcontent)). |
 | `extractor` | `"readability"` \| `"trafilatura"` \| `"playwright"` | (unset) | Force a specific extractor and skip the quality auto-pick. |
 | `fetch` | object (see below) | `{}` | Control fetching / rendering. |
 | `frontmatter` | object (see [§6](#6-structured-data-json-ld-into-frontmatter)) | (unset) | Inject custom frontmatter fields from JSON-LD / selectors. |
@@ -445,7 +447,12 @@ There is no Markdown post-processing step by design — content-noise removal
 happens before extraction, so choose your selectors against the (rendered, if
 applicable) DOM.
 
-Two tools, pick by intent:
+Three tools, pick by intent:
+
+- **`select.content`** — names the article body outright; see
+  [below](#naming-the-article-body-with-selectcontent) below. Reach for it when
+  the problem is "the extractor picked the wrong block", not "this block is
+  noise".
 
 - **`select.remove`** — a flat list of CSS selectors whose elements are deleted.
   This is the go-to for "delete these boilerplate blocks": ad slots, related-
@@ -490,6 +497,53 @@ that a `select.remove` selector would otherwise target, and nothing
 PullMD already removes generic chrome (nav, header, footer, sidebars, cookie
 banners, share buttons, 1×1 tracking pixels, …) on every page. Only add
 selectors for noise that survives that generic pass on your specific site.
+
+---
+
+### Naming the article body with `select.content`
+
+`select.remove` and `preprocess` are subtractive: they tell the extractor what
+to throw away, then leave it to guess what remains. `select.content` is the
+positive statement — **this** is the article:
+
+```json
+"select": { "content": [".article-body", ".article-body-continued"] }
+```
+
+Every match is collected and joined into one document, which becomes the
+article. Readability's candidate scoring and the Trafilatura auto-pick are both
+skipped, so the extractor cannot pick the wrong block: you already named the
+right one. Output carries `source: recipe-content`.
+
+Reach for it when the diagnosis is "the extractor picked the wrong container",
+not "this block is noise". The case that motivated it: a CMS that splits the
+body across two containers with a call-to-action wedged between them.
+Readability scores a single top candidate and keeps only that candidate plus its
+direct siblings, so the entire lead section vanished while the output still
+looked well-formed. No amount of `remove` fixes that — the problem is not a
+surplus element, it is that half the article was never selected.
+
+Semantics worth knowing:
+
+- **Document order.** Matches are emitted in the order they appear on the page,
+  regardless of the order you list the selectors in.
+- **Nested matches collapse.** If one match contains another, only the outermost
+  survives, so `[".article", ".article p"]` will not emit the prose twice.
+- **Invalid selectors skip themselves** and never break the rest of the page.
+- **`select.remove` still applies first.** Combining them is normal: name the
+  body with `content`, then delete a widget that lives *inside* it with `remove`.
+- **It runs on the rendered DOM too** when the page goes through Playwright, so
+  author selectors against the rendered markup (see
+  [§5](#5-js-heavy-and-bot-protected-sites-rendered-dom)).
+
+**The safety net.** A `remove` selector that goes stale is harmless — it removes
+nothing. A `content` selector that goes stale would yield an *empty* article, so
+PullMD guards it: if the selected body comes out under 200 characters, the page
+falls back to the normal Readability/Trafilatura pipeline and says so in
+`metadata.extractorReason` (`recipe select.content matched nothing, fell back to
+readability: …`). A site redesign therefore degrades your recipe to the generic
+behavior instead of breaking the page — but check that field if a recipe
+mysteriously stops taking effect.
 
 ---
 
@@ -550,7 +604,7 @@ the output begins with a YAML block including `author:`, `published:`, and
 
 ---
 
-## 9. The four built-in recipes
+## 9. The five built-in recipes
 
 The shipped `site-recipes.default.json` is the best reference for real, working
 recipes. Each demonstrates a different feature:
@@ -561,6 +615,7 @@ recipes. Each demonstrates a different feature:
 | `future-plc-recommendations` | `select.remove` — deletes recommendation rails on the same hosts. Split from the paywall recipe to keep one concern per recipe (they merge at match time). |
 | `github-issues` | `fetch.render: "force"` + `wait_for` + `wait_timeout_ms` and a multi-segment `path` glob (`/*/*/issues/*`) — renders JS-loaded issue comments. |
 | `sciencedaily-lead-image` | `preprocess` with `unwrap` and a `path` glob (`/releases/**`) — unwraps a `#text` container so Readability keeps the lead image instead of dropping it. |
+| `claude-blog-split-body` | `select.content` — the article body is split across two containers with a call-to-action between them, and Readability keeps only one of them. The recipe names both outright instead of nudging the scoring. |
 
 ---
 

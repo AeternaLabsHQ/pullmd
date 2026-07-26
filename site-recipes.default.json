@@ -97,6 +97,14 @@
     }
   },
   {
+    "name": "claude-blog-split-body",
+    "host": ["claude.com", "www.claude.com"],
+    "path": "/blog/**",
+    "select": {
+      "content": [".u-rich-text-blog"]
+    }
+  },
+  {
     "name": "booking-hotel-frontmatter",
     "host": ["www.booking.com", "booking.com"],
     "path": "/hotel/**",
