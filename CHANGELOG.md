@@ -9,7 +9,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
-## [Unreleased]
+## [3.6.0] - 2026-07-26
 
 ### Added
 
@@ -326,6 +326,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.6.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.6.0
 [3.0.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.0.0
 [2.6.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v2.6.0
 [2.5.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v2.5.0
