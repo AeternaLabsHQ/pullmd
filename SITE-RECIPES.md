@@ -545,6 +545,8 @@ readability: …`). A site redesign therefore degrades your recipe to the generi
 behavior instead of breaking the page — but check that field if a recipe
 mysteriously stops taking effect.
 
+> Before writing a `select.content` recipe for a one-pager, check whether the built-in coverage guard already handles it: fetch the page and look at `metadata.extractorReason`. If it starts with `coverage guard:`, the body was recovered automatically and a recipe is only needed for finer cleanup (removing widget chrome, gluing numbering back on).
+
 ---
 
 ## 8. A complete annotated example
