@@ -85,15 +85,29 @@ describe('shouldAttempt', () => {
 describe('findDominantContainer', () => {
   const PROSE = 'x'.repeat(1000);
 
-  it('descends into the single container that holds the text', () => {
-    const body = bodyOf(`<div class="wrap"><div class="a">${PROSE}</div><div class="b">short</div></div>`);
-    const node = findDominantContainer(body);
-    assert.equal(node.getAttribute('class'), 'wrap');
+  it('stops where the text branches across siblings', () => {
+    const body = bodyOf(`<div class="wrap"><div class="a">${PROSE}</div><div class="b">${PROSE}</div></div>`);
+    assert.equal(findDominantContainer(body).getAttribute('class'), 'wrap');
   });
 
   it('descends several levels while one child keeps dominating', () => {
-    const body = bodyOf(`<div class="outer"><div class="inner"><div class="a">${PROSE}</div><div class="b">short</div></div></div>`);
+    const body = bodyOf(`<div class="outer"><div class="inner"><div class="a">${PROSE}</div><div class="b">${PROSE}</div></div></div>`);
     assert.equal(findDominantContainer(body).getAttribute('class'), 'inner');
+  });
+
+  it('keeps descending past small siblings instead of stopping at them', () => {
+    // A sibling that holds a sliver of the text is not a branch point. This is
+    // the property that separates "one container owns the page" from "the page
+    // has several parts", and it is what makes the guard work on real markup.
+    const body = bodyOf(`<div class="wrap"><div class="a">${PROSE}</div><div class="b">short</div></div>`);
+    assert.equal(findDominantContainer(body).getAttribute('class'), 'a');
+  });
+
+  it('finds the dominant container even when the body itself has several children', () => {
+    // Real cleaned pages keep more than one child under body. Requiring a single
+    // child here would make the guard silently never fire.
+    const body = bodyOf(`<div class="main">${PROSE}</div><div class="tiny">short</div>`);
+    assert.equal(findDominantContainer(body).getAttribute('class'), 'main');
   });
 
   it('returns null when the text is spread across siblings of the body', () => {
@@ -103,7 +117,7 @@ describe('findDominantContainer', () => {
 
   it('ignores children that carry no text', () => {
     const body = bodyOf(`<div class="wrap"><span class="empty"></span><div class="a">${PROSE}</div></div>`);
-    assert.equal(findDominantContainer(body).getAttribute('class'), 'wrap');
+    assert.equal(findDominantContainer(body).getAttribute('class'), 'a');
   });
 
   it('returns null for an empty body', () => {
@@ -119,8 +133,6 @@ describe('findDominantContainer', () => {
     for (let i = 0; i < 60; i++) html = `<div class="d${i}">${html}</div>`;
     const node = findDominantContainer(bodyOf(html));
     assert.ok(node, 'expected a container');
-    // The wrappers are built inside-out, so d59 is outermost. MAX_DEPTH descents
-    // from the body land on d30 — verified, not derived.
     assert.equal(node.getAttribute('class'), 'd30');
   });
 });
