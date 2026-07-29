@@ -1,0 +1,171 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import { parseHTML } from 'linkedom';
+import {
+  GUARD_LIMITS,
+  isEnabled,
+  bodyTextLength,
+  shouldAttempt,
+  findDominantContainer,
+  acceptCandidate,
+  containerLabel,
+  guardReason,
+} from '../lib/coverage-guard.js';
+
+const bodyOf = (inner) => parseHTML(`<html><body>${inner}</body></html>`).document.querySelector('body');
+
+// Runs fn with PULLMD_COVERAGE_GUARD set to value, then restores the previous value.
+function withGuardEnv(value, fn) {
+  const prev = process.env.PULLMD_COVERAGE_GUARD;
+  if (value === undefined) delete process.env.PULLMD_COVERAGE_GUARD;
+  else process.env.PULLMD_COVERAGE_GUARD = value;
+  try { return fn(); } finally {
+    if (prev === undefined) delete process.env.PULLMD_COVERAGE_GUARD;
+    else process.env.PULLMD_COVERAGE_GUARD = prev;
+  }
+}
+
+describe('coverage guard limits', () => {
+  it('pins the calibrated constants', () => {
+    assert.equal(GUARD_LIMITS.MIN_BODY_TEXT, 20_000);
+    assert.equal(GUARD_LIMITS.MAX_COVERAGE, 0.10);
+    assert.equal(GUARD_LIMITS.DOMINANCE, 0.90);
+    assert.equal(GUARD_LIMITS.MIN_GAIN, 3);
+    assert.equal(GUARD_LIMITS.MIN_PARAGRAPHS, 5);
+  });
+});
+
+describe('isEnabled', () => {
+  it('defaults to on', () => {
+    assert.equal(withGuardEnv(undefined, isEnabled), true);
+  });
+
+  it('is off only for the literal off switch, case and space tolerant', () => {
+    assert.equal(withGuardEnv('off', isEnabled), false);
+    assert.equal(withGuardEnv('OFF', isEnabled), false);
+    assert.equal(withGuardEnv(' off ', isEnabled), false);
+    assert.equal(withGuardEnv('false', isEnabled), true);
+    assert.equal(withGuardEnv('on', isEnabled), true);
+  });
+});
+
+describe('bodyTextLength', () => {
+  it('collapses whitespace before measuring', () => {
+    assert.equal(bodyTextLength(parseHTML('<html><body>  a\n\n   b  </body></html>').document), 3);
+  });
+
+  it('returns 0 when there is no body', () => {
+    assert.equal(bodyTextLength({ querySelector: () => null }), 0);
+  });
+
+  it('returns 0 for a nullish document', () => {
+    assert.equal(bodyTextLength(null), 0);
+  });
+});
+
+describe('shouldAttempt', () => {
+  it('skips bodies below the size floor even at absurd coverage', () => {
+    assert.equal(shouldAttempt(19_999, 1), false);
+  });
+
+  it('fires on a large body with a sliver of an extract', () => {
+    assert.equal(shouldAttempt(100_000, 3_000), true);
+  });
+
+  it('skips when coverage is at or above the ceiling', () => {
+    assert.equal(shouldAttempt(100_000, 10_000), false);
+    assert.equal(shouldAttempt(100_000, 9_999), true);
+  });
+
+  it('skips entirely when the guard is switched off', () => {
+    assert.equal(withGuardEnv('off', () => shouldAttempt(100_000, 3_000)), false);
+  });
+});
+
+describe('findDominantContainer', () => {
+  const PROSE = 'x'.repeat(1000);
+
+  it('descends into the single container that holds the text', () => {
+    const body = bodyOf(`<div class="wrap"><div class="a">${PROSE}</div><div class="b">short</div></div>`);
+    const node = findDominantContainer(body);
+    assert.equal(node.getAttribute('class'), 'wrap');
+  });
+
+  it('descends several levels while one child keeps dominating', () => {
+    const body = bodyOf(`<div class="outer"><div class="inner"><div class="a">${PROSE}</div><div class="b">short</div></div></div>`);
+    assert.equal(findDominantContainer(body).getAttribute('class'), 'inner');
+  });
+
+  it('returns null when the text is spread across siblings of the body', () => {
+    const body = bodyOf(`<div class="a">${PROSE}</div><div class="b">${PROSE}</div><div class="c">${PROSE}</div>`);
+    assert.equal(findDominantContainer(body), null);
+  });
+
+  it('ignores children that carry no text', () => {
+    const body = bodyOf(`<div class="wrap"><span class="empty"></span><div class="a">${PROSE}</div></div>`);
+    assert.equal(findDominantContainer(body).getAttribute('class'), 'wrap');
+  });
+
+  it('returns null for an empty body', () => {
+    assert.equal(findDominantContainer(bodyOf('')), null);
+  });
+
+  it('returns null for a nullish body', () => {
+    assert.equal(findDominantContainer(null), null);
+  });
+
+  it('stops at the depth limit instead of walking forever', () => {
+    let html = `${PROSE}`;
+    for (let i = 0; i < 60; i++) html = `<div class="d${i}">${html}</div>`;
+    const node = findDominantContainer(bodyOf(html));
+    assert.ok(node, 'expected a container');
+    // The wrappers are built inside-out, so d59 is outermost. MAX_DEPTH descents
+    // from the body land on d30 — verified, not derived.
+    assert.equal(node.getAttribute('class'), 'd30');
+  });
+});
+
+describe('acceptCandidate', () => {
+  const para = (n) => Array.from({ length: n }, (_, i) => `Paragraph number ${i} is comfortably longer than forty characters.`).join('\n\n');
+
+  it('rejects a candidate that is not substantially larger', () => {
+    assert.equal(acceptCandidate(para(20), para(20).length), false);
+  });
+
+  it('rejects a large candidate without prose structure', () => {
+    const navSoup = '- link\n'.repeat(2000);
+    assert.equal(acceptCandidate(navSoup, 100), false);
+  });
+
+  it('accepts a large candidate with prose structure', () => {
+    assert.equal(acceptCandidate(para(30), 100), true);
+  });
+
+  it('treats a zero-length extract as length one instead of dividing by zero', () => {
+    assert.equal(acceptCandidate(para(30), 0), true);
+  });
+});
+
+describe('containerLabel', () => {
+  it('prefers the id', () => {
+    assert.equal(containerLabel(bodyOf('<div id="main" class="a b">x</div>').firstElementChild), 'div#main');
+  });
+
+  it('falls back to the first class', () => {
+    assert.equal(containerLabel(bodyOf('<div class="a b">x</div>').firstElementChild), 'div.a');
+  });
+
+  it('falls back to the bare tag name', () => {
+    assert.equal(containerLabel(bodyOf('<section>x</section>').firstElementChild), 'section');
+  });
+});
+
+describe('guardReason', () => {
+  it('states coverage, body size, container and gain, and keeps the prior reason', () => {
+    const node = bodyOf('<div class="elementor">x</div>').firstElementChild;
+    const reason = guardReason(336_670, 10_503, node, 339_923, 'comparable, prefer baseline');
+    assert.match(reason, /^coverage guard: 3\.1% coverage of 336670c body/);
+    assert.match(reason, /recovered div\.elementor \(32\.4x\)/);
+    assert.match(reason, /prior pick: comparable, prefer baseline$/);
+  });
+});
