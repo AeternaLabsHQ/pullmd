@@ -12,6 +12,7 @@ import {
   guardReason,
 } from '../lib/coverage-guard.js';
 import { extractHtml } from '../lib/web.js';
+import { RecipeSchema } from '../lib/recipes.js';
 
 const bodyOf = (inner) => parseHTML(`<html><body>${inner}</body></html>`).document.querySelector('body');
 
@@ -21,6 +22,17 @@ function withGuardEnv(value, fn) {
   if (value === undefined) delete process.env.PULLMD_COVERAGE_GUARD;
   else process.env.PULLMD_COVERAGE_GUARD = value;
   try { return fn(); } finally {
+    if (prev === undefined) delete process.env.PULLMD_COVERAGE_GUARD;
+    else process.env.PULLMD_COVERAGE_GUARD = prev;
+  }
+}
+
+// Async variant for tests with async functions like extractHtml.
+async function withGuardEnvAsync(value, fn) {
+  const prev = process.env.PULLMD_COVERAGE_GUARD;
+  if (value === undefined) delete process.env.PULLMD_COVERAGE_GUARD;
+  else process.env.PULLMD_COVERAGE_GUARD = value;
+  try { return await fn(); } finally {
     if (prev === undefined) delete process.env.PULLMD_COVERAGE_GUARD;
     else process.env.PULLMD_COVERAGE_GUARD = prev;
   }
@@ -231,5 +243,54 @@ describe('coverage guard in the extraction pipeline', () => {
     const after = await extractHtml(onePager(), { url: PAGE_URL, recipes: [] });
     assert.ok(after.metadata.contentLength > before.metadata.contentLength * 3,
       `expected the guard to grow the extract, got ${before.metadata.contentLength} -> ${after.metadata.contentLength}`);
+  });
+});
+
+describe('coverage guard guard-rails', () => {
+  it('stays silent on a flat page with the same content but no dominant container', async () => {
+    // Identical text, one structural difference: no wrapper. The text is spread
+    // across body-level siblings, which is what a listing page looks like.
+    const result = await extractHtml(onePager({ wrapped: false }), { url: PAGE_URL, recipes: [] });
+    assert.notEqual(result.source, 'coverage-guard');
+    assert.doesNotMatch(result.metadata.extractorReason, /coverage guard/);
+  });
+
+  it('stays silent on a small page', async () => {
+    const small = `<html><head><title>Note</title></head><body><div class="wrap"><article>`
+      + `<p>${prose(3)}</p><p>${prose(3)}</p></article></div></body></html>`;
+    const result = await extractHtml(small, { url: PAGE_URL, recipes: [] });
+    assert.notEqual(result.source, 'coverage-guard');
+  });
+
+  it('yields to a recipe select.content', async () => {
+    const recipe = RecipeSchema.parse({
+      name: 'test', host: 'example.com', select: { content: ['.intro-wrapper'] },
+    });
+    const result = await extractHtml(onePager(), { url: PAGE_URL, recipes: [recipe] });
+    assert.equal(result.source, 'recipe-content');
+    assert.doesNotMatch(result.metadata.extractorReason, /coverage guard/);
+  });
+
+  it('yields to a forced extractor=readability', async () => {
+    const result = await extractHtml(onePager(), { url: PAGE_URL, recipes: [], extractor: 'readability' });
+    assert.equal(result.source, 'readability');
+    assert.equal(result.metadata.extractorReason, 'forced via extractor=readability');
+  });
+
+  it('yields to a forced extractor=trafilatura even when the sidecar is unavailable', async () => {
+    const result = await extractHtml(onePager(), { url: PAGE_URL, recipes: [], extractor: 'trafilatura' });
+    assert.doesNotMatch(result.metadata.extractorReason, /coverage guard/);
+  });
+
+  it('is switched off by PULLMD_COVERAGE_GUARD=off', async () => {
+    const result = await withGuardEnvAsync('off', () => extractHtml(onePager(), { url: PAGE_URL, recipes: [] }));
+    assert.notEqual(result.source, 'coverage-guard');
+  });
+
+  it('never shrinks the result', async () => {
+    const forced = await extractHtml(onePager(), { url: PAGE_URL, recipes: [], extractor: 'readability' });
+    const guarded = await extractHtml(onePager(), { url: PAGE_URL, recipes: [] });
+    assert.ok(guarded.markdown.length >= forced.markdown.length,
+      'the guard must only ever grow the extract');
   });
 });
