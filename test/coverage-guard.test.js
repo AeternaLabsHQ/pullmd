@@ -11,6 +11,7 @@ import {
   containerLabel,
   guardReason,
 } from '../lib/coverage-guard.js';
+import { extractHtml } from '../lib/web.js';
 
 const bodyOf = (inner) => parseHTML(`<html><body>${inner}</body></html>`).document.querySelector('body');
 
@@ -179,5 +180,56 @@ describe('guardReason', () => {
     assert.match(reason, /^coverage guard: 3\.1% coverage of 336670c body/);
     assert.match(reason, /recovered div\.elementor \(32\.4x\)/);
     assert.match(reason, /prior pick: comparable, prefer baseline$/);
+  });
+});
+
+// A page-builder one-pager in miniature: one wrapper, a shallow preamble that
+// Readability scores highest, and many chapters whose prose sits several levels
+// deeper inside accordion items. Readability's candidate score dilutes with
+// depth, so it keeps the preamble and drops every chapter — the exact failure
+// this guard exists for. Built in code because test/fixtures/ is public.
+const SENTENCE = 'The maintenance schedule for the district heating network was revised after the winter review, and the operators agreed to publish updated figures every quarter. ';
+const prose = (n) => SENTENCE.repeat(n);
+
+function onePager({ wrapped = true, introParas = 5, chapters = 12, items = 6 } = {}) {
+  const intro = `<div class="page-block"><div class="block-inner"><h2>Preamble</h2>`
+    + `<div class="page-block"><div class="intro-wrapper">`
+    + Array.from({ length: introParas }, () => `<p>${prose(2)}</p>`).join('')
+    + `</div></div></div></div>`;
+  const chapter = (i) => `<div class="page-block"><div class="block-inner"><h2>Chapter ${i}</h2>`
+    + `<div class="page-block"><div class="accordion-wrapper"><div class="accordion">`
+    + Array.from({ length: items }, (_, j) =>
+      `<div class="accordion-item"><div class="accordion-head"><h3>Item ${i}.${j + 1}</h3></div>`
+      + `<div class="accordion-panel">${Array.from({ length: 2 }, () => `<p>${prose(1)}</p>`).join('')}</div></div>`).join('')
+    + `</div></div></div></div></div>`;
+  const blocks = intro + Array.from({ length: chapters }, (_, i) => chapter(i + 1)).join('');
+  const inner = wrapped ? `<div class="site-builder">${blocks}</div>` : blocks;
+  return `<html><head><title>Programme</title></head><body>`
+    + `<nav><a href="/a">Home</a></nav>${inner}<footer><p>Footer boilerplate.</p></footer></body></html>`;
+}
+
+const PAGE_URL = 'https://example.com/programme';
+
+describe('coverage guard in the extraction pipeline', () => {
+  it('recovers the full body of a page-builder one-pager', async () => {
+    const result = await extractHtml(onePager(), { url: PAGE_URL, recipes: [] });
+    assert.equal(result.source, 'coverage-guard');
+    assert.match(result.markdown, /Chapter 1\b/);
+    assert.match(result.markdown, /Chapter 12\b/);
+    assert.match(result.markdown, /Preamble/);
+  });
+
+  it('records why it intervened', async () => {
+    const result = await extractHtml(onePager(), { url: PAGE_URL, recipes: [] });
+    assert.match(result.metadata.extractorReason, /^coverage guard: \d+\.\d% coverage of \d+c body/);
+    assert.match(result.metadata.extractorReason, /recovered div\.site-builder \(\d+\.\dx\)/);
+    assert.match(result.metadata.extractorReason, /prior pick: /);
+  });
+
+  it('reports the recovered length, not the discarded one', async () => {
+    const before = await extractHtml(onePager(), { url: PAGE_URL, recipes: [], extractor: 'readability' });
+    const after = await extractHtml(onePager(), { url: PAGE_URL, recipes: [] });
+    assert.ok(after.metadata.contentLength > before.metadata.contentLength * 3,
+      `expected the guard to grow the extract, got ${before.metadata.contentLength} -> ${after.metadata.contentLength}`);
   });
 });
