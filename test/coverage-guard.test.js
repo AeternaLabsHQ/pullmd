@@ -255,11 +255,22 @@ describe('coverage guard guard-rails', () => {
     assert.doesNotMatch(result.metadata.extractorReason, /coverage guard/);
   });
 
-  it('stays silent on a small page', async () => {
+  it('leaves an ordinary small article untouched', async () => {
     const small = `<html><head><title>Note</title></head><body><div class="wrap"><article>`
       + `<p>${prose(3)}</p><p>${prose(3)}</p></article></div></body></html>`;
     const result = await extractHtml(small, { url: PAGE_URL, recipes: [] });
     assert.notEqual(result.source, 'coverage-guard');
+  });
+
+  it('stays silent below the body-size floor even when every other condition holds', async () => {
+    // Same shape as the firing fixture, only shorter. Measured on this fixture:
+    // body 17,635 chars (under the 20,000 floor), coverage 9.3% (under the
+    // ceiling), a dominant container is present, and the candidate would be
+    // ~10x larger. The size floor is the only thing holding the guard back, so
+    // lowering MIN_BODY_TEXT makes this test fail — which is the point.
+    const result = await extractHtml(onePager({ chapters: 8 }), { url: PAGE_URL, recipes: [] });
+    assert.notEqual(result.source, 'coverage-guard');
+    assert.doesNotMatch(result.metadata.extractorReason, /coverage guard/);
   });
 
   it('yields to a recipe select.content', async () => {
