@@ -11,7 +11,7 @@ import {
   containerLabel,
   guardReason,
 } from '../lib/coverage-guard.js';
-import { extractHtml } from '../lib/web.js';
+import { extractHtml, extractWeb } from '../lib/web.js';
 import { RecipeSchema } from '../lib/recipes.js';
 
 const bodyOf = (inner) => parseHTML(`<html><body>${inner}</body></html>`).document.querySelector('body');
@@ -293,6 +293,19 @@ describe('coverage guard guard-rails', () => {
     assert.doesNotMatch(result.metadata.extractorReason, /coverage guard/);
   });
 
+  it('still fires when the extractor is pinned to playwright', async () => {
+    // extractor=playwright still takes the DEFAULT pickBest path on the static
+    // pass (only readability/trafilatura pins skip Readability+Trafilatura
+    // entirely) - so the guard must NOT treat it like a static forced
+    // extractor. extractHtml's own `extractor` option only accepts
+    // 'readability'/'trafilatura' (see its JSDoc), so drive this through a
+    // recipe's `extractor: playwright` instead, exactly as a real site
+    // configuration would.
+    const recipe = RecipeSchema.parse({ name: 'test', host: 'example.com', extractor: 'playwright' });
+    const result = await extractHtml(onePager(), { url: PAGE_URL, recipes: [recipe] });
+    assert.equal(result.source, 'coverage-guard');
+  });
+
   it('is switched off by PULLMD_COVERAGE_GUARD=off', async () => {
     const result = await withGuardEnvAsync('off', () => extractHtml(onePager(), { url: PAGE_URL, recipes: [] }));
     assert.notEqual(result.source, 'coverage-guard');
@@ -303,5 +316,32 @@ describe('coverage guard guard-rails', () => {
     const guarded = await extractHtml(onePager(), { url: PAGE_URL, recipes: [] });
     assert.ok(guarded.markdown.length >= forced.markdown.length,
       'the guard must only ever grow the extract');
+  });
+});
+
+describe('coverage guard on the rendered (Playwright) pass', () => {
+  function fetchThinHtml() {
+    return async () => {
+      const headers = { get: (k) => (k.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) };
+      return { ok: true, status: 200, headers, text: async () => '<html><body><p>thin</p></body></html>' };
+    };
+  }
+
+  it('keeps the coverage-guard source and reason when the guard fires on the rendered DOM', async () => {
+    // render: 'force' makes the second (Playwright) pass happen regardless of
+    // what the static extraction looks like; the injected renderClient hands
+    // back the one-pager fixture, so the guard fires on the SECOND
+    // convertWithReadability call (the rendered one), not the first. Before the
+    // fix, extractWeb unconditionally overwrote source/extractorReason with
+    // 'playwright', losing the guard's transparency markers.
+    const result = await extractWeb(PAGE_URL, {
+      fetch: fetchThinHtml(),
+      recipes: [],
+      render: 'force',
+      renderClient: async () => onePager(),
+    });
+    assert.equal(result.source, 'coverage-guard');
+    assert.match(result.metadata.extractorReason, /forced via render=force/);
+    assert.match(result.metadata.extractorReason, /coverage guard:/);
   });
 });

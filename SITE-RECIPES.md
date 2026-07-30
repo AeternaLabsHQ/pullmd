@@ -658,7 +658,7 @@ retry before concluding your recipe is broken.
 **Recipe seems to do nothing?** Check how the page was actually extracted: look
 at the `X-Source` response header (or the `source:` field in the frontmatter,
 with `frontmatter=true`). Recipes only apply when it reads `readability`,
-`readability-fallback`, `trafilatura`, or `playwright`. Any other value —
+`readability-fallback`, `trafilatura`, `playwright`, or `coverage-guard`. Any other value —
 `cloudflare`, `reddit`, `hackernews`, `youtube`, `markitdown`, `pdf-ocr`,
 `image-caption`, `audio-transcript` — means the request never reached the
 recipe layer for the reasons in [§1](#1-when-you-need-a-recipe); your recipe
