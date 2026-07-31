@@ -15,7 +15,7 @@ function bothLangs(html, dePattern, enPattern) {
 
 describe('auth-pages: parallel lang spans', () => {
   it('login page contains both DE and EN spans for every label', () => {
-    const html = loginPage({});
+    const html = loginPage({ signupOpen: true });
     // Page uses the parallel-lang i18n pattern from help.html.
     assert.match(html, /body\[data-lang="de"\] \[lang="en"\] \{ display: none/);
     assert.match(html, /body\[data-lang="en"\] \[lang="de"\] \{ display: none/);

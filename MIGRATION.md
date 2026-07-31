@@ -111,6 +111,7 @@ If you don't set `PULLMD_AUTH_MODE`, nothing changes. Skip the rest.
 2. Decide which auth mode you want:
    - `single-admin` — one user, no self-signup, simplest for homelab.
    - `multi-user` — self-signup at `/signup`, per-user history.
+     Since 3.8.0, self-signup can be closed with `PULLMD_ALLOW_SIGNUP=false` while staying in `multi-user` mode.
 3. Pick admin credentials. The first startup with auth enabled requires `PULLMD_ADMIN_EMAIL` + `PULLMD_ADMIN_PASSWORD`.
 
 ## Upgrading

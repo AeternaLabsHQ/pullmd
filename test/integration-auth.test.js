@@ -190,8 +190,8 @@ describe('integration: auth gating in createApp', () => {
   });
 });
 
-describe('integration: admin-only cache deletion', () => {
-  it('multi-user: non-admin cannot DELETE /api/cache/:id', async () => {
+describe('integration: cache deletion scope', () => {
+  it('multi-user: non-admin gets 404 trying to delete entry not in their history', async () => {
     await withApp('multi-user', async (base, { auth, cache }) => {
       const u = await auth.createUser({ email: 'reg@x.y', password: 'pw1234567' });
       const { fullKey } = auth.createApiKey(u.id, 'k');
@@ -205,21 +205,33 @@ describe('integration: admin-only cache deletion', () => {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${fullKey}` },
       });
-      assert.equal(r.status, 403);
+      assert.equal(r.status, 404);
       // Cache row must still exist.
       assert.ok(cache.db.prepare("SELECT 1 FROM conversions WHERE id = ?").get(id));
     });
   });
 
-  it('multi-user: non-admin cannot DELETE /api/cache (wipe all)', async () => {
-    await withApp('multi-user', async (base, { auth }) => {
+  it('multi-user: non-admin can DELETE /api/cache (clears only their own)', async () => {
+    await withApp('multi-user', async (base, { auth, cache }) => {
       const u = await auth.createUser({ email: 'reg2@x.y', password: 'pw1234567' });
       const { fullKey } = auth.createApiKey(u.id, 'k');
+      const adminId = cache.db.prepare("SELECT id FROM users WHERE is_admin = 1").get().id;
+      cache.put({
+        url: 'https://user-entry.com', title: 'U', markdown: '# U',
+        source: 'readability', client: 'api', user_id: u.id,
+      });
+      cache.put({
+        url: 'https://admin-entry.com', title: 'A', markdown: '# A',
+        source: 'readability', client: 'api', user_id: adminId,
+      });
       const r = await fetch(base + '/api/cache', {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${fullKey}` },
       });
-      assert.equal(r.status, 403);
+      assert.equal(r.status, 200);
+      assert.deepEqual(await r.json(), { ok: true, scope: 'user', removed: 1 });
+      assert.equal(cache.historyForUser(u.id).length, 0);
+      assert.equal(cache.historyForUser(adminId).length, 1);
     });
   });
 

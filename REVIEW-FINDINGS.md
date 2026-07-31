@@ -68,6 +68,10 @@ Bug, not theoretical — anyone who reads the OSS source can `curl` it.
 keeps current behaviour (no auth, anyone can delete). Implemented in this
 review.
 
+Superseded in 3.8.0: a non-admin delete is now scoped to the caller's own
+history instead of rejected outright. See the README's Auth boundary
+section for the current behaviour.
+
 ---
 
 ## NICE TO HAVE — follow-ups, not release blockers

@@ -1382,6 +1382,11 @@
       }
       headerActions.appendChild(slot);
       document.documentElement.dataset.loggedIn = me ? '1' : '0';
+      // Tri-state on purpose. '1' admin, '0' a known non-admin, 'unknown' when
+      // /api/me did not answer. This line runs only after that fetch settles,
+      // so an absent attribute still means "not asked yet", which is a
+      // different situation and keeps its own default in isGlobalDelete().
+      document.documentElement.dataset.isAdmin = me ? (me.is_admin ? '1' : '0') : 'unknown';
     })();
 
     // ---- i18n: DE/EN, default from navigator.language, persisted override ----
@@ -1408,8 +1413,10 @@
           'archive.back':      '← Zurück',
           'archive.more':      'Mehr laden',
           'archive.deleteAll': 'Alles löschen',
-          'archive.confirmDeleteAll': 'Alle Einträge löschen?',
-          'archive.delete':    'Löschen',
+          'archive.confirmDeleteAllMine':   'Alle Einträge aus deiner Historie entfernen?',
+          'archive.confirmDeleteAllGlobal': 'Alle Einträge global löschen? Das betrifft alle Benutzer und macht bestehende Share-Links ungültig.',
+          'archive.deleteMine':   'Aus meiner Historie entfernen',
+          'archive.deleteGlobal': 'Global löschen',
           'archive.entries':   '{n} Einträge',
           'stat.entries':      'Einträge',
           'stat.entries.expiring': '{n} laufen bald ab',
@@ -1432,6 +1439,7 @@
           'err.unknown':       'Unbekannter Fehler ({code})',
           'err.empty':         'Leere Antwort vom Server.',
           'err.network':       'Netzwerkfehler: Server nicht erreichbar.',
+          'err.deleteFailed':  'Löschen fehlgeschlagen.',
           'drop.hint':         'HTML-Datei hier ablegen',
           'drop.affordance':   'Alternativ: HTML-Datei hierher ziehen oder auswählen',
           'drop.affordanceOpen': 'Alternativ: HTML-Datei auswählen',
@@ -1466,8 +1474,10 @@
           'archive.back':      '← Back',
           'archive.more':      'Load more',
           'archive.deleteAll': 'Delete all',
-          'archive.confirmDeleteAll': 'Delete all entries?',
-          'archive.delete':    'Delete',
+          'archive.confirmDeleteAllMine':   'Remove all entries from your history?',
+          'archive.confirmDeleteAllGlobal': 'Delete all entries globally? This affects every user and invalidates existing share links.',
+          'archive.deleteMine':   'Remove from my history',
+          'archive.deleteGlobal': 'Delete globally',
           'archive.entries':   '{n} entries',
           'stat.entries':      'Entries',
           'stat.entries.expiring': '{n} expiring soon',
@@ -1490,6 +1500,7 @@
           'err.unknown':       'Unknown error ({code})',
           'err.empty':         'Empty response from server.',
           'err.network':       'Network error: server unreachable.',
+          'err.deleteFailed':  'Delete failed.',
           'drop.hint':         'Drop HTML file here',
           'drop.affordance':   'Alternatively: drag an HTML file here or browse',
           'drop.affordanceOpen': 'Alternatively: choose an HTML file',
@@ -1744,11 +1755,36 @@
         loadingEl.classList.remove('visible');
         goBtn.disabled = false;
       }
+      // Mirrors isGlobalScope on the server: no auth configured or auth
+      // disabled means every caller deletes globally, otherwise only an admin
+      // does. dataset.authMode is set before the bootstrap's early return for
+      // disabled mode, and defaults to 'disabled' when /api/config is
+      // unreachable.
+      // 'unknown' means /api/me answered nothing, so the role is undecidable:
+      // overwarn. Claiming "global" for a delete that turns out to be scoped
+      // costs nothing, while the reverse puts a harmless label on a
+      // destructive action. An absent attribute is the different case of
+      // "bootstrap still running" and keeps the scoped default.
+      function isGlobalDelete() {
+        var root = document.documentElement;
+        return root.dataset.authMode === 'disabled'
+          || root.dataset.isAdmin === '1'
+          || root.dataset.isAdmin === 'unknown';
+      }
       function showError(msg) {
         hideLoading();
         errorEl.textContent = msg;
         errorEl.classList.add('visible');
-        resultContainer.classList.remove('visible');
+        // showArchive() hides the shared views with an inline display:none, and an
+        // inline style outranks the .error.visible class rule. Clear it, or a
+        // delete that fails inside the archive view would show nothing at all.
+        errorEl.style.display = '';
+        // Only collapse a shown conversion result on the main view. From the
+        // archive this would silently drop the user's result for when they
+        // navigate back, since hideArchive() restores display but not classes.
+        if (!archiveView || !archiveView.classList.contains('visible')) {
+          resultContainer.classList.remove('visible');
+        }
       }
 
       var sourceBadge = document.getElementById('source-badge');
@@ -2402,7 +2438,7 @@
               delBtn.type = 'button';
               delBtn.className = 'h-delete-btn';
               delBtn.textContent = '×';
-              delBtn.title = t('archive.delete');
+              delBtn.title = isGlobalDelete() ? t('archive.deleteGlobal') : t('archive.deleteMine');
               delBtn.addEventListener('click', (function(itm, row, btn) {
                 return function(e) {
                   e.preventDefault();
@@ -2418,12 +2454,14 @@
                       btn.disabled = false;
                       row.style.borderColor = 'var(--bad)';
                       btn.title = 'Delete failed (HTTP ' + res.status + ')';
+                      showError(t('err.deleteFailed'));
                       console.warn('History delete failed:', res.status, itm.id, itm.url);
                     })
                     .catch(function(err) {
                       btn.disabled = false;
                       row.style.borderColor = 'var(--bad)';
                       btn.title = 'Delete failed: ' + err.message;
+                      showError(t('err.deleteFailed'));
                       console.warn('History delete error:', err, itm.id, itm.url);
                     });
                 };
@@ -2551,6 +2589,7 @@
         if (mainView) mainView.style.display = '';
         if (heroView) heroView.style.display = '';
         resultViews.forEach(function(el) { if (el) el.style.display = ''; });
+        errorEl.classList.remove('visible');
         loadHistory();
       }
       function formatDate(dateStr) {
@@ -2584,7 +2623,7 @@
         delBtn.type = 'button';
         delBtn.className = 'archive-delete-btn';
         delBtn.textContent = '×';
-        delBtn.title = t('archive.delete');
+        delBtn.title = isGlobalDelete() ? t('archive.deleteGlobal') : t('archive.deleteMine');
         delBtn.addEventListener('click', function(e) {
           e.preventDefault();
           e.stopPropagation();
@@ -2601,12 +2640,14 @@
               delBtn.disabled = false;
               row.style.borderColor = 'var(--bad)';
               delBtn.title = 'Delete failed (HTTP ' + res.status + ')';
+              showError(t('err.deleteFailed'));
               console.warn('Archive delete failed:', res.status, item.id, item.url);
             })
             .catch(function(err) {
               delBtn.disabled = false;
               row.style.borderColor = 'var(--bad)';
               delBtn.title = 'Delete failed: ' + err.message;
+              showError(t('err.deleteFailed'));
               console.warn('Archive delete error:', err, item.id, item.url);
             });
         });
@@ -2634,14 +2675,20 @@
       archiveBackBtn.addEventListener('click', function(e) { e.preventDefault(); hideArchive(); });
       archiveMoreBtn.addEventListener('click', loadArchivePage);
       archiveDeleteAllBtn.addEventListener('click', function() {
-        if (!confirm(t('archive.confirmDeleteAll'))) return;
+        if (!confirm(isGlobalDelete() ? t('archive.confirmDeleteAllGlobal') : t('archive.confirmDeleteAllMine'))) return;
         fetch('/api/cache', { method: 'DELETE' }).then(function(res) {
           if (res.ok) {
             while (archiveList.firstChild) archiveList.removeChild(archiveList.firstChild);
             archiveTotal = 0;
             archiveCount.textContent = t('archive.entries', { n: 0 });
             archiveMoreBtn.style.display = 'none';
+            return;
           }
+          showError(t('err.deleteFailed'));
+          console.warn('Archive delete-all failed:', res.status);
+        }).catch(function(err) {
+          showError(t('err.deleteFailed'));
+          console.warn('Archive delete-all error:', err);
         });
       });
 
