@@ -5,11 +5,14 @@ import os from 'node:os';
 import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
 import { resetPassword, listUsers, makeAdmin, createUserCmd } from '../scripts/admin.js';
 
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, '..');
 
 describe('admin CLI commands', () => {
   let cache, auth;
@@ -166,6 +169,48 @@ describe('admin CLI create-user integration (non-TTY stdin)', () => {
       assert.match(stdout, /Created someone@example\.com.*no admin rights/);
     } finally {
       // Clean up
+      if (fs.existsSync(tmpDbPath)) {
+        fs.unlinkSync(tmpDbPath);
+      }
+    }
+  });
+});
+
+describe('admin CLI list-users without any bootstrap env (regression for runMigration removal)', () => {
+  it('exits 0, reports no users, and leaves the users table empty', async () => {
+    const tmpDbPath = path.join(os.tmpdir(), `pullmd-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
+
+    try {
+      // Deliberately no PULLMD_AUTH_MODE, PULLMD_ADMIN_EMAIL or PULLMD_ADMIN_PASSWORD.
+      // Built explicitly (not spread from process.env) so the test does not
+      // depend on the caller's shell environment.
+      const proc = execFile(process.execPath, ['scripts/admin.js', 'list-users'], {
+        cwd: ROOT,
+        env: {
+          CACHE_DB: tmpDbPath,
+        },
+        timeout: 30000,
+      });
+
+      const { stdout, stderr, code } = await new Promise((resolve, reject) => {
+        let stdoutData = '';
+        let stderrData = '';
+        proc.stdout.on('data', (d) => { stdoutData += d; });
+        proc.stderr.on('data', (d) => { stderrData += d; });
+        proc.on('error', reject);
+        proc.on('exit', (exitCode) => {
+          resolve({ stdout: stdoutData, stderr: stderrData, code: exitCode });
+        });
+      });
+
+      assert.equal(code, 0, `expected exit 0, got ${code}. stderr: ${stderr}`);
+      assert.match(stdout, /\(no users yet\)/);
+
+      // The important assertion: no bootstrap admin was created as a side effect.
+      const dbCache = createCache(tmpDbPath);
+      const count = dbCache.db.prepare("SELECT COUNT(*) c FROM users").get().c;
+      assert.equal(count, 0, 'the users table must remain empty');
+    } finally {
       if (fs.existsSync(tmpDbPath)) {
         fs.unlinkSync(tmpDbPath);
       }

@@ -95,7 +95,6 @@ async function main() {
     mode: process.env.PULLMD_AUTH_MODE || 'multi-user',
     env: process.env,
   });
-  await auth.runMigration();
 
   if (cmd === 'list-users') {
     const users = listUsers({ db: cache.db });
