@@ -65,10 +65,33 @@ describe('captionImage', () => {
     assert.equal(sent.length, 2, 'exactly one retry');
     assert.equal(sent[0].max_tokens, 500, 'the first attempt asks the way every endpoint understands');
     assert.equal(sent[0].max_completion_tokens, undefined);
-    assert.equal(sent[1].max_completion_tokens, 500, 'the retry uses the parameter the endpoint asked for');
+    assert.equal(sent[1].max_completion_tokens, 4000, 'the retry uses the parameter the endpoint asked for, with a budget that leaves room for reasoning tokens');
     assert.equal(sent[1].max_tokens, undefined, 'and must not send both');
     assert.equal(sent[1].model, 'newer-model');
     assert.equal(r.markdown, '## Description\n\nA gradient.');
+    restore(s);
+  });
+
+  // A reasoning model can burn the entire budget on invisible reasoning tokens
+  // and return an empty message. Handing that back as a caption produces a
+  // heading with nothing under it; throwing lets the caller fall back.
+  it('throws instead of returning an empty caption when the budget ran out', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    const fetchFn = async () => ({
+      ok: true,
+      json: async () => ({ model: 'reasoner', choices: [{ message: { content: '' }, finish_reason: 'length' }], usage: { completion_tokens: 4000, completion_tokens_details: { reasoning_tokens: 4000 } } }),
+    });
+
+    await assert.rejects(() => captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn }),
+      /token budget|no text/i);
+    restore(s);
+  });
+
+  it('throws on an empty caption even when the model stopped normally', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    const fetchFn = async () => ({ ok: true, json: async () => ({ choices: [{ message: { content: '   ' }, finish_reason: 'stop' }] }) });
+
+    await assert.rejects(() => captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn }), /no text/i);
     restore(s);
   });
 
