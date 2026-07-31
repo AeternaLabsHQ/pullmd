@@ -12,6 +12,7 @@ import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
 import { assertUrlAllowed, SsrfError } from './lib/ssrf.js';
+import { ignoredModelEnvWarning } from './lib/llm/providers.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -1085,6 +1086,9 @@ if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
           : null);
   loadRecipes({ defaultPath: defaultRecipesPath, userPath: userRecipesPath });
   validateFrontmatterFields();
+
+  const modelEnvWarning = ignoredModelEnvWarning(process.env);
+  if (modelEnvWarning) console.warn(`[config] ${modelEnvWarning}`);
 
   // Hash recipe content; if changed since last boot, invalidate cache.
   const recipesHash = computeRecipesHash([defaultRecipesPath, userRecipesPath].filter(Boolean));

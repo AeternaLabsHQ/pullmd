@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveProvider, mapUsage, abortController } from '../lib/llm/providers.js';
+import { resolveProvider, mapUsage, abortController, ignoredModelEnvWarning } from '../lib/llm/providers.js';
 
 const save = (...k) => { const s = {}; for (const n of k) s[n] = process.env[n]; return s; };
 const restore = (s) => { for (const [n, v] of Object.entries(s)) { if (v === undefined) delete process.env[n]; else process.env[n] = v; } };
@@ -72,5 +72,23 @@ describe('abortController', () => {
     cleanup();
     await new Promise(r => setTimeout(r, 40));
     assert.equal(signal.aborted, false);
+  });
+});
+
+describe('ignoredModelEnvWarning', () => {
+  it('says nothing when PULLMD_LLM_MODEL is not set', () => {
+    assert.equal(ignoredModelEnvWarning({ PULLMD_LLM_API_KEY: 'k' }), null);
+  });
+
+  it('warns when PULLMD_LLM_MODEL is set, and names the variables that do work', () => {
+    const msg = ignoredModelEnvWarning({ PULLMD_LLM_MODEL: 'some-model' });
+    assert.match(msg, /PULLMD_LLM_MODEL/);
+    assert.match(msg, /PULLMD_VISION_MODEL/);
+    assert.match(msg, /PULLMD_STT_MODEL/);
+    assert.match(msg, /PULLMD_PDF_OCR_MODEL/);
+  });
+
+  it('still warns when a per-modality model is set too, because the shared one stays dead', () => {
+    assert.ok(ignoredModelEnvWarning({ PULLMD_LLM_MODEL: 'a', PULLMD_VISION_MODEL: 'b' }));
   });
 });
