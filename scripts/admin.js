@@ -28,6 +28,19 @@ export function makeAdmin({ db }, email) {
   return r.changes > 0;
 }
 
+export async function createUserCmd({ db, auth }, email, password) {
+  const clean = String(email || '').trim().toLowerCase();
+  if (db.prepare("SELECT 1 FROM users WHERE email = ?").get(clean)) {
+    return { ok: false, reason: 'exists' };
+  }
+  try {
+    const user = await auth.createUser({ email, password, isAdmin: false });
+    return { ok: true, user };
+  } catch (err) {
+    return { ok: false, reason: 'invalid', message: err?.message || 'could not create user' };
+  }
+}
+
 async function readPassword(prompt = 'New password: ') {
   process.stdout.write(prompt);
   return new Promise((resolve) => {
@@ -66,7 +79,7 @@ async function readPassword(prompt = 'New password: ') {
 async function main() {
   const [, , cmd, ...args] = process.argv;
   if (!cmd) {
-    console.error('Usage: node scripts/admin.js <list-users|reset-password|make-admin> [email]');
+    console.error('Usage: node scripts/admin.js <list-users|create-user|reset-password|make-admin> [email]');
     process.exit(1);
   }
   const dbPath = process.env.CACHE_DB || './data/cache.db';
@@ -76,6 +89,7 @@ async function main() {
     mode: process.env.PULLMD_AUTH_MODE || 'multi-user',
     env: process.env,
   });
+  await auth.runMigration();
 
   if (cmd === 'list-users') {
     const users = listUsers({ db: cache.db });
@@ -103,6 +117,22 @@ async function main() {
     const ok = makeAdmin({ db: cache.db }, email);
     if (!ok) { console.error(`No user with email ${email}`); process.exit(2); }
     console.log(`${email} is now an admin.`);
+    return;
+  }
+
+  if (cmd === 'create-user') {
+    const email = args[0];
+    if (!email) { console.error('Usage: create-user <email>'); process.exit(2); }
+    const pw = await readPassword();
+    if (!pw || pw.length < 8) { console.error('Password must be at least 8 characters.'); process.exit(2); }
+    const r = await createUserCmd({ db: cache.db, auth }, email, pw);
+    if (!r.ok) {
+      console.error(r.reason === 'exists'
+        ? `A user with email ${email} already exists.`
+        : r.message);
+      process.exit(2);
+    }
+    console.log(`Created ${r.user.email} (no admin rights). Use make-admin to promote.`);
     return;
   }
 

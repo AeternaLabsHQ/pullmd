@@ -265,6 +265,13 @@ In `single-admin` and `multi-user` modes, `PULLMD_ADMIN_EMAIL` + `PULLMD_ADMIN_P
 docker compose exec pullmd node scripts/admin.js reset-password you@example.com
 ```
 
+Create an account without opening self-registration (useful when
+`PULLMD_ALLOW_SIGNUP` is off):
+
+```bash
+docker compose exec pullmd node scripts/admin.js create-user someone@example.com
+```
+
 ### Auth boundary
 
 | Endpoint                                                         | Auth required (when mode != disabled) |

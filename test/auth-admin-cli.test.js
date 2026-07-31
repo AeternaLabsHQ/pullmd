@@ -2,7 +2,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
-import { resetPassword, listUsers, makeAdmin } from '../scripts/admin.js';
+import { resetPassword, listUsers, makeAdmin, createUserCmd } from '../scripts/admin.js';
 
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
 
@@ -49,5 +49,67 @@ describe('admin CLI commands', () => {
     assert.equal(ok, true);
     const u = cache.db.prepare("SELECT is_admin FROM users WHERE email = ?").get('other@x.y');
     assert.equal(u.is_admin, 1);
+  });
+});
+
+describe('admin CLI create-user', () => {
+  let cache, auth;
+  beforeEach(async () => {
+    cache = createCache(':memory:');
+    auth = createAuth({
+      db: cache.db, mode: 'multi-user',
+      env: { PULLMD_ADMIN_EMAIL: 'a@b.c', PULLMD_ADMIN_PASSWORD: 'pw1234567' },
+      argon2Opts: fastOpts,
+    });
+    await auth.runMigration();
+    await auth.createUser({ email: 'other@x.y', password: 'pw1234567' });
+  });
+
+  it('creates a non-admin user that can authenticate', async () => {
+    const r = await createUserCmd({ db: cache.db, auth }, 'fresh@x.y', 'pw1234567');
+
+    assert.equal(r.ok, true);
+    assert.equal(r.user.email, 'fresh@x.y');
+    assert.equal(r.user.is_admin, false);
+    const u = await auth.authenticate('fresh@x.y', 'pw1234567');
+    assert.ok(u, 'the new user must be able to log in');
+    assert.equal(u.is_admin, false);
+  });
+
+  it('normalises the email like signup does', async () => {
+    const r = await createUserCmd({ db: cache.db, auth }, '  MiXeD@X.Y  ', 'pw1234567');
+
+    assert.equal(r.ok, true);
+    assert.equal(r.user.email, 'mixed@x.y');
+  });
+
+  it('refuses a duplicate email without throwing', async () => {
+    const r = await createUserCmd({ db: cache.db, auth }, 'other@x.y', 'pw1234567');
+
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'exists');
+    assert.equal(cache.db.prepare("SELECT COUNT(*) c FROM users WHERE email = ?").get('other@x.y').c, 1);
+  });
+
+  it('refuses a duplicate that differs only in case', async () => {
+    const r = await createUserCmd({ db: cache.db, auth }, 'OTHER@X.Y', 'pw1234567');
+
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'exists');
+  });
+
+  it('refuses a short password', async () => {
+    const r = await createUserCmd({ db: cache.db, auth }, 'short@x.y', 'pw1');
+
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'invalid');
+    assert.match(r.message, /at least 8/);
+  });
+
+  it('refuses an invalid email', async () => {
+    const r = await createUserCmd({ db: cache.db, auth }, 'not-an-email', 'pw1234567');
+
+    assert.equal(r.ok, false);
+    assert.equal(r.reason, 'invalid');
   });
 });
