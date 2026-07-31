@@ -218,6 +218,20 @@ describe('cache: no orphaned user_fetches', () => {
     assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM user_fetches').get().c, 0);
   });
 
+  it('pruneOld triggers the orphan sweep when it ages out a user-owned entry', () => {
+    cache.put({ url: 'https://a.test/11', title: 't', markdown: '# t', source: 's', user_id: uid });
+    cache.db.prepare("UPDATE conversions SET created_at = datetime('now','-91 days') WHERE url = ?").run('https://a.test/11');
+
+    // Insert a second, fresh entry - this put() is what triggers pruneOld.
+    cache.put({ url: 'https://a.test/12', title: 't', markdown: '# t', source: 's', user_id: uid });
+
+    const aged = cache.db.prepare("SELECT COUNT(*) c FROM conversions WHERE url = ?").get('https://a.test/11').c;
+    assert.equal(aged, 0, 'the aged conversion must be pruned');
+    assert.equal(orphanCount(cache), 0);
+    const page = cache.historyPageForUser(uid, 50, 0);
+    assert.equal(page.total, page.items.length, 'total must not count rows the join cannot return');
+  });
+
   it('pruneOrphanFetches sweeps pre-existing orphans', () => {
     cache.db.prepare('INSERT INTO user_fetches (user_id, cache_id) VALUES (?, ?)').run(uid, 999999);
 

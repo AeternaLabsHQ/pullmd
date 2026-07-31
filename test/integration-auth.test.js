@@ -190,7 +190,7 @@ describe('integration: auth gating in createApp', () => {
   });
 });
 
-describe('integration: admin-only cache deletion', () => {
+describe('integration: cache deletion scope', () => {
   it('multi-user: non-admin gets 404 trying to delete entry not in their history', async () => {
     await withApp('multi-user', async (base, { auth, cache }) => {
       const u = await auth.createUser({ email: 'reg@x.y', password: 'pw1234567' });

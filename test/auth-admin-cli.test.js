@@ -129,7 +129,7 @@ describe('admin CLI create-user integration (non-TTY stdin)', () => {
     try {
       // Spawn the CLI with piped stdin
       const proc = execFile('node', ['scripts/admin.js', 'create-user', 'someone@example.com'], {
-        cwd: new URL('..', import.meta.url).pathname,
+        cwd: ROOT,
         env: {
           ...process.env,
           CACHE_DB: tmpDbPath,
@@ -167,6 +167,7 @@ describe('admin CLI create-user integration (non-TTY stdin)', () => {
       assert.equal(user.email, 'someone@example.com');
       assert.equal(user.is_admin, 0);
       assert.match(stdout, /Created someone@example\.com.*no admin rights/);
+      assert.equal(stderr, '');
     } finally {
       // Clean up
       if (fs.existsSync(tmpDbPath)) {
