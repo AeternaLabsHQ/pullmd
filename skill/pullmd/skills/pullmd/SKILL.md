@@ -14,12 +14,13 @@ PullMD is unavailable.
 PullMD routes each URL through the extraction path that fits it:
 
 1. **Reddit** — auto-detected URLs go through Reddit's JSON API with full comment trees.
-2. **Cloudflare** — sites that support `Accept: text/markdown` get native Markdown directly.
-3. **Static HTML** — Mozilla Readability and Trafilatura run in parallel; the higher-quality output wins.
-4. **Headless Chromium fallback** — when static extraction returns body-soup or low-quality output (typical for Next.js / SPA pages), the page is rendered in a real browser before extracting.
-5. **Documents** — direct links to PDF, Word, PowerPoint, Excel, EPUB, ZIP, CSV, JSON, or XML files are converted to Markdown (requires the markitdown sidecar on the instance).
-6. **YouTube** — video URLs return title, description, and the transcript with clickable timecodes (when enabled on the instance).
-7. **Images & audio** — captioned / transcribed when the instance has a vision or STT provider configured; metadata-only otherwise.
+2. **Hacker News** — auto-detected item pages, comment permalinks, and listings (`/news`, `/newest`, `/ask`, `/show`, `/jobs`, `/best`) go through the HN API and come back as a clean nested comment tree.
+3. **Cloudflare** — sites that support `Accept: text/markdown` get native Markdown directly.
+4. **Static HTML** — Mozilla Readability and Trafilatura run in parallel; the higher-quality output wins.
+5. **Headless Chromium fallback** — when static extraction returns body-soup or low-quality output (typical for Next.js / SPA pages), the page is rendered in a real browser before extracting.
+6. **Documents** — direct links to PDF, Word, PowerPoint, Excel, EPUB, ZIP, CSV, JSON, or XML files are converted to Markdown (requires the markitdown sidecar on the instance).
+7. **YouTube** — video URLs return title, description, and the transcript with clickable timecodes (when enabled on the instance).
+8. **Images & audio** — captioned / transcribed when the instance has a vision or STT provider configured; metadata-only otherwise.
 
 The result is much cleaner than the raw HTML that WebFetch returns, and it
 works on JavaScript-heavy sites and binary formats that WebFetch can't
@@ -42,8 +43,8 @@ The response is `text/markdown` — ready to use as-is.
 | Param           | Default | Notes                                                                       |
 | --------------- | ------- | --------------------------------------------------------------------------- |
 | `url`           | —       | Required.                                                                   |
-| `comments`      | `true`  | Include Reddit comments. Ignored for non-Reddit URLs.                       |
-| `comment_depth` | `3`     | Reddit comment nesting depth (1–10).                                        |
+| `comments`      | `true`  | Include Reddit / Hacker News comments. Ignored for other URLs.              |
+| `comment_depth` | `3`     | Comment nesting depth (1–10), Reddit and Hacker News.                       |
 | `comment_limit` | none    | Max top-level Reddit comments (Reddit returns ~200 without a cap).          |
 | `frontmatter`   | `false` | Prepend YAML metadata (title, source, quality, share id, …).                |
 | `format`        | `md`    | `text` strips Markdown; `json` returns a structured response with metadata. |
@@ -53,13 +54,17 @@ The response is `text/markdown` — ready to use as-is.
 | `pdf`           | —       | `ocr` → high-quality OCR conversion for PDFs (table-grade output; needs a server-side OCR key). Bypasses cache. |
 | `yt_timecodes`  | `links` | YouTube transcripts: `links` (clickable timestamps), `plain` (`[MM:SS]`), `none`. |
 | `yt_chunk`      | `30`    | YouTube transcript block size in seconds; `0` = per original snippet.       |
+| `query`         | —       | Return only the sections relevant to this text instead of the whole page (BM25 over the converted Markdown, no LLM). Empty/absent = full page, unchanged. |
+| `max_tokens`    | `600`   | Token budget for `query` (64–20000). Only validated when `query` is set.     |
 | `lang`          | `de`    | Language for the comments-section header (`de` or `en`).                    |
 
 **Response headers worth checking:**
 
-- `X-Source` — `reddit` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
+- `X-Source` — `reddit` · `hackernews` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
 - `X-Quality` — `0.0–1.0` extraction confidence (low values mean the static extraction was thin or noisy)
 - `X-Share-Id` — 8-hex permalink, openable as `__PULLMD_URL__/s/<id>` (absent for `/api/html` — local conversions are never cached or shared)
+- `X-Transcript-Status` — YouTube only: `ok` / `none` / `blocked` / `error`. `blocked` and `error` are transient (rate limit) and not cached — retry later; `none` means the video has no transcript at all.
+- `X-Extracted` / `X-Extract-Confidence` / `X-Extract-Sections` / `X-Extract-Original-Tokens` / `X-Extract-Returned-Tokens` — only when `query` is active; the last two show how much context the extraction saved.
 
 **Example calls:**
 
@@ -78,6 +83,9 @@ curl -s "__PULLMD_URL__/api?url=https://example.com/report.pdf&pdf=ocr"
 
 # YouTube transcript with clickable timecodes (if enabled on the instance)
 curl -s "__PULLMD_URL__/api?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+# Long page, but you only need one thing: get just the relevant sections
+curl -s "__PULLMD_URL__/api?url=https://example.com/long-doc&query=rate+limit+headers&max_tokens=800"
 
 # Get fresh (uncached) content
 curl -s "__PULLMD_URL__/api?url=https://example.com/news&nocache=true"
@@ -125,7 +133,8 @@ Need to read a URL?
 ## Tips
 
 - PullMD caches results for 1 hour. Use `nocache=true` if you need the latest version. `render=force|skip`, `extractor=`, `pdf=ocr`, and explicit `yt_*` params also bypass the cache.
-- For pages with important comments or discussions (forums, HN, Reddit), add `comments=true` to include the discussion below the post.
+- For pages with important comments or discussions (forums, HN, Reddit), add `comments=true` to include the discussion below the post. Reddit and Hacker News URLs are auto-detected and use dedicated pipelines; `comment_depth` controls how deep the tree goes.
+- When the page is long and you only need one aspect of it, add `query=<what you are looking for>` instead of pulling the whole thing — it returns just the matching sections and reports the token saving in `X-Extract-*`. It falls back to the full page when nothing matches, so it is safe to try.
 - For JS-rendered apps where the auto-fallback didn't fire (e.g. content lives in a tab the heuristic didn't reach), `render=force` re-extracts via headless Chromium.
 - Reddit URLs are automatically detected (incl. `redd.it` short links and `/r/<sub>/s/<id>` share links) and use a specialized extraction pipeline that handles posts, comments, galleries, and videos.
 - Add `frontmatter=true` when you want metadata: extraction source and quality always; for Reddit posts also subreddit, author, upvotes, and publish date; for media/YouTube/OCR results duration, image size, and LLM token usage (cost tracking).

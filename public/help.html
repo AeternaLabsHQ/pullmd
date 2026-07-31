@@ -266,10 +266,15 @@
         <li><a href="#what">Was macht PullMD?</a></li>
         <li><a href="#cache">Cache & TTL</a></li>
         <li><a href="#agent">In KI-Agenten einrichten</a></li>
+        <li><a href="#endpoints">Endpunkte</a></li>
         <li><a href="#api">API-Parameter</a></li>
-        <li><a href="#local-html">Lokale HTML-Dateien</a></li>
+        <li><a href="#headers">Response-Header</a></li>
+        <li><a href="#query">Query-Extraktion</a></li>
+        <li><a href="#files">Dateien konvertieren</a></li>
         <li><a href="#share">Share-Links</a></li>
         <li><a href="#frontmatter">Frontmatter</a></li>
+        <li><a href="#recipes">Site-Recipes</a></li>
+        <li><a href="#auth">Authentifizierung</a></li>
         <li><a href="#clients">Client-Erkennung</a></li>
       </ul>
       <ul lang="en">
@@ -277,17 +282,22 @@
         <li><a href="#what">What PullMD does</a></li>
         <li><a href="#cache">Cache & TTL</a></li>
         <li><a href="#agent">Set up in AI agents</a></li>
+        <li><a href="#endpoints">Endpoints</a></li>
         <li><a href="#api">API parameters</a></li>
-        <li><a href="#local-html">Local HTML files</a></li>
+        <li><a href="#headers">Response headers</a></li>
+        <li><a href="#query">Query extraction</a></li>
+        <li><a href="#files">Converting files</a></li>
         <li><a href="#share">Share links</a></li>
         <li><a href="#frontmatter">Frontmatter</a></li>
+        <li><a href="#recipes">Site recipes</a></li>
+        <li><a href="#auth">Authentication</a></li>
         <li><a href="#clients">Client detection</a></li>
       </ul>
     </nav>
 
     <!-- ===================================================== -->
     <section id="whats-new">
-      <h2><span lang="de">Neu in v3</span><span lang="en">New in v3</span><span class="kicker">v3</span></h2>
+      <h2><span lang="de">Neu in v3</span><span lang="en">New in v3</span><span class="kicker">v__PULLMD_VERSION__</span></h2>
       <p lang="de">In v3 ist PullMD von einem reinen Web-Reader zu einem allgemeinen <strong>Alles-zu-Markdown</strong>-Dienst gewachsen. Alles über die normale Web-Extraktion hinaus ist optional und lässt sich einzeln aktivieren:</p>
       <p lang="en">In v3, PullMD grew from a web-page reader into a general <strong>anything-to-Markdown</strong> service. Everything beyond plain web extraction is optional and enabled individually:</p>
       <ul class="doc-list" lang="de">
@@ -304,6 +314,27 @@
         <li><strong>Images & audio</strong> - optional image captioning and audio transcription.</li>
         <li><strong>YouTube</strong> - title, description and transcript with clickable timecodes, no API key.</li>
       </ul>
+
+      <h3 lang="de">Seitdem dazugekommen</h3>
+      <h3 lang="en">Added since</h3>
+      <ul class="doc-list" lang="de">
+        <li><strong>Hacker News</strong> (v3.1) - eigene Pipeline für Items, Kommentar-Permalinks und Listings, mit sauberem verschachteltem Kommentarbaum statt Layout-Tabellen.</li>
+        <li><strong>Teilen aus der PWA</strong> (v3.1) - Share-Button neben Kopieren übergibt das Markdown an das native Share-Sheet; der Frontmatter-Schalter wirkt sofort, ohne zweiten Pull.</li>
+        <li><strong>Transkript-Status</strong> (v3.2) - <code>X-Transcript-Status</code> unterscheidet bei YouTube ein fehlendes Transkript von einer temporären Sperre.</li>
+        <li><strong>SSRF-Schutz</strong> (v3.3) - Anfragen an interne Adressen werden standardmäßig abgelehnt, siehe <a href="#endpoints">Endpunkte</a>.</li>
+        <li><strong>Query-Extraktion</strong> (v3.4) - <code>?query=</code> liefert nur die zur Frage passenden Abschnitte statt der ganzen Seite, siehe <a href="#query">Query-Extraktion</a>.</li>
+        <li><strong>Site-Recipes</strong> (v3.5/v3.6) - pro Host konfigurierbare Extraktion, inklusive Frontmatter aus JSON-LD und <code>select.content</code>, um den Artikel-Body direkt zu benennen.</li>
+        <li><strong>Coverage Guard</strong> (v3.7) - erkennt Extraktionen, die nur einen Bruchteil der Seite behalten haben, und holt den fehlenden Teil nach.</li>
+      </ul>
+      <ul class="doc-list" lang="en">
+        <li><strong>Hacker News</strong> (v3.1) - a dedicated pipeline for items, comment permalinks and listings, producing a clean nested comment tree instead of layout-table soup.</li>
+        <li><strong>Share from the PWA</strong> (v3.1) - a share button next to Copy hands the Markdown to the native share sheet; the frontmatter toggle now applies instantly, with no second pull.</li>
+        <li><strong>Transcript status</strong> (v3.2) - <code>X-Transcript-Status</code> tells a missing YouTube transcript apart from a temporary block.</li>
+        <li><strong>SSRF protection</strong> (v3.3) - requests to internal addresses are rejected by default, see <a href="#endpoints">Endpoints</a>.</li>
+        <li><strong>Query extraction</strong> (v3.4) - <code>?query=</code> returns only the sections relevant to your question instead of the whole page, see <a href="#query">Query extraction</a>.</li>
+        <li><strong>Site recipes</strong> (v3.5/v3.6) - per-host extraction tuning, including frontmatter from JSON-LD and <code>select.content</code> to name the article body outright.</li>
+        <li><strong>Coverage guard</strong> (v3.7) - detects extractions that kept only a sliver of the page and recovers the rest.</li>
+      </ul>
     </section>
 
     <!-- ===================================================== -->
@@ -312,17 +343,23 @@
       <p lang="de">PullMD ruft eine beliebige URL ab und liefert sie als sauberes Markdown zurück. Je nach Quelle wird der passende Extraktions-Pfad gewählt:</p>
       <p lang="en">PullMD fetches any URL and returns it as clean Markdown. It picks the right extraction path depending on the source:</p>
       <ul class="doc-list" lang="de">
-        <li><strong>Reddit</strong> — eigener Pipeline für Posts, Kommentare, Subreddit-Listings (mit Tiefe und Limit konfigurierbar).</li>
+        <li><strong>Reddit</strong> — eigene Pipeline für Posts, Kommentare, Subreddit-Listings (mit Tiefe und Limit konfigurierbar).</li>
         <li><strong>Hacker News</strong> — eigene Pipeline für Items, Kommentar-Permalinks und Listings (Front/Newest/Ask/Show/Jobs); verschachtelte Kommentare mit konfigurierbarer Tiefe.</li>
         <li><strong>Cloudflare-Markdown</strong> — wenn die Quelle <code>Accept: text/markdown</code> nativ unterstützt, wird das direkt durchgereicht (sauberster Output).</li>
-        <li><strong>Readability + Turndown</strong> — Fallback für alles andere: Mozilla Readability extrahiert den Hauptinhalt, Turndown wandelt nach Markdown.</li>
+        <li><strong>Readability + Trafilatura</strong> — für statisches HTML laufen beide Extraktoren; die Ausgabe mit der besseren Qualitätsbewertung gewinnt. Trafilatura ist ein optionaler Sidecar; ohne ihn bleibt es bei Readability.</li>
+        <li><strong>Headless Chromium</strong> — wenn die statische Extraktion dünn oder nach Layout-Soup aussieht (typisch für SPAs), wird die Seite im Playwright-Sidecar gerendert und danach neu extrahiert. Mit <code>?render=force</code> bzw. <code>?render=skip</code> erzwing- oder abschaltbar.</li>
+        <li><strong>Dokumente, YouTube, Bilder, Audio</strong> — je nach Instanz-Konfiguration; siehe <a href="#files">Dateien konvertieren</a>.</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li><strong>Reddit</strong> — dedicated pipeline for posts, comments, subreddit listings (configurable depth and limit).</li>
         <li><strong>Hacker News</strong> — dedicated pipeline for items, comment permalinks, and listings (front/newest/ask/show/jobs); nested comments with configurable depth.</li>
         <li><strong>Cloudflare-Markdown</strong> — when the source supports <code>Accept: text/markdown</code> natively, that's passed through directly (cleanest output).</li>
-        <li><strong>Readability + Turndown</strong> — fallback for everything else: Mozilla Readability pulls the main content, Turndown converts to Markdown.</li>
+        <li><strong>Readability + Trafilatura</strong> — static HTML runs through both extractors and the one with the better quality score wins. Trafilatura is an optional sidecar; without it, Readability alone is used.</li>
+        <li><strong>Headless Chromium</strong> — when static extraction comes out thin or looks like layout soup (typical for SPAs), the page is rendered in the Playwright sidecar and re-extracted. Force or disable it with <code>?render=force</code> / <code>?render=skip</code>.</li>
+        <li><strong>Documents, YouTube, images, audio</strong> — depending on how the instance is configured; see <a href="#files">Converting files</a>.</li>
       </ul>
+      <p lang="de">Zwei Korrekturen laufen darüber: <strong>Site-Recipes</strong> passen die Extraktion pro Host an (siehe <a href="#recipes">Site-Recipes</a>), und der <strong>Coverage Guard</strong> greift ein, wenn die Extraktion nur einen Bruchteil einer großen Seite behalten hat, und konvertiert stattdessen den Container mit dem eigentlichen Body. Er kann ein Ergebnis nur vergrößern, meldet sich als <code>source: coverage-guard</code> und lässt sich mit <code>PULLMD_COVERAGE_GUARD=off</code> abschalten.</p>
+      <p lang="en">Two corrections sit on top: <strong>site recipes</strong> tune extraction per host (see <a href="#recipes">Site recipes</a>), and the <strong>coverage guard</strong> steps in when an extraction kept only a sliver of a large page, converting the container that actually holds the body instead. It can only grow a result, reports itself as <code>source: coverage-guard</code>, and is switched off with <code>PULLMD_COVERAGE_GUARD=off</code>.</p>
       <p lang="de">Welcher Pfad genommen wurde, sieht man im Response-Header <code>X-Source</code> und in der History neben jedem Eintrag.</p>
       <p lang="en">Which path was used shows up in the response header <code>X-Source</code> and next to each entry in the history.</p>
     </section>
@@ -402,22 +439,33 @@
 
 Returns clean Markdown (text/markdown). Optional query params:
 
-  comments=false        skip Reddit comments
+  comments=false        skip Reddit / Hacker News comments
   comment_depth=N       comment nesting depth (default 3)
   frontmatter=true      prepend YAML metadata block
   format=text           strip Markdown, return plain text
   nocache=true          bypass the 1h cache and refetch
+  render=force|skip     override the auto headless-Chromium fallback
+  extractor=readability|trafilatura|playwright   force one extractor
+  pdf=ocr               high-quality PDF conversion (tables)
+  query=<text>          return only the sections relevant to <text>
+  max_tokens=N          budget for query= (default 600, 64-20000)
   lang=de|en            language for the comments section header
 
 Response headers worth checking:
-  X-Source       reddit | cloudflare | readability | trafilatura |
-                 playwright | markitdown | youtube | pdf-ocr | ...
+  X-Source       reddit | hackernews | cloudflare | readability |
+                 trafilatura | playwright | recipe-content |
+                 coverage-guard | markitdown | youtube | pdf-ocr | ...
   X-Quality      0.0-1.0 extraction confidence
   X-Share-Id     8-hex permalink, openable as /s/&lt;id&gt;
+  X-Transcript-Status  youtube only: ok | none | blocked | error
+                 (blocked/error = transient, not cached — retry later)
 
 Reddit URLs are auto-detected (incl. redd.it short links and /s/ shares).
+Hacker News URLs are auto-detected too — items, comment permalinks, and the
+front/newest/ask/show/jobs listings.
 Use this whenever you would otherwise fetch raw HTML — the markdown is
-much cleaner and saves significant context window space.</pre>
+much cleaner and saves significant context window space. For a long page
+where you only need one thing, add query= and get just that.</pre>
       </div>
 
       <h3 lang="de">Option 2 — Claude Code Skill</h3>
@@ -509,6 +557,86 @@ Then: claude mcp list to verify.</pre>
 
       <p class="muted" lang="de">Sobald registriert, erscheinen die drei Tools nativ im Agent — keine Prompt-Anweisungen nötig, das LLM erkennt sie über ihre Schema-Beschreibungen.</p>
       <p class="muted" lang="en">Once registered, the three tools surface natively in the agent — no prompt instructions needed, the LLM picks them up via their schema descriptions.</p>
+
+      <p class="muted" lang="de"><code>read_url</code> kennt dieselben Stellschrauben wie die REST-API: <code>comments</code>, <code>comment_depth</code>, <code>comment_limit</code>, <code>frontmatter</code>, <code>lang</code>, <code>nocache</code>, <code>extractor</code>, <code>yt_timecodes</code>, <code>yt_chunk</code>, <code>pdf_ocr</code> (statt <code>pdf=ocr</code>), <code>query</code> und <code>max_tokens</code>. MCP-Antworten haben keine Response-Header; findet die Query-Extraktion nichts, steht stattdessen ein Kommentar im Markdown.</p>
+      <p class="muted" lang="en"><code>read_url</code> exposes the same knobs as the REST API: <code>comments</code>, <code>comment_depth</code>, <code>comment_limit</code>, <code>frontmatter</code>, <code>lang</code>, <code>nocache</code>, <code>extractor</code>, <code>yt_timecodes</code>, <code>yt_chunk</code>, <code>pdf_ocr</code> (instead of <code>pdf=ocr</code>), <code>query</code> and <code>max_tokens</code>. MCP responses carry no headers; when query extraction finds no match it prepends an in-band comment to the markdown instead.</p>
+
+      <div class="callout">
+        <p lang="de" style="margin:0;"><strong>Instanz mit Login?</strong> Dann brauchen <code>/api</code> und <code>/mcp</code> Zugangsdaten: einen API-Key als <code>Authorization: Bearer pmd_…</code> oder OAuth für Claude Desktop und claude.ai. Details unter <a href="#auth">Authentifizierung</a>.</p>
+        <p lang="en" style="margin:0;"><strong>Instance with login?</strong> Then <code>/api</code> and <code>/mcp</code> need credentials: an API key as <code>Authorization: Bearer pmd_…</code>, or OAuth for Claude Desktop and claude.ai. Details under <a href="#auth">Authentication</a>.</p>
+      </div>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="endpoints">
+      <h2><span lang="de">Endpunkte</span><span lang="en">Endpoints</span><span class="kicker">http</span></h2>
+      <p lang="de">Alles, was die Instanz nach außen anbietet. <code>GET /api</code> ist der Hauptweg, der Rest ist Beiwerk für PWA, Betrieb und Integration.</p>
+      <p lang="en">Everything the instance exposes. <code>GET /api</code> is the main path; the rest supports the PWA, operations, and integration.</p>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Endpoint</th>
+            <th lang="de">Zweck</th>
+            <th lang="en">Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>GET /api?url=…</code></td>
+            <td lang="de">URL zu Markdown. Siehe <a href="#api">API-Parameter</a>.</td>
+            <td lang="en">URL to Markdown. See <a href="#api">API parameters</a>.</td>
+          </tr>
+          <tr><td><code>GET /api/stream?url=…</code></td>
+            <td lang="de">Dieselbe Konvertierung als Server-Sent-Events: <code>status</code>-Events pro Extraktionsstufe, dann ein <code>result</code>- oder <code>error</code>-Event. Die PWA zeigt damit den Fortschritt an.</td>
+            <td lang="en">The same conversion as Server-Sent Events: a <code>status</code> event per extraction stage, then one <code>result</code> or <code>error</code> event. This is what drives the PWA's progress display.</td>
+          </tr>
+          <tr><td><code>POST /api/html</code></td>
+            <td lang="de">Gespeicherte HTML-Datei konvertieren (max. 10 MB).</td>
+            <td lang="en">Convert a saved HTML file (max 10 MB).</td>
+          </tr>
+          <tr><td><code>POST /api/file</code></td>
+            <td lang="de">Dokument-Upload konvertieren (max. 25 MB).</td>
+            <td lang="en">Convert an uploaded document (max 25 MB).</td>
+          </tr>
+          <tr><td><code>GET /s/:id</code></td>
+            <td lang="de">Share-Link, aktualisiert sich selbst. Siehe <a href="#share">Share-Links</a>.</td>
+            <td lang="en">Share link, refreshes itself. See <a href="#share">Share links</a>.</td>
+          </tr>
+          <tr><td><code>GET /api/history</code></td>
+            <td lang="de">Letzte Konversionen als JSON (<code>?limit=</code>, Default 20, max. 100).</td>
+            <td lang="en">Recent conversions as JSON (<code>?limit=</code>, default 20, max 100).</td>
+          </tr>
+          <tr><td><code>GET /api/archive</code></td>
+            <td lang="de">Seitenweise durch das ganze Archiv (<code>?limit=</code> Default 50, max. 200, <code>?offset=</code>).</td>
+            <td lang="en">Paginated full archive (<code>?limit=</code> default 50, max 200, <code>?offset=</code>).</td>
+          </tr>
+          <tr><td><code>GET /api/storage</code></td>
+            <td lang="de">Cache-Größe und Aufbewahrungsdauer.</td>
+            <td lang="en">Cache size and retention.</td>
+          </tr>
+          <tr><td><code>GET /api/stats</code></td>
+            <td lang="de">Extraktions-Telemetrie: Quellen, Qualität, Laufzeit (<code>?window=-7 days</code>).</td>
+            <td lang="en">Extraction telemetry: sources, quality, latency (<code>?window=-7 days</code>).</td>
+          </tr>
+          <tr><td><code>GET /api/config</code></td>
+            <td lang="de">Was auf dieser Instanz aktiv ist (Auth-Modus, Dokumente, Vision, STT, PDF-OCR, YouTube). Die PWA blendet danach ihre Bedienelemente ein oder aus.</td>
+            <td lang="en">What is enabled on this instance (auth mode, documents, vision, STT, PDF OCR, YouTube). The PWA shows or hides its controls accordingly.</td>
+          </tr>
+          <tr><td><code>GET /api/recipes/status</code></td>
+            <td lang="de">Welche <a href="#recipes">Site-Recipes</a> geladen bzw. abgelehnt wurden.</td>
+            <td lang="en">Which <a href="#recipes">site recipes</a> loaded or were rejected.</td>
+          </tr>
+          <tr><td><code>POST /mcp</code></td>
+            <td lang="de">MCP-Server (Streamable-HTTP, stateless), drei Tools.</td>
+            <td lang="en">MCP server (Streamable HTTP, stateless), three tools.</td>
+          </tr>
+          <tr><td><code>GET /pullmd.zip</code></td>
+            <td lang="de">Claude-Code-Skill mit der URL dieser Instanz. <code>/web-reader.zip</code> leitet hierher weiter.</td>
+            <td lang="en">Claude Code skill with this instance's URL baked in. <code>/web-reader.zip</code> redirects here.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted" lang="de">Zum Schutz vor Server-Side Request Forgery (SSRF) werden Anfragen an private, loopback-, link-local-, CGNAT- und Cloud-Metadata-Adressen (z. B. <code>169.254.169.254</code>, <code>100.100.100.200</code>) standardmäßig abgelehnt - auch wenn eine URL erst per Redirect dorthin führt und auch über IPv6-Übergangsadressen. <code>/api</code> und das MCP-Tool <code>read_url</code> prüfen vorab und antworten mit <code>403</code>, bevor irgendetwas geholt wird; <code>/api/stream</code> meldet die Ablehnung als <code>error</code>-Event. Selbst-Hoster können mit <code>PULLMD_ALLOWED_HOSTS</code> (kommagetrennte CIDRs und/oder Hostnamen) gezielt interne Ziele freigeben.</p>
+      <p class="muted" lang="en">To guard against Server-Side Request Forgery (SSRF), requests to private, loopback, link-local, CGNAT and cloud-metadata addresses (e.g. <code>169.254.169.254</code>, <code>100.100.100.200</code>) are rejected by default - including when a URL only reaches them via redirect, and including IPv6 transition addressing. <code>/api</code> and the MCP <code>read_url</code> tool check up front and answer <code>403</code> before fetching anything; <code>/api/stream</code> surfaces the refusal as an <code>error</code> event. Self-hosters can allow specific internal targets via <code>PULLMD_ALLOWED_HOSTS</code> (comma-separated CIDRs and/or hostnames).</p>
     </section>
 
     <!-- ===================================================== -->
@@ -528,12 +656,12 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">Required. Any public URL.</td>
           </tr>
           <tr><td><code>comments</code></td><td><code>true</code></td>
-            <td lang="de">Reddit-Kommentare einschließen. <code>false</code> liefert nur den Post.</td>
-            <td lang="en">Include Reddit comments. <code>false</code> returns just the post.</td>
+            <td lang="de">Kommentare einschließen (Reddit und Hacker News). <code>false</code> liefert nur den Post. Bei anderen URLs wirkungslos.</td>
+            <td lang="en">Include comments (Reddit and Hacker News). <code>false</code> returns just the post. No effect on other URLs.</td>
           </tr>
           <tr><td><code>comment_depth</code></td><td><code>3</code></td>
-            <td lang="de">Maximale Verschachtelungstiefe (1–10).</td>
-            <td lang="en">Max nesting depth (1–10).</td>
+            <td lang="de">Maximale Verschachtelungstiefe (1–10), für Reddit und Hacker News.</td>
+            <td lang="en">Max nesting depth (1–10), for Reddit and Hacker News.</td>
           </tr>
           <tr><td><code>comment_limit</code></td><td>—</td>
             <td lang="de">Optionale Obergrenze für Top-Level-Kommentare (Reddit liefert standardmäßig ~200).</td>
@@ -551,30 +679,189 @@ Then: claude mcp list to verify.</pre>
             <td lang="de">1-h-Cache umgehen, immer frisch holen.</td>
             <td lang="en">Bypass the 1-hour cache, always refetch.</td>
           </tr>
+          <tr><td><code>render</code></td><td>auto</td>
+            <td lang="de"><code>force</code> = immer im Headless-Browser rendern, <code>skip</code> = nie. Umgeht den Cache.</td>
+            <td lang="en"><code>force</code> = always render in the headless browser, <code>skip</code> = never. Bypasses the cache.</td>
+          </tr>
+          <tr><td><code>extractor</code></td><td>auto</td>
+            <td lang="de">Erzwingt <code>readability</code>, <code>trafilatura</code> oder <code>playwright</code> und überspringt die Qualitätsauswahl. Notausgang, wenn die Automatik bei einer Seite danebengreift. Umgeht den Cache; bei Reddit wirkungslos.</td>
+            <td lang="en">Forces <code>readability</code>, <code>trafilatura</code> or <code>playwright</code> and skips the quality pick. An escape hatch for sites where the automatic choice is wrong. Bypasses the cache; ignored for Reddit.</td>
+          </tr>
+          <tr><td><code>pdf</code></td><td>—</td>
+            <td lang="de"><code>ocr</code> schickt PDFs durch die hochwertige OCR-Stufe (saubere Tabellen). Braucht einen serverseitigen OCR-Key; ohne ihn bleibt es beim normalen Pfad. Umgeht den Cache.</td>
+            <td lang="en"><code>ocr</code> routes PDFs through the high-quality OCR tier (clean tables). Needs a server-side OCR key; without one the normal path is used. Bypasses the cache.</td>
+          </tr>
+          <tr><td><code>yt_timecodes</code></td><td><code>links</code></td>
+            <td lang="de">YouTube-Transkript: <code>links</code> = klickbare Zeitstempel, <code>plain</code> = <code>[MM:SS]</code>, <code>none</code> = nur Text. Umgeht den Cache.</td>
+            <td lang="en">YouTube transcript: <code>links</code> = clickable timestamps, <code>plain</code> = <code>[MM:SS]</code>, <code>none</code> = text only. Bypasses the cache.</td>
+          </tr>
+          <tr><td><code>yt_chunk</code></td><td><code>30</code></td>
+            <td lang="de">Blockgröße des Transkripts in Sekunden; <code>0</code> behält die Original-Schnipsel. Umgeht den Cache.</td>
+            <td lang="en">Transcript block size in seconds; <code>0</code> keeps the original snippets. Bypasses the cache.</td>
+          </tr>
           <tr><td><code>lang</code></td><td><code>de</code></td>
             <td lang="de">Sprache des Kommentar-Headers (<code>de</code> oder <code>en</code>).</td>
             <td lang="en">Language for the comments header (<code>de</code> or <code>en</code>).</td>
           </tr>
           <tr><td><code>query</code></td><td>—</td>
-            <td lang="de">Filtert die Antwort per BM25 auf die zur Anfrage passenden Abschnitte (Extraktion) - Token-Budget mit <code>max_tokens</code> steuerbar (Default <code>600</code>, 64–20000). Leer/nur Leerzeichen = Verhalten unverändert. Auch im MCP-Tool <code>read_url</code> verfügbar.</td>
-            <td lang="en">Filters the response to the sections relevant to this text via BM25 (extraction) - token budget configurable via <code>max_tokens</code> (default <code>600</code>, 64–20000). Empty/whitespace-only = behavior unchanged. Also available on the MCP <code>read_url</code> tool.</td>
+            <td lang="de">Liefert nur die zur Anfrage passenden Abschnitte statt der ganzen Seite, siehe <a href="#query">Query-Extraktion</a>.</td>
+            <td lang="en">Returns only the sections relevant to this text instead of the whole page, see <a href="#query">Query extraction</a>.</td>
+          </tr>
+          <tr><td><code>max_tokens</code></td><td><code>600</code></td>
+            <td lang="de">Token-Budget für <code>query</code> (64–20000). Wird nur geprüft, wenn <code>query</code> gesetzt ist; ein ungültiger Wert liefert <code>400</code>.</td>
+            <td lang="en">Token budget for <code>query</code> (64–20000). Only validated when <code>query</code> is set; an invalid value returns <code>400</code>.</td>
           </tr>
         </tbody>
       </table>
-      <p class="muted" lang="de">Zum Schutz vor Server-Side Request Forgery (SSRF) werden Anfragen an private, loopback-, link-local-, CGNAT- und Cloud-Metadata-Adressen (z. B. <code>169.254.169.254</code>, <code>100.100.100.200</code>) standardmäßig mit <code>403</code> abgelehnt - auch wenn eine URL erst per Redirect dorthin führt. Selbst-Hoster können mit <code>PULLMD_ALLOWED_HOSTS</code> (kommagetrennte CIDRs und/oder Hostnamen) gezielt interne Ziele freigeben.</p>
-      <p class="muted" lang="en">To guard against Server-Side Request Forgery (SSRF), requests to private, loopback, link-local, CGNAT and cloud-metadata addresses (e.g. <code>169.254.169.254</code>, <code>100.100.100.200</code>) are rejected with <code>403</code> by default - including when a URL only reaches them via redirect. Self-hosters can allow specific internal targets via <code>PULLMD_ALLOWED_HOSTS</code> (comma-separated CIDRs and/or hostnames).</p>
+      <p class="muted" lang="de">Dieselben Parameter gelten für <code>GET /api/stream</code>. Alles, was das erwartete Ergebnis verändert (<code>comment_depth</code>, <code>comment_limit</code>, <code>render</code>, <code>extractor</code>, <code>pdf=ocr</code>, <code>yt_*</code>), umgeht den Cache, damit der neue Wert auch wirklich greift.</p>
+      <p class="muted" lang="en">The same parameters apply to <code>GET /api/stream</code>. Anything that changes the expected result (<code>comment_depth</code>, <code>comment_limit</code>, <code>render</code>, <code>extractor</code>, <code>pdf=ocr</code>, <code>yt_*</code>) bypasses the cache so the new value actually takes effect.</p>
     </section>
 
     <!-- ===================================================== -->
-    <section id="local-html">
-      <h2><span lang="de">Lokale HTML-Dateien</span><span lang="en">Local HTML files</span><span class="kicker">POST /api/html</span></h2>
+    <section id="headers">
+      <h2><span lang="de">Response-Header</span><span lang="en">Response headers</span><span class="kicker">http</span></h2>
+      <p lang="de">Jede Antwort von <code>/api</code> trägt mit, wie sie zustande kam. Für Agenten ist das der billigste Weg, die Qualität einer Extraktion zu beurteilen, ohne den Text zu analysieren.</p>
+      <p lang="en">Every <code>/api</code> response carries how it was produced. For agents that is the cheapest way to judge an extraction without analyzing the text.</p>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Header</th>
+            <th lang="de">Inhalt</th>
+            <th lang="en">Contents</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>X-Source</code></td>
+            <td lang="de"><code>reddit</code> · <code>hackernews</code> · <code>cloudflare</code> · <code>readability</code> · <code>readability-fallback</code> · <code>trafilatura</code> · <code>playwright</code> · <code>recipe-content</code> · <code>coverage-guard</code> · <code>markitdown</code> · <code>youtube</code> · <code>image-caption</code> · <code>audio-transcript</code> · <code>pdf-ocr</code></td>
+            <td lang="en"><code>reddit</code> · <code>hackernews</code> · <code>cloudflare</code> · <code>readability</code> · <code>readability-fallback</code> · <code>trafilatura</code> · <code>playwright</code> · <code>recipe-content</code> · <code>coverage-guard</code> · <code>markitdown</code> · <code>youtube</code> · <code>image-caption</code> · <code>audio-transcript</code> · <code>pdf-ocr</code></td>
+          </tr>
+          <tr><td><code>X-Quality</code></td>
+            <td lang="de"><code>0.0</code>–<code>1.0</code>, Konfidenz der Extraktion. Niedrige Werte heißen dünner oder verrauschter Text.</td>
+            <td lang="en"><code>0.0</code>–<code>1.0</code> extraction confidence. Low values mean thin or noisy output.</td>
+          </tr>
+          <tr><td><code>X-Share-Id</code></td>
+            <td lang="de">8-stellige Hex-ID, aufrufbar als <code>/s/&lt;id&gt;</code>. Fehlt bei <code>/api/html</code> und <code>/api/file</code>, weil lokale Dateien nicht gecacht werden.</td>
+            <td lang="en">8-hex id, openable as <code>/s/&lt;id&gt;</code>. Absent on <code>/api/html</code> and <code>/api/file</code>, since local files are never cached.</td>
+          </tr>
+          <tr><td><code>X-Transcript-Status</code></td>
+            <td lang="de">Nur YouTube: <code>ok</code> · <code>none</code> · <code>blocked</code> · <code>error</code>. <code>blocked</code> (Rate-Limit, HTTP 429) und <code>error</code> sind vorübergehend und werden nicht gecacht - später erneut versuchen. <code>none</code> heißt, das Video hat wirklich kein Transkript.</td>
+            <td lang="en">YouTube only: <code>ok</code> · <code>none</code> · <code>blocked</code> · <code>error</code>. <code>blocked</code> (rate limit, HTTP 429) and <code>error</code> are transient and not cached - retry later. <code>none</code> means the video genuinely has no transcript.</td>
+          </tr>
+          <tr><td><code>X-Extracted</code></td>
+            <td lang="de"><code>true</code>/<code>false</code>. Nur vorhanden, wenn <code>query</code> aktiv ist.</td>
+            <td lang="en"><code>true</code>/<code>false</code>. Present only when <code>query</code> is active.</td>
+          </tr>
+          <tr><td><code>X-Extract-Confidence</code></td>
+            <td lang="de"><code>high</code> · <code>medium</code> · <code>low</code>. Fehlt, wenn die Seite ohnehin klein genug war und die Extraktion übersprungen wurde.</td>
+            <td lang="en"><code>high</code> · <code>medium</code> · <code>low</code>. Absent when the page was small enough that extraction was skipped.</td>
+          </tr>
+          <tr><td><code>X-Extract-Sections</code></td>
+            <td lang="de">Anzahl der zurückgelieferten Abschnitte.</td>
+            <td lang="en">Number of returned sections.</td>
+          </tr>
+          <tr><td><code>X-Extract-Original-Tokens</code><br><code>X-Extract-Returned-Tokens</code></td>
+            <td lang="de">Geschätzte Tokenzahl (Zeichen / 4) der ganzen Seite und der Antwort. Die Differenz ist die Ersparnis.</td>
+            <td lang="en">Estimated token count (chars / 4) of the full page and of the response. The difference is what you saved.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="muted" lang="de">MCP-Antworten haben keine Header. Dort landen dieselben Angaben im Frontmatter bzw. bei <code>format=json</code> im <code>extract</code>-Objekt.</p>
+      <p class="muted" lang="en">MCP responses have no headers. There the same data lands in the frontmatter, or in the <code>extract</code> object with <code>format=json</code>.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="query">
+      <h2><span lang="de">Query-Extraktion</span><span lang="en">Query extraction</span><span class="kicker">?query=</span></h2>
+      <p lang="de">Bei langen Seiten braucht ein Agent selten alles. <code>?query=</code> liefert nur die Abschnitte, die zur Frage passen:</p>
+      <p lang="en">On long pages an agent rarely needs everything. <code>?query=</code> returns just the sections that match:</p>
+      <div class="copybox">
+        <div class="copybox-header">
+          <span class="copybox-label">example</span>
+          <button class="copybox-btn" data-copy="query-example">
+            <span lang="de">Kopieren</span><span lang="en">Copy</span>
+          </button>
+        </div>
+        <pre id="query-example">curl -s "__PULLMD_URL__/api?url=https://example.com/long-article&amp;query=how+does+caching+work&amp;max_tokens=800"</pre>
+      </div>
+      <ul class="doc-list" lang="de">
+        <li>BM25-Ranking über die Überschriften-Abschnitte des konvertierten Markdowns (bei weniger als zwei Überschriften über Absätze). Keine Netzwerkaufrufe, kein LLM, keine zusätzlichen Kosten.</li>
+        <li><code>max_tokens</code> begrenzt die Ausgabe (Default <code>600</code>, 64–20000, geschätzt als Zeichen / 4).</li>
+        <li>Codeblöcke, Tabellen, Listen und Zitate werden nie zerschnitten - passt ein Teil, bleibt der ganze Block. Lücken zwischen den ausgewählten Stellen markiert ein <code>&lt;!-- … --&gt;</code>.</li>
+        <li>Passt nichts, oder ist die Seite ohnehin klein genug, kommt die ganze Seite zurück (im ersten Fall mit <code>confidence: low</code>).</li>
+        <li>Extrahiert wird aus der bereits gecachten Vollversion: mehrere Fragen an dieselbe URL kosten innerhalb der Cache-Stunde einen einzigen Abruf.</li>
+        <li>Ohne <code>query</code> (oder mit leerem Wert) ist die Antwort byte-identisch zu vorher - keine zusätzlichen Header, keine zusätzlichen Felder.</li>
+      </ul>
+      <ul class="doc-list" lang="en">
+        <li>BM25 ranking over the heading-based sections of the converted Markdown (paragraph-level for pages with fewer than two headings). No network calls, no LLM, no extra cost.</li>
+        <li><code>max_tokens</code> caps the output (default <code>600</code>, 64–20000, estimated as chars / 4).</li>
+        <li>Code fences, tables, lists and blockquotes are never split - if part of one matches, the whole block is kept. Gaps between selected regions are marked with <code>&lt;!-- … --&gt;</code>.</li>
+        <li>If nothing matches, or the page is small enough already, the full page comes back (with <code>confidence: low</code> in the first case).</li>
+        <li>Extraction runs on the already-cached full page: several questions against one URL cost a single fetch within the cache hour.</li>
+        <li>Without <code>query</code> (or with an empty value) the response is byte-identical to before - no extra headers, no extra fields.</li>
+      </ul>
+      <p class="muted" lang="de">Mit <code>?frontmatter=true</code> kommen <code>extracted</code>, <code>extract_confidence</code>, <code>sections_selected</code>, <code>original_tokens</code> und <code>returned_tokens</code> dazu; <code>format=json</code> liefert dieselben Werte im <code>extract</code>-Objekt.</p>
+      <p class="muted" lang="en">With <code>?frontmatter=true</code> you also get <code>extracted</code>, <code>extract_confidence</code>, <code>sections_selected</code>, <code>original_tokens</code> and <code>returned_tokens</code>; <code>format=json</code> returns the same values in the <code>extract</code> object.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="files">
+      <h2><span lang="de">Dateien konvertieren</span><span lang="en">Converting files</span><span class="kicker">POST /api/html · /api/file</span></h2>
+      <p lang="de">Nicht alles steht als abrufbare URL im Netz. Zwei Upload-Wege decken den Rest ab. Beide landen aus Datenschutzgründen <strong>nicht</strong> im Cache - kein History-Eintrag, kein Share-Link, keine <code>X-Share-Id</code>.</p>
+      <p lang="en">Not everything lives at a fetchable URL. Two upload paths cover the rest. For privacy, neither is <strong>ever</strong> cached - no history entry, no share link, no <code>X-Share-Id</code>.</p>
+
+      <h3 lang="de">Gespeicherte HTML-Seiten</h3>
+      <h3 lang="en">Saved HTML pages</h3>
       <p lang="de">Bereits gespeicherte Seiten ("Seite speichern unter", SingleFile-Exports) lassen sich direkt konvertieren: die <code>.html</code>-Datei auf die PullMD-Oberfläche ziehen (Desktop) oder den gestrichelten Hinweis unter dem URL-Feld antippen, um eine Datei zu wählen (Desktop + Mobile) - oder per API:</p>
       <p lang="en">Already-saved pages ("Save Page As", SingleFile exports) can be converted directly: drag-and-drop the <code>.html</code> file onto the PullMD UI (desktop) or tap the dashed hint below the URL field to pick a file (desktop and mobile) - or via the API:</p>
-      <pre>curl -s -X POST --data-binary @page.html \
+      <div class="copybox">
+        <div class="copybox-header">
+          <span class="copybox-label">post · html</span>
+          <button class="copybox-btn" data-copy="post-html">
+            <span lang="de">Kopieren</span><span lang="en">Copy</span>
+          </button>
+        </div>
+        <pre id="post-html">curl -s -X POST --data-binary @page.html \
   -H 'Content-Type: text/html' \
-  "__PULLMD_URL__/api/html?filename=page.html"</pre>
-      <p lang="de">Optionale Parameter: <code>url=…</code> (Original-URL - aktiviert Site-Recipes und den verlinkten Header), <code>format=json|text</code>, <code>frontmatter=true</code>, <code>extractor=readability|trafilatura</code>. Statt <code>?filename=</code> geht auch der Header <code>X-Filename</code> (URI-encodiert) - so bleibt der Dateiname aus Access-Logs heraus. Maximal 10 MB. Aus Datenschutzgründen landen lokale Dateien <strong>nicht</strong> im Cache - kein History-Eintrag, kein Share-Link.</p>
-      <p lang="en">Optional parameters: <code>url=…</code> (original URL - enables site recipes and the linked header), <code>format=json|text</code>, <code>frontmatter=true</code>, <code>extractor=readability|trafilatura</code>. Instead of <code>?filename=</code> you can send the <code>X-Filename</code> header (URI-encoded) - keeping the file name out of access logs. Max 10 MB. For privacy, local files are <strong>never</strong> cached - no history entry, no share link.</p>
+  -H 'X-Filename: page.html' \
+  "__PULLMD_URL__/api/html"</pre>
+      </div>
+      <p lang="de">Optionale Parameter: <code>url=…</code> (Original-URL - aktiviert Site-Recipes und den verlinkten Header), <code>format=json|text</code>, <code>frontmatter=true</code>, <code>extractor=readability|trafilatura</code>. Statt des Headers <code>X-Filename</code> (URI-encodiert) geht auch <code>?filename=</code>; der Header hält den Dateinamen aus Access-Logs heraus. Maximal 10 MB. Findet die Extraktion so gut wie keinen Inhalt - typisch für eine gespeicherte JavaScript-App-Hülle - kommt <code>422</code> mit der Bitte, stattdessen die Original-URL zu schicken.</p>
+      <p lang="en">Optional parameters: <code>url=…</code> (original URL - enables site recipes and the linked header), <code>format=json|text</code>, <code>frontmatter=true</code>, <code>extractor=readability|trafilatura</code>. Instead of the <code>X-Filename</code> header (URI-encoded) you can use <code>?filename=</code>; the header keeps the file name out of access logs. Max 10 MB. If extraction finds almost no content - typical for a saved JavaScript app shell - you get a <code>422</code> asking for the original URL instead.</p>
+
+      <h3 lang="de">Dokumente</h3>
+      <h3 lang="en">Documents</h3>
+      <p lang="de">PDF, Word, PowerPoint, Excel, EPUB, ZIP (Inhalt wird aufgelistet), CSV, JSON und XML werden zu Markdown konvertiert. Liegt das Dokument im Netz, reicht die normale API - der Dokumenttyp wird am Content-Type erkannt:</p>
+      <p lang="en">PDF, Word, PowerPoint, Excel, EPUB, ZIP (contents listed), CSV, JSON and XML are converted to Markdown. If the document is online, the regular API is enough - the type is detected from the content type:</p>
+      <div class="copybox">
+        <div class="copybox-header">
+          <span class="copybox-label">get · document url</span>
+          <button class="copybox-btn" data-copy="get-doc">
+            <span lang="de">Kopieren</span><span lang="en">Copy</span>
+          </button>
+        </div>
+        <pre id="get-doc">curl -s "__PULLMD_URL__/api?url=https://example.com/report.pdf"</pre>
+      </div>
+      <p lang="de">Lokale Dateien gehen per Upload - rohe Bytes im Body, Content-Type der Datei, maximal 25 MB. In der Web-Oberfläche funktioniert dafür derselbe Drag-and-drop bzw. die Dateiauswahl:</p>
+      <p lang="en">Local files go through the upload path - raw bytes in the body, the file's content type, max 25 MB. In the web UI the same drag-and-drop and file picker handle it:</p>
+      <div class="copybox">
+        <div class="copybox-header">
+          <span class="copybox-label">post · file</span>
+          <button class="copybox-btn" data-copy="post-file">
+            <span lang="de">Kopieren</span><span lang="en">Copy</span>
+          </button>
+        </div>
+        <pre id="post-file">curl -s -X POST --data-binary @report.pdf \
+  -H 'Content-Type: application/pdf' \
+  -H 'X-Filename: report.pdf' \
+  "__PULLMD_URL__/api/file"</pre>
+      </div>
+      <p lang="de">Optionale Parameter: <code>format=json|text</code>, <code>frontmatter=true</code>, <code>pdf=ocr</code>. Die Dokument-Konvertierung braucht den markitdown-Sidecar; ist er nicht konfiguriert, antworten Dokument-URLs und <code>/api/file</code> mit <code>502</code>. Ob diese Instanz ihn hat, verrät <code>/api/config</code>.</p>
+      <p lang="en">Optional parameters: <code>format=json|text</code>, <code>frontmatter=true</code>, <code>pdf=ocr</code>. Document conversion needs the markitdown sidecar; without it, document URLs and <code>/api/file</code> return <code>502</code>. Whether this instance has it is reported by <code>/api/config</code>.</p>
+
+      <h3 lang="de">Bilder, Audio, YouTube</h3>
+      <h3 lang="en">Images, audio, YouTube</h3>
+      <p lang="de">Bilder und Audio funktionieren über denselben Weg (URL oder Upload). Standardmäßig kommen nur Metadaten zurück - EXIF beim Bild, Track-Infos beim Audio. Hat die Instanz ein Vision- bzw. Speech-to-Text-Modell hinterlegt, kommt eine Bildbeschreibung bzw. ein Transkript dazu; die verwendeten Modelle und der Tokenverbrauch stehen dann im <a href="#frontmatter">Frontmatter</a>. YouTube-URLs liefern Titel, Beschreibung und Transkript, wenn die Instanz das aktiviert hat.</p>
+      <p lang="en">Images and audio work the same way (URL or upload). By default you only get metadata - EXIF for images, track info for audio. If the instance has a vision or speech-to-text model configured, you also get a caption or a transcript; the models used and the token spend then show up in the <a href="#frontmatter">frontmatter</a>. YouTube URLs return title, description and transcript when the instance enables it.</p>
     </section>
 
     <!-- ===================================================== -->
@@ -622,13 +909,95 @@ author: kentonv
 published: 2026-04-24T18:42:00Z
 description: "After two years on managed Postgres..."
 language: en
-share_id: a3f9c2
+share_id: a3f9c2b7
 ---</pre>
       </div>
       <p class="muted" lang="de">Basis-Felder: <code>title, url, source, fetched, quality, author, published, modified, description, language, image, site, extractor_reason, share_id</code>. Je nach Quelle zusätzlich: <code>subreddit, upvotes</code> (Reddit) · <code>duration, views</code> (YouTube) · <code>image_size, audio_seconds, llm_model, llm_tokens, llm_prompt_tokens, llm_completion_tokens</code> (Media) · <code>pdf_pages</code> (PDF-OCR). MCP-Antworten ergänzen <code>share_url, cached, refreshed, age_ms</code>. Mit <code>PULLMD_FRONTMATTER_FIELDS</code> lässt sich die Auswahl serverseitig einschränken.</p>
       <p class="muted" lang="en">Base fields: <code>title, url, source, fetched, quality, author, published, modified, description, language, image, site, extractor_reason, share_id</code>. Depending on the source, additionally: <code>subreddit, upvotes</code> (Reddit) · <code>duration, views</code> (YouTube) · <code>image_size, audio_seconds, llm_model, llm_tokens, llm_prompt_tokens, llm_completion_tokens</code> (media) · <code>pdf_pages</code> (PDF OCR). MCP responses add <code>share_url, cached, refreshed, age_ms</code>. <code>PULLMD_FRONTMATTER_FIELDS</code> can trim the selection server-side.</p>
+      <p class="muted" lang="de">Bei aktiver <a href="#query">Query-Extraktion</a> kommen <code>extracted</code>, <code>extract_confidence</code>, <code>sections_selected</code>, <code>original_tokens</code> und <code>returned_tokens</code> dazu. <a href="#recipes">Site-Recipes</a> können weitere Felder beisteuern, etwa aus dem JSON-LD einer Seite.</p>
+      <p class="muted" lang="en">With <a href="#query">query extraction</a> active, <code>extracted</code>, <code>extract_confidence</code>, <code>sections_selected</code>, <code>original_tokens</code> and <code>returned_tokens</code> are added. <a href="#recipes">Site recipes</a> can contribute further fields, e.g. from a page's JSON-LD.</p>
       <p class="muted" lang="de">In der Web-App schaltet der <strong>Frontmatter</strong>-Regler die Anzeige sofort um - der YAML-Block erscheint oder verschwindet, ohne dass man erneut auf Pull drücken muss.</p>
       <p class="muted" lang="en">In the web app the <strong>Frontmatter</strong> toggle switches the view instantly - the YAML block appears or disappears with no second Pull.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="recipes">
+      <h2><span lang="de">Site-Recipes</span><span lang="en">Site recipes</span><span class="kicker">json</span></h2>
+      <p lang="de">Manche Seiten brauchen Nachhilfe: eine Paywall-Hülle, ein Cookie-Banner mitten im Text, ein Layout, in dem die Automatik den falschen Block für den Artikel hält. Site-Recipes sind kleine JSON-Einträge pro Host, die genau das geradebiegen.</p>
+      <p lang="en">Some sites need a nudge: a paywall wrapper, a cookie banner in the middle of the text, a layout where the automatic pick grabs the wrong block. Site recipes are small per-host JSON entries that straighten exactly that out.</p>
+      <ul class="doc-list" lang="de">
+        <li><strong>Rendern erzwingen</strong> - Seiten, die ohne JavaScript nichts hergeben, gehen direkt in den Headless-Browser.</li>
+        <li><strong>Störendes entfernen</strong> (<code>select.remove</code>) - seitenspezifische Banner, Teaser, Skelette.</li>
+        <li><strong>Body benennen</strong> (<code>select.content</code>) - statt die Automatik raten zu lassen, sagt das Recipe direkt, welche Container den Artikel bilden. Ergebnis trägt <code>source: recipe-content</code>.</li>
+        <li><strong>Frontmatter füllen</strong> - Felder aus dem JSON-LD der Seite oder per CSS-Selektor, z. B. Bewertung, Adresse oder Preisrahmen.</li>
+      </ul>
+      <ul class="doc-list" lang="en">
+        <li><strong>Force rendering</strong> - pages that are empty without JavaScript go straight to the headless browser.</li>
+        <li><strong>Remove noise</strong> (<code>select.remove</code>) - site-specific banners, teasers, skeletons.</li>
+        <li><strong>Name the body</strong> (<code>select.content</code>) - instead of letting the automatic pick guess, the recipe says which containers make up the article. Output carries <code>source: recipe-content</code>.</li>
+        <li><strong>Fill frontmatter</strong> - fields from the page's JSON-LD or via CSS selectors, e.g. rating, address, or price range.</li>
+      </ul>
+      <p lang="de">Ein paar Recipes werden mitgeliefert. Selbst-Hoster legen eigene unter <code>data/site-recipes.json</code> ab oder setzen <code>PULLMD_SITE_RECIPES</code> auf einen Pfad; nach Änderungen muss die Instanz neu starten. Was geladen wurde und was abgelehnt, zeigt <code>GET /api/recipes/status</code>. Wie man ein Recipe schreibt (und beisteuert), steht in <a href="https://github.com/AeternaLabsHQ/pullmd/blob/main/SITE-RECIPES.md" target="_blank" rel="noopener">SITE-RECIPES.md</a>.</p>
+      <p lang="en">A few recipes ship with PullMD. Self-hosters add their own in <code>data/site-recipes.json</code> or point <code>PULLMD_SITE_RECIPES</code> at a path; the instance needs a restart after changes. <code>GET /api/recipes/status</code> reports what loaded and what was rejected. How to write (and contribute) one is documented in <a href="https://github.com/AeternaLabsHQ/pullmd/blob/main/SITE-RECIPES.md" target="_blank" rel="noopener">SITE-RECIPES.md</a>.</p>
+    </section>
+
+    <!-- ===================================================== -->
+    <section id="auth">
+      <h2><span lang="de">Authentifizierung</span><span lang="en">Authentication</span><span class="kicker">optional</span></h2>
+      <p lang="de">Standardmäßig ist eine PullMD-Instanz offen. Self-Hoster können das umstellen; welcher Modus hier läuft, steht in <code>/api/config</code> unter <code>authMode</code>.</p>
+      <p lang="en">By default a PullMD instance is open. Self-hosters can change that; the mode in use here is reported by <code>/api/config</code> as <code>authMode</code>.</p>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Modus</th>
+            <th lang="de">Bedeutung</th>
+            <th lang="en">Meaning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>disabled</code></td>
+            <td lang="de">Default. Kein Login, alles offen.</td>
+            <td lang="en">Default. No login, everything open.</td>
+          </tr>
+          <tr><td><code>single-admin</code></td>
+            <td lang="de">Ein Benutzer aus den Server-Einstellungen, keine Selbstregistrierung. Für den Heimserver.</td>
+            <td lang="en">One user from the server settings, no self-signup. For a homelab.</td>
+          </tr>
+          <tr><td><code>multi-user</code></td>
+            <td lang="de">Registrierung unter <code>/signup</code>, Login unter <code>/login</code>, getrennte Daten pro Benutzer.</td>
+            <td lang="en">Sign up at <code>/signup</code>, log in at <code>/login</code>, per-user data isolation.</td>
+          </tr>
+        </tbody>
+      </table>
+      <p lang="de">Ist ein Modus aktiv, brauchen <code>/api</code>, <code>/api/stream</code>, die Upload-Endpunkte, <code>/mcp</code> sowie History und Archiv Zugangsdaten. Öffentlich bleiben die Startseite, diese Hilfeseite, das Skill-Zip und vor allem die <a href="#share">Share-Links</a> unter <code>/s/:id</code> - geteilte Inhalte bleiben also teilbar.</p>
+      <p lang="en">With a mode active, <code>/api</code>, <code>/api/stream</code>, the upload endpoints, <code>/mcp</code>, history and archive all need credentials. The start page, this help page, the skill zip and above all the <a href="#share">share links</a> at <code>/s/:id</code> stay public - shared content stays shareable.</p>
+      <h3 lang="de">Drei Wege hinein</h3>
+      <h3 lang="en">Three ways in</h3>
+      <ul class="doc-list" lang="de">
+        <li><strong>Session-Cookie</strong> - der Login im Browser. Die Web-App nutzt ihn automatisch; die Sitzung hält 90 Tage und verlängert sich bei Nutzung.</li>
+        <li><strong>API-Key</strong> - unter <code>/settings</code> erzeugen und als <code>Authorization: Bearer pmd_…</code> mitschicken. Der Schlüssel wird nur einmal angezeigt, danach liegt serverseitig nur noch sein Hash. Das ist der Weg für curl, Skripte und die Claude-Code-CLI.</li>
+        <li><strong>OAuth</strong> - für Clients ohne Header-Feld, namentlich Claude Desktop und claude.ai im Web. Der Client entdeckt alles Nötige selbst; man verbindet ihn mit <code>__PULLMD_URL__/mcp</code> und landet beim ersten Klick auf der Login- und Zustimmungsseite dieser Instanz.</li>
+      </ul>
+      <ul class="doc-list" lang="en">
+        <li><strong>Session cookie</strong> - the browser login. The web app uses it automatically; the session lasts 90 days and extends with use.</li>
+        <li><strong>API key</strong> - create one at <code>/settings</code> and send it as <code>Authorization: Bearer pmd_…</code>. The key is shown once; only its hash is kept server-side. This is the path for curl, scripts and the Claude Code CLI.</li>
+        <li><strong>OAuth</strong> - for clients without a header field, namely Claude Desktop and claude.ai on the web. The client discovers what it needs on its own; point it at <code>__PULLMD_URL__/mcp</code> and the first click takes you to this instance's login and consent screen.</li>
+      </ul>
+      <div class="copybox">
+        <div class="copybox-header">
+          <span class="copybox-label">api key · curl + mcp</span>
+          <button class="copybox-btn" data-copy="auth-key">
+            <span lang="de">Kopieren</span><span lang="en">Copy</span>
+          </button>
+        </div>
+        <pre id="auth-key">curl -s -H "Authorization: Bearer pmd_YOURKEY" \
+  "__PULLMD_URL__/api?url=https://example.com"
+
+claude mcp add --transport http pullmd __PULLMD_URL__/mcp \
+  --header "Authorization: Bearer pmd_YOURKEY"</pre>
+      </div>
+      <p class="muted" lang="de">Fehlen die Zugangsdaten, antwortet die API mit <code>401</code>; im Browser wird stattdessen zur Login-Seite weitergeleitet und danach zurück zur ursprünglichen Seite.</p>
+      <p class="muted" lang="en">Without credentials the API answers <code>401</code>; in the browser you are redirected to the login page and back afterwards.</p>
     </section>
 
     <!-- ===================================================== -->
