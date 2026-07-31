@@ -115,14 +115,11 @@ export function createApp(overrides = {}) {
 
   const gate = auth ? auth.requireAuth() : (req, res, next) => next();
 
-  // Cache deletes touch the global URL-deduped store — they affect every
-  // user's history, not just the caller's. Restrict to admin in any
-  // non-disabled mode. In disabled mode, anyone can call (v1 behaviour).
-  const adminOnly = (req, res, next) => {
-    if (!auth || auth.mode === 'disabled') return next();
-    if (req.user?.is_admin) return next();
-    return res.status(403).json({ error: 'Admin required' });
-  };
+  // Delete scope depends on the caller. The cache is URL-deduped and shared,
+  // so dropping a `conversions` row affects every user's history - that stays
+  // admin-only. A regular user's delete only unlinks the entry from their own
+  // history (`user_fetches`); the shared row and its share link survive.
+  const isGlobalScope = (req) => !auth || auth.mode === 'disabled' || !!req.user?.is_admin;
 
   // Templated help page + skill zip (PUBLIC_URL substitution).
   // Must come BEFORE express.static so they win over the raw files in /public.
@@ -1020,25 +1017,36 @@ export function createApp(overrides = {}) {
     res.json(cache.historyPage(limit, offset));
   });
 
-  app.delete('/api/cache/:id', gate, adminOnly, (req, res) => {
+  app.delete('/api/cache/:id', gate, (req, res) => {
     if (!cache) {
       return res.status(404).json({ error: 'Cache not available' });
     }
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error: 'Invalid ID' });
-    const result = cache.delete(id);
+    if (isGlobalScope(req)) {
+      const result = cache.delete(id);
+      if (!result.changes) {
+        return res.status(404).json({ error: 'Entry not found', id });
+      }
+      return res.json({ ok: true, id, scope: 'global' });
+    }
+    const result = cache.forgetForUser(req.user.id, id);
     if (!result.changes) {
       return res.status(404).json({ error: 'Entry not found', id });
     }
-    res.json({ ok: true, id });
+    res.json({ ok: true, id, scope: 'user' });
   });
 
-  app.delete('/api/cache', gate, adminOnly, (req, res) => {
+  app.delete('/api/cache', gate, (req, res) => {
     if (!cache) {
       return res.status(404).json({ error: 'Cache not available' });
     }
-    cache.deleteAll();
-    res.json({ ok: true });
+    if (isGlobalScope(req)) {
+      const result = cache.deleteAll();
+      return res.json({ ok: true, scope: 'global', removed: result.changes });
+    }
+    const result = cache.forgetAllForUser(req.user.id);
+    res.json({ ok: true, scope: 'user', removed: result.changes });
   });
 
   // Friendly JSON for body-parser limit violations. Mounted last; non-413

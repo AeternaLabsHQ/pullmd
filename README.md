@@ -275,8 +275,14 @@ docker compose exec pullmd node scripts/admin.js reset-password you@example.com
 | `POST /api/html`, `POST /api/file`                               |                 yes                  |
 | `/mcp`                                                           |                 yes                  |
 | `/api/history`, `/api/archive`                                   |                 yes                  |
-| `/api/cache/:id`, `DELETE /api/cache`                            |                 yes                  |
+| `DELETE /api/cache/:id`, `DELETE /api/cache`                     |                 yes                  |
 | `/api/stats`, `/api/storage`, `/api/config` (aggregate)          |                  no                  |
+
+Cache deletes are scoped to the caller. An admin (and every caller in
+`disabled` mode) removes the shared, URL-deduped cache row, which affects
+every user's history. A regular user only unlinks the entry from their own
+history - the shared row and its `/s/:id` share link keep working. The
+response says which happened via `"scope": "user" | "global"`.
 
 ### Authentication paths
 
