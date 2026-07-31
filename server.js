@@ -980,6 +980,7 @@ export function createApp(overrides = {}) {
       disablePublicHistory,
       authMode: auth ? auth.mode : 'disabled',
       authMisconfigured: !!auth?.isMisconfigured,
+      signupOpen: !!auth?.signupOpen,
       markitdown: !!process.env.MARKITDOWN_URL,
       vision: !!(process.env.PULLMD_VISION_API_KEY || process.env.PULLMD_LLM_API_KEY),
       stt: !!(process.env.PULLMD_STT_API_KEY || process.env.PULLMD_LLM_API_KEY),

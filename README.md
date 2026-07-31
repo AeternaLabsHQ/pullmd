@@ -207,6 +207,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `PULLMD_USER_AGENT`    | no       | Pin a single outbound User-Agent for every web fetch. Disables rotation. Useful for CI or when one specific UA is known to work. |
 | `PULLMD_UA_FEED_URL`   | no       | URL of a JSON feed of current real-world UAs. Default: [WinFuture23/real-world-user-agents](https://github.com/WinFuture23/real-world-user-agents). Set to an empty string to disable live refresh and rely on the built-in seed pool. |
 | `PULLMD_AUTH_MODE`     | no       | `disabled` (default) / `single-admin` / `multi-user`. See "Authentication" below.                   |
+| `PULLMD_ALLOW_SIGNUP`  | no       | Self-registration in `multi-user` mode. Default: on. `false` / `0` / `no` / `off` closes `/signup` (404) and removes the "create an account" link from the login page. Accounts can still be created with `node scripts/admin.js create-user <email>`. |
 | `PULLMD_ADMIN_EMAIL`   | required when AUTH_MODE != disabled, on first startup | Bootstrap email for the first admin user.                            |
 | `PULLMD_ADMIN_PASSWORD` | required when AUTH_MODE != disabled, on first startup | Bootstrap password (min 8 chars).                                    |
 | `PULLMD_AUTH_TOKEN`    | no       | Legacy bearer token compat (single-admin mode only, deprecated).                                    |
@@ -256,7 +257,7 @@ PullMD ships with three auth modes. Pick one with `PULLMD_AUTH_MODE`:
 | -------------- | --------------------------------------------------------------------------- |
 | `disabled`     | Default. No auth, everything open. Existing v1.x behavior.                  |
 | `single-admin` | One user, credentials from env vars. No self-signup. For homelab.           |
-| `multi-user`   | Self-signup at `/signup`, login at `/login`, per-user data isolation.       |
+| `multi-user`   | Self-signup at `/signup` (unless `PULLMD_ALLOW_SIGNUP` is off), login at `/login`, per-user data isolation. |
 
 In `single-admin` and `multi-user` modes, `PULLMD_ADMIN_EMAIL` + `PULLMD_ADMIN_PASSWORD` bootstrap the first admin user on first startup. After that, changing these env vars does **not** change the password — use the admin CLI:
 
