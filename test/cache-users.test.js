@@ -1,5 +1,8 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createCache } from '../lib/cache.js';
 
 describe('cache schema for auth', () => {
@@ -117,5 +120,127 @@ describe('cache: user-scoped history', () => {
     cache.put({ url: 'https://a.com', title: 'A2', markdown: '# A2', source: 'r', user_id: userA });
     const c = cache.db.prepare("SELECT COUNT(*) c FROM user_fetches WHERE user_id = ?").get(userA).c;
     assert.equal(c, 1);
+  });
+});
+
+describe('cache: per-user history unlink', () => {
+  let cache, uid;
+  beforeEach(() => {
+    cache = createCache(':memory:');
+    const r = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)").run('u@x.y', 'h');
+    uid = r.lastInsertRowid;
+  });
+
+  it('forgetForUser removes only the caller fetch row, not the conversion', () => {
+    const shareId = cache.put({ url: 'https://a.test/1', title: 't', markdown: '# t', source: 's', user_id: uid });
+    const id = cache.getIdByUrl('https://a.test/1');
+
+    const r = cache.forgetForUser(uid, id);
+
+    assert.equal(r.changes, 1);
+    assert.deepEqual(cache.historyForUser(uid), []);
+    assert.ok(cache.getByShareId(shareId), 'share link must survive a user-scope unlink');
+    assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM conversions WHERE id = ?').get(id).c, 1);
+  });
+
+  it('forgetForUser reports 0 changes when the user has no fetch row', () => {
+    cache.put({ url: 'https://a.test/2', title: 't', markdown: '# t', source: 's' });
+    const id = cache.getIdByUrl('https://a.test/2');
+
+    assert.equal(cache.forgetForUser(uid, id).changes, 0);
+  });
+
+  it('forgetForUser leaves another user history untouched', () => {
+    const other = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)").run('o@x.y', 'h').lastInsertRowid;
+    cache.put({ url: 'https://a.test/3', title: 't', markdown: '# t', source: 's', user_id: uid });
+    const id = cache.getIdByUrl('https://a.test/3');
+    cache.db.prepare('INSERT INTO user_fetches (user_id, cache_id) VALUES (?, ?)').run(other, id);
+
+    cache.forgetForUser(uid, id);
+
+    assert.equal(cache.historyForUser(other).length, 1);
+  });
+
+  it('forgetAllForUser clears only the caller rows', () => {
+    const other = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)").run('o2@x.y', 'h').lastInsertRowid;
+    cache.put({ url: 'https://a.test/4', title: 't', markdown: '# t', source: 's', user_id: uid });
+    cache.put({ url: 'https://a.test/5', title: 't', markdown: '# t', source: 's', user_id: uid });
+    cache.put({ url: 'https://a.test/6', title: 't', markdown: '# t', source: 's', user_id: other });
+
+    const r = cache.forgetAllForUser(uid);
+
+    assert.equal(r.changes, 2);
+    assert.deepEqual(cache.historyForUser(uid), []);
+    assert.equal(cache.historyForUser(other).length, 1);
+    assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM conversions').get().c, 3);
+  });
+});
+
+describe('cache: no orphaned user_fetches', () => {
+  let cache, uid;
+  beforeEach(() => {
+    cache = createCache(':memory:');
+    uid = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)").run('u@x.y', 'h').lastInsertRowid;
+  });
+
+  const orphanCount = (cache) => cache.db.prepare(`
+    SELECT COUNT(*) c FROM user_fetches f
+    LEFT JOIN conversions c ON c.id = f.cache_id
+    WHERE c.id IS NULL
+  `).get().c;
+
+  it('delete removes the fetch rows along with the conversion', () => {
+    cache.put({ url: 'https://a.test/7', title: 't', markdown: '# t', source: 's', user_id: uid });
+    const id = cache.getIdByUrl('https://a.test/7');
+
+    const r = cache.delete(id);
+
+    assert.equal(r.changes, 1, 'return value must stay the conversions delete count');
+    assert.equal(orphanCount(cache), 0);
+  });
+
+  it('countForUser stays consistent with historyPageForUser after a global delete', () => {
+    cache.put({ url: 'https://a.test/8', title: 't', markdown: '# t', source: 's', user_id: uid });
+    cache.put({ url: 'https://a.test/9', title: 't', markdown: '# t', source: 's', user_id: uid });
+    cache.delete(cache.getIdByUrl('https://a.test/8'));
+
+    const page = cache.historyPageForUser(uid, 50, 0);
+
+    assert.equal(page.total, page.items.length, 'total must not count rows the join cannot return');
+    assert.equal(page.total, 1);
+  });
+
+  it('deleteAll leaves no fetch rows behind', () => {
+    cache.put({ url: 'https://a.test/10', title: 't', markdown: '# t', source: 's', user_id: uid });
+
+    cache.deleteAll();
+
+    assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM user_fetches').get().c, 0);
+  });
+
+  it('pruneOrphanFetches sweeps pre-existing orphans', () => {
+    cache.db.prepare('INSERT INTO user_fetches (user_id, cache_id) VALUES (?, ?)').run(uid, 999999);
+
+    const r = cache.pruneOrphanFetches();
+
+    assert.equal(r.changes, 1);
+    assert.equal(orphanCount(cache), 0);
+  });
+
+  it('createCache sweeps orphans left by an earlier process', () => {
+    // Temp-file pattern copied from test/recipes-frontmatter.test.js:126.
+    const file = path.join(os.tmpdir(), `pullmd-orphan-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
+    const first = createCache(file);
+    first.db.prepare("INSERT INTO users (email, password_hash) VALUES (?, ?)").run('u@x.y', 'h');
+    first.db.prepare('INSERT INTO user_fetches (user_id, cache_id) VALUES (?, ?)').run(1, 424242);
+    first.db.close();
+
+    try {
+      const second = createCache(file);
+      assert.equal(second.db.prepare('SELECT COUNT(*) c FROM user_fetches').get().c, 0);
+      second.db.close();
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
   });
 });
