@@ -1382,7 +1382,11 @@
       }
       headerActions.appendChild(slot);
       document.documentElement.dataset.loggedIn = me ? '1' : '0';
-      document.documentElement.dataset.isAdmin = me && me.is_admin ? '1' : '0';
+      // Tri-state on purpose. '1' admin, '0' a known non-admin, 'unknown' when
+      // /api/me did not answer. This line runs only after that fetch settles,
+      // so an absent attribute still means "not asked yet", which is a
+      // different situation and keeps its own default in isGlobalDelete().
+      document.documentElement.dataset.isAdmin = me ? (me.is_admin ? '1' : '0') : 'unknown';
     })();
 
     // ---- i18n: DE/EN, default from navigator.language, persisted override ----
@@ -1755,11 +1759,17 @@
       // disabled means every caller deletes globally, otherwise only an admin
       // does. dataset.authMode is set before the bootstrap's early return for
       // disabled mode, and defaults to 'disabled' when /api/config is
-      // unreachable - the conservative side, since a global delete is the
-      // destructive one.
+      // unreachable.
+      // 'unknown' means /api/me answered nothing, so the role is undecidable:
+      // overwarn. Claiming "global" for a delete that turns out to be scoped
+      // costs nothing, while the reverse puts a harmless label on a
+      // destructive action. An absent attribute is the different case of
+      // "bootstrap still running" and keeps the scoped default.
       function isGlobalDelete() {
         var root = document.documentElement;
-        return root.dataset.authMode === 'disabled' || root.dataset.isAdmin === '1';
+        return root.dataset.authMode === 'disabled'
+          || root.dataset.isAdmin === '1'
+          || root.dataset.isAdmin === 'unknown';
       }
       function showError(msg) {
         hideLoading();
