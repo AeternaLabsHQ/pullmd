@@ -45,6 +45,7 @@ describe('coverage guard limits', () => {
     assert.equal(GUARD_LIMITS.DOMINANCE, 0.90);
     assert.equal(GUARD_LIMITS.MIN_GAIN, 3);
     assert.equal(GUARD_LIMITS.MIN_PARAGRAPHS, 5);
+    assert.equal(GUARD_LIMITS.MAX_LABEL, 60);
   });
 });
 
@@ -183,6 +184,20 @@ describe('containerLabel', () => {
   it('falls back to the bare tag name', () => {
     assert.equal(containerLabel(bodyOf('<section>x</section>').firstElementChild), 'section');
   });
+
+  it('caps a page-controlled id so the persisted reason stays bounded', () => {
+    // id and class come from the fetched page. The label lands in the extraction
+    // log and in frontmatter, so an absurd attribute must not travel with it.
+    const node = bodyOf(`<div id="${'A'.repeat(5000)}">x</div>`).firstElementChild;
+    const label = containerLabel(node);
+    assert.ok(label.length <= GUARD_LIMITS.MAX_LABEL + 'div#'.length + 1, `label was ${label.length}c`);
+    assert.match(label, /^div#A+…$/);
+  });
+
+  it('caps a page-controlled class the same way', () => {
+    const node = bodyOf(`<div class="${'B'.repeat(500)}">x</div>`).firstElementChild;
+    assert.match(containerLabel(node), /^div\.B{60}…$/);
+  });
 });
 
 describe('guardReason', () => {
@@ -190,8 +205,16 @@ describe('guardReason', () => {
     const node = bodyOf('<div class="elementor">x</div>').firstElementChild;
     const reason = guardReason(336_670, 10_503, node, 339_923, 'comparable, prefer baseline');
     assert.match(reason, /^coverage guard: 3\.1% coverage of 336670c body/);
-    assert.match(reason, /recovered div\.elementor \(32\.4x\)/);
+    assert.match(reason, /recovered div\.elementor \(32\.4x, holds \d+% of body\)/);
     assert.match(reason, /prior pick: comparable, prefer baseline$/);
+  });
+
+  it('reports the container share of the body, which the trigger does not imply', () => {
+    // DOMINANCE is enforced per descent level, so the shares multiply: a
+    // container reached through several levels can hold far less than 90% of
+    // the body. The reason has to state the real figure, not the threshold.
+    const node = bodyOf(`<div class="deep">${'x'.repeat(500)}</div>`).firstElementChild;
+    assert.match(guardReason(1000, 10, node, 500, 'prior'), /holds 50% of body/);
   });
 });
 
@@ -234,7 +257,7 @@ describe('coverage guard in the extraction pipeline', () => {
   it('records why it intervened', async () => {
     const result = await extractHtml(onePager(), { url: PAGE_URL, recipes: [] });
     assert.match(result.metadata.extractorReason, /^coverage guard: \d+\.\d% coverage of \d+c body/);
-    assert.match(result.metadata.extractorReason, /recovered div\.site-builder \(\d+\.\dx\)/);
+    assert.match(result.metadata.extractorReason, /recovered div\.site-builder \(\d+\.\dx, holds \d+% of body\)/);
     assert.match(result.metadata.extractorReason, /prior pick: /);
   });
 
