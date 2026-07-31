@@ -1759,7 +1759,16 @@
         hideLoading();
         errorEl.textContent = msg;
         errorEl.classList.add('visible');
-        resultContainer.classList.remove('visible');
+        // showArchive() hides the shared views with an inline display:none, and an
+        // inline style outranks the .error.visible class rule. Clear it, or a
+        // delete that fails inside the archive view would show nothing at all.
+        errorEl.style.display = '';
+        // Only collapse a shown conversion result on the main view. From the
+        // archive this would silently drop the user's result for when they
+        // navigate back, since hideArchive() restores display but not classes.
+        if (!archiveView || !archiveView.classList.contains('visible')) {
+          resultContainer.classList.remove('visible');
+        }
       }
 
       var sourceBadge = document.getElementById('source-badge');
@@ -2564,6 +2573,7 @@
         if (mainView) mainView.style.display = '';
         if (heroView) heroView.style.display = '';
         resultViews.forEach(function(el) { if (el) el.style.display = ''; });
+        errorEl.classList.remove('visible');
         loadHistory();
       }
       function formatDate(dateStr) {
