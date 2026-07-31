@@ -9,6 +9,14 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.7.0] - 2026-07-31
+
+### Added
+
+- **Coverage guard — extractions that keep only a sliver of the page now recover the rest** (closes #46). Readability commits to a single best candidate container. On the one-pagers page builders emit, the article is a flat list of sibling blocks whose prose sits several levels deep; Readability's candidate score dilutes with nesting depth, so a shallow paragraph-rich block near the top outscores the far larger content below it, and everything else is dropped. The output is well-formed markdown, so nothing downstream signals the loss — measured on one such page, 10,503 of 336,670 characters, 3.1% coverage. The guard now re-converts the container that holds the body instead, which is an auto-written `select.content` through the same conversion path a recipe takes. It fires only when all of the following hold: no recipe `select.content`, no forced static extractor, a cleaned body of at least 20,000 characters, coverage under 10%, a single container dominating the body text, and a recovered candidate at least 3× larger with at least 5 paragraphs. The dominance condition is what separates one article split across siblings from many separate teasers, and it is what keeps listing pages out. Calibrated against an 85-page live corpus (forum threads, comment-heavy blogs, wikis, long single-document pages, shops, listing homepages, landing pages): it fires on 1 of 85 and on 0 of 12 forum threads, with roughly a factor of 2 between the shipped thresholds and the first false positive. The guard can only grow a result, degrades to previous behavior on any error, and is switched off with the new `PULLMD_COVERAGE_GUARD=off`. Every intervention carries `source: coverage-guard` and records what it acted on in `metadata.extractorReason` — coverage, body size, gain, and the share of the body the recovered container actually holds. A `select.content` recipe still wins outright, so a site that needs finer cleanup can keep one.
+
+---
+
 ## [3.6.0] - 2026-07-26
 
 ### Added
