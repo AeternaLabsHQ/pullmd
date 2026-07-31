@@ -998,6 +998,37 @@ claude mcp add --transport http pullmd __PULLMD_URL__/mcp \
       </div>
       <p class="muted" lang="de">Fehlen die Zugangsdaten, antwortet die API mit <code>401</code>; im Browser wird stattdessen zur Login-Seite weitergeleitet und danach zurück zur ursprünglichen Seite.</p>
       <p class="muted" lang="en">Without credentials the API answers <code>401</code>; in the browser you are redirected to the login page and back afterwards.</p>
+
+      <h3 lang="de">Benutzerverwaltung</h3>
+      <h3 lang="en">Managing users</h3>
+      <p lang="de">Konten verwaltet der Betreiber auf der Kommandozeile der Instanz; eine Oberfläche dafür gibt es nicht. In <code>single-admin</code> stammt der eine Benutzer aus den Server-Einstellungen, in <code>multi-user</code> registrieren sich Benutzer selbst - es sei denn, <code>PULLMD_ALLOW_SIGNUP</code> steht auf <code>false</code>. Dann ist <code>create-user</code> der Weg, trotzdem Konten anzulegen.</p>
+      <p lang="en">Accounts are managed by the operator on the instance's command line; there is no UI for it. In <code>single-admin</code> the single user comes from the server settings, in <code>multi-user</code> users sign up themselves - unless <code>PULLMD_ALLOW_SIGNUP</code> is <code>false</code>. In that case <code>create-user</code> is how accounts still get created.</p>
+      <div class="copybox">
+        <div class="copybox-header">
+          <span class="copybox-label">admin cli</span>
+          <button class="copybox-btn" data-copy="auth-users">
+            <span lang="de">Kopieren</span><span lang="en">Copy</span>
+          </button>
+        </div>
+        <pre id="auth-users">docker compose exec pullmd node scripts/admin.js list-users
+docker compose exec pullmd node scripts/admin.js create-user someone@example.com
+docker compose exec pullmd node scripts/admin.js make-admin someone@example.com
+docker compose exec pullmd node scripts/admin.js reset-password someone@example.com</pre>
+      </div>
+      <ul class="doc-list" lang="de">
+        <li><code>list-users</code> - alle Konten mit ID, E-Mail, Admin-Flag und Anlagedatum.</li>
+        <li><code>create-user &lt;email&gt;</code> - legt ein Konto an und fragt das Passwort interaktiv ab (mindestens 8 Zeichen). Das Konto bekommt <em>keine</em> Admin-Rechte.</li>
+        <li><code>make-admin &lt;email&gt;</code> - befördert ein bestehendes Konto zum Admin. Bewusst ein eigener Schritt.</li>
+        <li><code>reset-password &lt;email&gt;</code> - setzt das Passwort neu und wirft dabei alle offenen Sitzungen des Benutzers weg.</li>
+      </ul>
+      <ul class="doc-list" lang="en">
+        <li><code>list-users</code> - every account with id, email, admin flag and creation date.</li>
+        <li><code>create-user &lt;email&gt;</code> - creates an account and prompts for the password interactively (8 characters minimum). The account gets <em>no</em> admin rights.</li>
+        <li><code>make-admin &lt;email&gt;</code> - promotes an existing account to admin. Deliberately a separate step.</li>
+        <li><code>reset-password &lt;email&gt;</code> - sets a new password and drops all of that user's open sessions.</li>
+      </ul>
+      <p class="muted" lang="de">Ohne Docker läuft derselbe Befehl als <code>node scripts/admin.js …</code> im Verzeichnis der Instanz. <strong>Wichtig:</strong> <code>create-user</code> und <code>reset-password</code> lesen das Passwort von der Standardeingabe, es braucht also <code>docker compose exec</code> oder <code>docker exec -it</code>. Ein <code>docker exec</code> ohne <code>-i</code> hängt die Eingabe nicht an: Der Befehl gibt nur <code>New password:</code> aus und endet mit Code 0, ohne etwas anzulegen.</p>
+      <p class="muted" lang="en">Without Docker the same command runs as <code>node scripts/admin.js …</code> in the instance's directory. <strong>Important:</strong> <code>create-user</code> and <code>reset-password</code> read the password from standard input, so use <code>docker compose exec</code> or <code>docker exec -it</code>. A plain <code>docker exec</code> without <code>-i</code> does not attach input: the command prints <code>New password:</code> and exits with code 0 without creating anything.</p>
     </section>
 
     <!-- ===================================================== -->
