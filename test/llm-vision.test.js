@@ -41,6 +41,52 @@ describe('captionImage', () => {
     restore(s);
   });
 
+  // Newer OpenAI models reject max_tokens outright. Most other
+  // OpenAI-compatible endpoints only know max_tokens, so the request keeps
+  // asking that way and switches only when the endpoint says to.
+  it('retries with max_completion_tokens when the endpoint rejects max_tokens', async () => {
+    const s = save();
+    process.env.PULLMD_VISION_API_KEY = 'k'; process.env.PULLMD_VISION_MODEL = 'newer-model';
+    delete process.env.PULLMD_VISION_BASE_URL; delete process.env.PULLMD_LLM_API_KEY;
+    const sent = [];
+    const fetchFn = async (url, opts) => {
+      sent.push(JSON.parse(opts.body));
+      if (sent.length === 1) {
+        return {
+          ok: false, status: 400,
+          text: async () => JSON.stringify({ error: { message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.", type: 'invalid_request_error', param: 'max_tokens' } }),
+        };
+      }
+      return { ok: true, json: async () => ({ model: 'newer-model', choices: [{ message: { content: 'A gradient.' } }] }) };
+    };
+
+    const r = await captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn });
+
+    assert.equal(sent.length, 2, 'exactly one retry');
+    assert.equal(sent[0].max_tokens, 500, 'the first attempt asks the way every endpoint understands');
+    assert.equal(sent[0].max_completion_tokens, undefined);
+    assert.equal(sent[1].max_completion_tokens, 500, 'the retry uses the parameter the endpoint asked for');
+    assert.equal(sent[1].max_tokens, undefined, 'and must not send both');
+    assert.equal(sent[1].model, 'newer-model');
+    assert.equal(r.markdown, '## Description\n\nA gradient.');
+    restore(s);
+  });
+
+  it('does not retry a 400 that is about something else', async () => {
+    const s = save();
+    process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_VISION_MODEL; delete process.env.PULLMD_LLM_API_KEY;
+    let calls = 0;
+    const fetchFn = async () => {
+      calls++;
+      return { ok: false, status: 400, text: async () => JSON.stringify({ error: { message: 'The model `nope` does not exist.' } }) };
+    };
+
+    await assert.rejects(() => captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn }),
+      /captioning failed \(400\).*does not exist/s);
+    assert.equal(calls, 1);
+    restore(s);
+  });
+
   it('falls back to image/jpeg data-uri when mimetype is missing', async () => {
     const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_VISION_BASE_URL; delete process.env.PULLMD_VISION_MODEL; delete process.env.PULLMD_LLM_API_KEY;
     let captured;
