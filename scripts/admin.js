@@ -43,13 +43,19 @@ export async function createUserCmd({ db, auth }, email, password) {
 
 async function readPassword(prompt = 'New password: ') {
   process.stdout.write(prompt);
-  return new Promise((resolve) => {
-    if (!process.stdin.isTTY) {
-      // Fallback: read line normally if not interactive (pipe/test).
-      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-      rl.question('', (answer) => { rl.close(); resolve(answer); });
-      return;
+  // Non-interactive stdin (a pipe, or a test): node:readline/promises
+  // question() returns a promise and ignores a callback, so it has to be
+  // awaited. Passing a callback here silently never fires and the process
+  // exits without having read anything.
+  if (!process.stdin.isTTY) {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    try {
+      return await rl.question('');
+    } finally {
+      rl.close();
     }
+  }
+  return new Promise((resolve) => {
     process.stdin.setRawMode(true);
     let buf = '';
     const onData = (chunk) => {

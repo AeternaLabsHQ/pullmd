@@ -1,5 +1,10 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
 import { resetPassword, listUsers, makeAdmin, createUserCmd } from '../scripts/admin.js';
@@ -111,5 +116,59 @@ describe('admin CLI create-user', () => {
 
     assert.equal(r.ok, false);
     assert.equal(r.reason, 'invalid');
+  });
+});
+
+describe('admin CLI create-user integration (non-TTY stdin)', () => {
+  it('reads password from piped stdin and creates the user', async () => {
+    const tmpDbPath = path.join(os.tmpdir(), `pullmd-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
+
+    try {
+      // Spawn the CLI with piped stdin
+      const proc = execFile('node', ['scripts/admin.js', 'create-user', 'someone@example.com'], {
+        cwd: new URL('..', import.meta.url).pathname,
+        env: {
+          ...process.env,
+          CACHE_DB: tmpDbPath,
+          PULLMD_AUTH_MODE: 'multi-user',
+          PULLMD_ADMIN_EMAIL: 'admin@x.y',
+          PULLMD_ADMIN_PASSWORD: 'pw1234567',
+        },
+        timeout: 30000, // 30 seconds, accounting for argon2 cost
+      });
+
+      // Write password to stdin
+      proc.stdin.write('pw1234567\n');
+      proc.stdin.end();
+
+      // Wait for process to complete
+      const { stdout, stderr } = await new Promise((resolve, reject) => {
+        let stdoutData = '';
+        let stderrData = '';
+        proc.stdout.on('data', (d) => { stdoutData += d; });
+        proc.stderr.on('data', (d) => { stderrData += d; });
+        proc.on('error', reject);
+        proc.on('exit', (code) => {
+          if (code === 0) {
+            resolve({ stdout: stdoutData, stderr: stderrData });
+          } else {
+            reject(new Error(`CLI exited with code ${code}: ${stderrData}`));
+          }
+        });
+      });
+
+      // Verify the user was created in the database
+      const dbCache = createCache(tmpDbPath);
+      const user = dbCache.db.prepare("SELECT id, email, is_admin FROM users WHERE email = ?").get('someone@example.com');
+      assert.ok(user, 'user should exist in the database');
+      assert.equal(user.email, 'someone@example.com');
+      assert.equal(user.is_admin, 0);
+      assert.match(stdout, /Created someone@example\.com.*no admin rights/);
+    } finally {
+      // Clean up
+      if (fs.existsSync(tmpDbPath)) {
+        fs.unlinkSync(tmpDbPath);
+      }
+    }
   });
 });
