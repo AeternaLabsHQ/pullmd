@@ -1409,7 +1409,8 @@
           'archive.back':      '← Zurück',
           'archive.more':      'Mehr laden',
           'archive.deleteAll': 'Alles löschen',
-          'archive.confirmDeleteAll': 'Alle Einträge löschen?',
+          'archive.confirmDeleteAllMine':   'Alle Einträge aus deiner Historie entfernen?',
+          'archive.confirmDeleteAllGlobal': 'Alle Einträge global löschen? Das betrifft alle Benutzer und macht bestehende Share-Links ungültig.',
           'archive.deleteMine':   'Aus meiner Historie entfernen',
           'archive.deleteGlobal': 'Global löschen',
           'archive.entries':   '{n} Einträge',
@@ -1469,7 +1470,8 @@
           'archive.back':      '← Back',
           'archive.more':      'Load more',
           'archive.deleteAll': 'Delete all',
-          'archive.confirmDeleteAll': 'Delete all entries?',
+          'archive.confirmDeleteAllMine':   'Remove all entries from your history?',
+          'archive.confirmDeleteAllGlobal': 'Delete all entries globally? This affects every user and invalidates existing share links.',
           'archive.deleteMine':   'Remove from my history',
           'archive.deleteGlobal': 'Delete globally',
           'archive.entries':   '{n} entries',
@@ -1749,11 +1751,15 @@
         loadingEl.classList.remove('visible');
         goBtn.disabled = false;
       }
-      // The /api/me fetch lives in another IIFE and resolves asynchronously.
-      // Falling back to the user-scope wording is correct: an unresolved flag
-      // means we do not know the caller is an admin.
-      function isAdminUser() {
-        return document.documentElement.dataset.isAdmin === '1';
+      // Mirrors isGlobalScope on the server: no auth configured or auth
+      // disabled means every caller deletes globally, otherwise only an admin
+      // does. dataset.authMode is set before the bootstrap's early return for
+      // disabled mode, and defaults to 'disabled' when /api/config is
+      // unreachable - the conservative side, since a global delete is the
+      // destructive one.
+      function isGlobalDelete() {
+        var root = document.documentElement;
+        return root.dataset.authMode === 'disabled' || root.dataset.isAdmin === '1';
       }
       function showError(msg) {
         hideLoading();
@@ -2422,7 +2428,7 @@
               delBtn.type = 'button';
               delBtn.className = 'h-delete-btn';
               delBtn.textContent = '×';
-              delBtn.title = isAdminUser() ? t('archive.deleteGlobal') : t('archive.deleteMine');
+              delBtn.title = isGlobalDelete() ? t('archive.deleteGlobal') : t('archive.deleteMine');
               delBtn.addEventListener('click', (function(itm, row, btn) {
                 return function(e) {
                   e.preventDefault();
@@ -2607,7 +2613,7 @@
         delBtn.type = 'button';
         delBtn.className = 'archive-delete-btn';
         delBtn.textContent = '×';
-        delBtn.title = isAdminUser() ? t('archive.deleteGlobal') : t('archive.deleteMine');
+        delBtn.title = isGlobalDelete() ? t('archive.deleteGlobal') : t('archive.deleteMine');
         delBtn.addEventListener('click', function(e) {
           e.preventDefault();
           e.stopPropagation();
@@ -2659,7 +2665,7 @@
       archiveBackBtn.addEventListener('click', function(e) { e.preventDefault(); hideArchive(); });
       archiveMoreBtn.addEventListener('click', loadArchivePage);
       archiveDeleteAllBtn.addEventListener('click', function() {
-        if (!confirm(t('archive.confirmDeleteAll'))) return;
+        if (!confirm(isGlobalDelete() ? t('archive.confirmDeleteAllGlobal') : t('archive.confirmDeleteAllMine'))) return;
         fetch('/api/cache', { method: 'DELETE' }).then(function(res) {
           if (res.ok) {
             while (archiveList.firstChild) archiveList.removeChild(archiveList.firstChild);
