@@ -9,6 +9,28 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.8.0] - 2026-07-31
+
+### Added
+
+- **`PULLMD_ALLOW_SIGNUP` closes self-registration in `multi-user` mode.** Default is on, so an existing instance behaves exactly as before; only `false`, `0`, `no` or `off` turns it off. When off, the `/signup` routes are not mounted at all, so both GET and POST answer 404 and no account can be created by a crafted request, the login page drops its "create an account" link, and `/api/config` reports `signupOpen: false`. This is for running a public demo instance in `multi-user` mode without collecting stranger accounts. `createAuth` exposes the raw switch as `allowSignup` and the effective value as `signupOpen` (`mode === 'multi-user' && allowSignup`); only the effective value is read anywhere in production code, because a switch that is on while the mode has no signup route at all is not useful information.
+- **`node scripts/admin.js create-user <email>`** with a password prompt, so "registration closed" is not a state an operator cannot get out of. The account is created without admin rights; `make-admin` promotes it as a separate step.
+
+### Changed
+
+- **Cache deletes are now scoped to the caller instead of being rejected** (closes #49). `DELETE /api/cache/:id` and `DELETE /api/cache` used to sit behind an admin-only guard, so a logged-in non-admin got `403 {"error":"Admin required"}` and could never clear anything from their own history, even though the frontend offered them the button. The guard's premise was sound only halfway: `conversions` is deduplicated by URL and therefore shared between all users, so dropping a row does affect everyone - but each user's history is a separate `user_fetches` join table, and unlinking a row there affects nobody else. An admin (and every caller when `PULLMD_AUTH_MODE` is `disabled` or unset) still purges the shared row; a regular user now only unlinks their own history entry, leaving the shared row and its `/s/:id` share link intact. Both responses gained `scope: "user" | "global"`, and delete-all gained `removed`. Existing status codes are unchanged. **For API consumers:** in `single-admin` and `multi-user` modes a non-admin `DELETE /api/cache*` now answers `200` with `scope: "user"` where it previously answered `403`.
+- **The delete button says which of the two it does.** The same `×` now means "remove from my history" or "delete globally" depending on the caller, so the tooltip and the archive's delete-all confirmation name the scope. When the caller's role cannot be determined the label errs toward "global", because claiming a global delete for one that turns out to be scoped costs nothing, while the reverse puts a harmless label on a destructive action.
+
+### Fixed
+
+- **Orphaned history rows inflated the archive's entry count.** `user_fetches.cache_id` has no foreign key to `conversions`, and `pruneOld` - which runs on every conversion and drops entries older than 90 days - never removed the matching history rows. Since `countForUser` counts without the join that `historyPageForUser` uses, the archive reported more entries than it could ever return and paginated toward entries that never arrived, drifting further with every prune. Cleanup is now explicit in the delete paths and after a prune that actually removed something, plus a one-time sweep when the cache opens, so an existing database repairs itself on the next start. A real foreign key with `ON DELETE CASCADE` was deliberately not introduced: better-sqlite3 only enforces foreign keys with `PRAGMA foreign_keys=ON`, and enabling that globally would start enforcing constraints across the OAuth and session tables too.
+- **A failed delete is now visible.** Both entry-delete handlers turned a failed request into a red border and a `title` attribute and never called the page's own error banner, so a rejected delete looked like a dead button; the archive's delete-all had no failure path at all. All three now surface the failure. This also required fixing the banner itself: opening the archive view hides the shared error element with an inline style that outranks the class the banner is shown with, so a message raised from inside the archive would not have rendered.
+- **`reset-password` and `create-user` silently did nothing when the password came from a pipe.** `scripts/admin.js` reads passwords through `node:readline/promises`, whose `question()` returns a promise and ignores a callback, but the non-interactive branch passed one. The promise never settled, the process exited 0, and nothing was written - so a scripted `reset-password` reported success without changing anything, for as long as that command has existed. Interactive use was never affected. A test that drives the real CLI as a child process with piped stdin now guards it.
+- **Read-only admin CLI commands no longer write to the database.** `list-users`, `reset-password` and `make-admin` ran the auth migration on startup. Because the CLI defaults to `multi-user` while the server defaults to `disabled`, on an auth-disabled instance `list-users` either aborted with a stack trace or silently bootstrapped an admin user from whatever credentials were in the environment, claimed every existing conversion for it and backfilled history rows.
+- **The login page no longer links to a page that does not exist.** The "create an account" link was rendered in every auth mode, but `/signup` only exists in `multi-user`, so in `single-admin` the link led to a 404. It is now tied to whether the route is actually reachable.
+
+---
+
 ## [3.7.1] - 2026-07-31
 
 ### Documentation
