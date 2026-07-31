@@ -55,6 +55,15 @@ web pages exactly like v2, just with a cleaner body by default.
 
 > Self-hosters upgrading from v2.x: the clean-body change is the only breaking one - [`MIGRATION.md`](./MIGRATION.md) has the one-line opt-out. Everything else is additive.
 
+**Added in the 3.x line since then:**
+
+- **Hacker News pipeline** (3.1) - items, comment permalinks and listings through a purpose-built converter, plus Web Share and an instant frontmatter toggle in the PWA.
+- **`X-Transcript-Status`** (3.2) - tells a transient YouTube rate-limit apart from a genuinely missing transcript.
+- **[SSRF protection](#ssrf-protection)** (3.3) - private, loopback, link-local, CGNAT and cloud-metadata targets are rejected by default, on every fetch path and every redirect hop.
+- **[Query-scoped extraction](#query-scoped-extraction)** (3.4) - `?query=` returns only the sections relevant to a question, with a `max_tokens` budget.
+- **[Site recipes opened up](#site-recipes)** (3.5/3.6) - JSON-LD-to-frontmatter, a contributor guide, and `select.content` so a recipe can name the article body outright.
+- **Coverage guard** (3.7) - recovers pages where extraction kept only a sliver of the body; see [`PULLMD_COVERAGE_GUARD`](#configuration).
+
 ---
 
 ## Quick start
@@ -203,6 +212,8 @@ All variables go in `.env` (copy from `.env.example`):
 | `PULLMD_AUTH_TOKEN`    | no       | Legacy bearer token compat (single-admin mode only, deprecated).                                    |
 | `PULLMD_SOURCE_HEADER` | no       | Set to `true` to restore the legacy inline source header in the body (`# Title` + `**domain** · date` + url; for Reddit the `**r/sub** · u/user · N ↑` line). Default (unset): clean body - just the H1 title; source/date/post meta live in the frontmatter. |
 | `PULLMD_FRONTMATTER_FIELDS` | no  | Comma-separated allowlist of frontmatter fields to emit (e.g. `title,url,source,llm_tokens`). Unset = all fields. Trims tokens. Unknown names are ignored with a startup warning. |
+| `PULLMD_ALLOWED_HOSTS` | no | Comma-separated CIDRs and/or exact hostnames that may be fetched even though they resolve into a blocked range. Empty by default = every internal target is blocked. See [SSRF protection](#ssrf-protection). |
+| `PULLMD_SITE_RECIPES`  | no       | Path to a JSON file of extra [site recipes](#site-recipes), merged on top of the built-ins. Alternative to `data/site-recipes.json`. |
 | `PULLMD_COVERAGE_GUARD` | no | Set to `off` to disable the coverage guard. Default (unset): on. The guard notices when an extraction kept only a sliver of the page - the failure mode of page-builder one-pagers, whose chapters sit in flat sibling containers that Readability's single-candidate scoring discards - and re-converts the container holding the body instead. It only ever grows the result, records `source: coverage-guard`, and explains itself in `metadata.extractorReason`. |
 
 `PUBLIC_URL` matters for self-hosting: the help page and downloadable
@@ -328,6 +339,9 @@ Returns clean Markdown (text/markdown). Optional query params:
   format=text           strip Markdown, return plain text
   nocache=true          bypass the 1h cache and refetch
   render=force|skip     override the auto Playwright fallback
+  pdf=ocr               high-quality PDF conversion (tables)
+  query=<text>          return only the sections relevant to <text>
+  max_tokens=N          budget for query= (default 600, 64-20000)
   lang=de|en            language for the comments section header
 
 Response headers worth checking:
@@ -342,7 +356,8 @@ Reddit URLs are auto-detected (incl. redd.it short links and /s/ shares).
 Hacker News URLs are auto-detected too — items, comment permalinks, and the
 front/newest/ask/show/jobs listings.
 Use this whenever you would otherwise fetch raw HTML — the markdown is
-much cleaner and saves significant context window space.
+much cleaner and saves significant context window space. For a long page
+where you only need one thing, add query= and get just that.
 ```
 
 ### 2. Claude Code skill
@@ -457,7 +472,9 @@ for it.
 | `GET /api/history`     | Recent conversions (JSON).                                                       |
 | `GET /api/archive`     | Paginated full archive.                                                          |
 | `GET /api/storage`     | Cache size / hit-rate stats.                                                     |
-| `GET /api/stats`       | Extraction telemetry (sources, quality, latency).                                |
+| `GET /api/stats`       | Extraction telemetry (sources, quality, latency). `?window=-7 days`.             |
+| `GET /api/config`      | Which optional tiers this instance has enabled (auth mode, markitdown, vision, STT, PDF OCR, YouTube). The PWA reads it to show or hide controls. |
+| `GET /api/recipes/status` | Which [site recipes](#site-recipes) loaded, which were rejected, and any frontmatter fields dropped by the allowlist. |
 | `POST /mcp`            | Streamable-HTTP MCP endpoint (3 tools: `read_url`, `get_share`, `list_recent`). |
 | `GET /pullmd.zip`      | Claude Code skill bundle, with this instance's URL baked in (`/web-reader.zip` redirects here). |
 | `GET /help`            | Bilingual user/agent setup guide.                                                |
@@ -533,6 +550,46 @@ calls, no LLM involved.
 - MCP `read_url` has no response headers; when nothing matches, it prepends an
   in-band comment (`<!-- query-extract: no match; returning full page -->`) to
   the returned markdown instead.
+
+---
+
+## SSRF protection
+
+A URL-fetching service will happily be pointed at its own network if you let
+it. Since v3.3.0 PullMD does not: before any fetch, the target host is
+resolved and the resulting addresses are checked. Anything in a private,
+loopback, link-local, CGNAT or cloud-metadata range is refused with `403` —
+including `169.254.169.254` (AWS/GCP/Azure) and `100.100.100.200` (Alibaba).
+
+- `GET /api` and the MCP `read_url` tool check the URL up front and answer
+  `403` before doing any work. `GET /api/stream` is covered by the same guard
+  one layer down, in the Reddit / web / Playwright fetch paths, and surfaces
+  the refusal as an SSE `error` event.
+- **Every redirect hop is re-checked** before it is followed, so a public URL
+  that redirects inward is blocked at the hop, not after it.
+- IPv6 is covered too, including blocked v4 ranges reached through transition
+  addressing (IPv4-mapped, NAT64, 6to4, IPv4-compatible).
+- The rejection happens before the cache is touched — a blocked URL never
+  produces a cache row or a share id.
+
+To reach an internal host on purpose (an intranet wiki, a document server on
+the same network), allowlist it:
+
+```bash
+# CIDRs, exact hostnames, or both
+PULLMD_ALLOWED_HOSTS=10.0.5.0/24,wiki.internal
+```
+
+Empty (the default) means every internal target stays blocked.
+
+> **Known residual:** the guard checks resolved IPs at request time but does
+> not pin the outbound socket to the address it checked, so a DNS-rebinding
+> attack (where the name resolves differently between check and connect) is
+> not fully closed. When PullMD runs behind an outbound HTTP proxy, the proxy
+> resolves names itself — its egress filtering, not this guard, is the
+> authoritative layer for traffic it forwards.
+
+Reported as [#41](https://github.com/AeternaLabsHQ/pullmd/issues/41), shipped in v3.3.0.
 
 ---
 
