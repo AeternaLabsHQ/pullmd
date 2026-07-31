@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { createCache } from '../lib/cache.js';
@@ -175,6 +175,84 @@ describe('admin CLI create-user integration (non-TTY stdin)', () => {
       }
     }
   });
+
+  // A pipe does not have to end in a newline, and one written on Windows ends
+  // in CRLF. Both used to hang up readline and produce a silent no-op.
+  for (const [label, written] of [['no trailing newline', 'pw1234567'], ['CRLF', 'pw1234567\r\n']]) {
+    it(`accepts a piped password with ${label}`, async () => {
+      const tmpDbPath = path.join(os.tmpdir(), `pullmd-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
+
+      try {
+        const proc = execFile(process.execPath, ['scripts/admin.js', 'create-user', 'someone@example.com'], {
+          cwd: ROOT,
+          env: { CACHE_DB: tmpDbPath, PULLMD_AUTH_MODE: 'multi-user' },
+          timeout: 30000,
+        });
+        proc.stdin.end(written);
+
+        const code = await new Promise((resolve, reject) => {
+          proc.on('error', reject);
+          proc.on('exit', resolve);
+        });
+
+        assert.equal(code, 0);
+        const dbCache = createCache(tmpDbPath);
+        const auth = createAuth({ db: dbCache.db, mode: 'multi-user', env: {} });
+        // Authenticating proves the CR was stripped rather than stored.
+        assert.ok(await auth.authenticate('someone@example.com', 'pw1234567'),
+          'the password must round-trip exactly, without the line ending');
+      } finally {
+        if (fs.existsSync(tmpDbPath)) {
+          fs.unlinkSync(tmpDbPath);
+        }
+      }
+    });
+  }
+
+  // `docker exec` without -i hands the process a stdin that is already at EOF.
+  // readline's question() never settles on that, the event loop drains, and
+  // the process used to exit 0 having printed the prompt and done nothing.
+  for (const cmd of ['create-user', 'reset-password']) {
+    it(`${cmd} fails loudly when stdin is not connected at all`, async () => {
+      const tmpDbPath = path.join(os.tmpdir(), `pullmd-cli-test-${Date.now()}-${Math.random().toString(16).slice(2)}.db`);
+
+      try {
+        // spawn, not execFile: execFile silently drops the stdio option, so the
+        // child would get an open pipe nobody ever writes to (a hang) instead of
+        // the /dev/null stdin that `docker exec` without -i actually hands over.
+        const proc = spawn(process.execPath, ['scripts/admin.js', cmd, 'someone@example.com'], {
+          cwd: ROOT,
+          env: {
+            CACHE_DB: tmpDbPath,
+            PULLMD_AUTH_MODE: 'multi-user',
+          },
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 30000,
+        });
+
+        const { stderr, code } = await new Promise((resolve, reject) => {
+          let stdoutData = '';
+          let stderrData = '';
+          proc.stdout.on('data', (d) => { stdoutData += d; });
+          proc.stderr.on('data', (d) => { stderrData += d; });
+          proc.on('error', reject);
+          proc.on('exit', (exitCode) => resolve({ stdout: stdoutData, stderr: stderrData, code: exitCode }));
+        });
+
+        assert.notEqual(code, 0, 'a password that could not be read must not look like success');
+        assert.match(stderr, /stdin/i, 'the error must name the actual problem');
+        assert.match(stderr, /-it|compose exec/, 'the error must show a working invocation');
+
+        const dbCache = createCache(tmpDbPath);
+        const count = dbCache.db.prepare("SELECT COUNT(*) c FROM users").get().c;
+        assert.equal(count, 0, 'nothing may be written when no password was read');
+      } finally {
+        if (fs.existsSync(tmpDbPath)) {
+          fs.unlinkSync(tmpDbPath);
+        }
+      }
+    });
+  }
 });
 
 describe('admin CLI list-users without any bootstrap env (regression for runMigration removal)', () => {

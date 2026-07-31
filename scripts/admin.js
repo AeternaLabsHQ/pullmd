@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { createCache } from '../lib/cache.js';
 import { createAuth, hashPassword } from '../lib/auth.js';
-import readline from 'node:readline/promises';
 
 export function listUsers({ db }) {
   return db.prepare(`
@@ -41,19 +40,36 @@ export async function createUserCmd({ db, auth }, email, password) {
   }
 }
 
+function noStdinError() {
+  const err = new Error(
+    'Could not read a password: stdin is not connected.\n' +
+    'Run this with a terminal attached:\n' +
+    '  docker compose exec pullmd node scripts/admin.js ...\n' +
+    '  docker exec -it <container> node scripts/admin.js ...\n' +
+    'or pipe the password in:\n' +
+    '  echo "thepassword" | docker exec -i <container> node scripts/admin.js ...'
+  );
+  err.code = 'ENOSTDIN';
+  return err;
+}
+
 async function readPassword(prompt = 'New password: ') {
   process.stdout.write(prompt);
-  // Non-interactive stdin (a pipe, or a test): node:readline/promises
-  // question() returns a promise and ignores a callback, so it has to be
-  // awaited. Passing a callback here silently never fires and the process
-  // exits without having read anything.
+  // Non-interactive stdin (a pipe, or a test). Read the stream directly rather
+  // than through readline: readline neither settles when stdin is already at
+  // EOF - which is what `docker exec` without -i hands over, and used to make
+  // this exit 0 having done nothing - nor hands over a final line that arrives
+  // without a trailing newline.
   if (!process.stdin.isTTY) {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    try {
-      return await rl.question('');
-    } finally {
-      rl.close();
+    process.stdin.setEncoding('utf8');
+    let buf = '';
+    for await (const chunk of process.stdin) {
+      buf += chunk;
+      const nl = buf.indexOf('\n');
+      if (nl !== -1) return buf.slice(0, nl).replace(/\r$/, '');
     }
+    if (buf === '') throw noStdinError();
+    return buf;
   }
   return new Promise((resolve) => {
     process.stdin.setRawMode(true);
@@ -148,5 +164,13 @@ async function main() {
 const isDirectRun = import.meta.url === `file://${process.argv[1]}`
   || process.argv[1]?.endsWith('admin.js');
 if (isDirectRun) {
-  main().catch((err) => { console.error(err); process.exit(1); });
+  main().catch((err) => {
+    if (err?.code === 'ENOSTDIN') {
+      // An operator error, not a crash - a stack trace would only bury the fix.
+      console.error(`\n${err.message}`);
+      process.exit(2);
+    }
+    console.error(err);
+    process.exit(1);
+  });
 }
