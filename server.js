@@ -1023,18 +1023,14 @@ export function createApp(overrides = {}) {
     }
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error: 'Invalid ID' });
-    if (isGlobalScope(req)) {
-      const result = cache.delete(id);
-      if (!result.changes) {
-        return res.status(404).json({ error: 'Entry not found', id });
-      }
-      return res.json({ ok: true, id, scope: 'global' });
-    }
-    const result = cache.forgetForUser(req.user.id, id);
+    const global = isGlobalScope(req);
+    const result = global
+      ? cache.delete(id)
+      : cache.forgetForUser(req.user.id, id);
     if (!result.changes) {
       return res.status(404).json({ error: 'Entry not found', id });
     }
-    res.json({ ok: true, id, scope: 'user' });
+    res.json({ ok: true, id, scope: global ? 'global' : 'user' });
   });
 
   app.delete('/api/cache', gate, (req, res) => {
