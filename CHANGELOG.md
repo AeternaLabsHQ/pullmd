@@ -9,6 +9,16 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.7.1] - 2026-07-31
+
+### Documentation
+
+- **The in-app help page now documents the service as it ships** (#48). It had drifted to a v3.0 view: the extraction stack was described as "Readability + Turndown" (a dependency replaced by `node-html-markdown`, with Trafilatura and the headless-Chromium stage missing from the list entirely), and `comments` / `comment_depth` were still presented as Reddit-only although Hacker News has honored them since 3.1. New sections cover the endpoints (all 13, including `/api/stream`, archive, storage, stats, config and recipes status), the response headers (including `X-Transcript-Status` and the five `X-Extract-*` headers), query extraction, site recipes, and authentication. That last gap was the practical one: `/help` stays public when `PULLMD_AUTH_MODE` is set, but it never mentioned login, API keys or OAuth, so an instance could reject every API call without telling anyone how to authenticate. "Local HTML files" grew into a "converting files" section covering `/api/html`, `/api/file`, document URLs and images/audio/YouTube; the parameter table gained `render`, `extractor`, `pdf`, `yt_timecodes`, `yt_chunk` and `max_tokens`; and the drop-in agent prompt was synced with the README version plus `query`.
+- **README: SSRF protection documented.** The guard shipped in 3.3.0, but the README never mentioned it, so the default-deny behavior and the `PULLMD_ALLOWED_HOSTS` opt-out were only discoverable from the changelog or `.env.example`. Also adds `PULLMD_ALLOWED_HOSTS` and `PULLMD_SITE_RECIPES` to the configuration table, `/api/config` and `/api/recipes/status` to the endpoint table, `query` / `max_tokens` / `pdf=ocr` to the universal prompt, and a summary of what the 3.x line added after 3.0.
+- **Bundled Claude Code skill:** Hacker News (pipeline entry and `X-Source` value), `query` / `max_tokens` with an example and a usage tip, `X-Transcript-Status`, and the `X-Extract-*` headers.
+
+---
+
 ## [3.7.0] - 2026-07-31
 
 ### Added
@@ -334,6 +344,8 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.7.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.7.1
+[3.7.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.7.0
 [3.6.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.6.0
 [3.0.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.0.0
 [2.6.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v2.6.0
