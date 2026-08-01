@@ -458,7 +458,7 @@
     }
     .badge.neutral { background: var(--border); color: var(--fg-muted); }
 
-    #copy-btn, #permalink-copy-btn, #share-btn {
+    #copy-btn, #permalink-copy-btn, #share-btn, #download-btn {
       padding: 0.4375rem 0.875rem;
       font-size: 0.8125rem;
       font-weight: 500;
@@ -474,12 +474,12 @@
       align-items: center;
       gap: 0.375rem;
     }
-    #copy-btn:hover, #permalink-copy-btn:hover, #share-btn:hover {
+    #copy-btn:hover, #permalink-copy-btn:hover, #share-btn:hover, #download-btn:hover {
       border-color: var(--accent);
       color: var(--accent);
     }
-    #copy-btn:active, #permalink-copy-btn:active, #share-btn:active { transform: scale(0.97); }
-    #copy-btn.copied, #permalink-copy-btn.copied, #share-btn.copied {
+    #copy-btn:active, #permalink-copy-btn:active, #share-btn:active, #download-btn:active { transform: scale(0.97); }
+    #copy-btn.copied, #permalink-copy-btn.copied, #share-btn.copied, #download-btn.copied {
       background: var(--good-bg);
       border-color: var(--good);
       color: var(--good);
@@ -1058,6 +1058,11 @@
       .container { padding: 1.5rem 1rem 4rem; }
       .controls { gap: 0.5rem 0.875rem; }
       #go-btn { width: 100%; margin-left: 0; justify-content: center; }
+      /* Three action buttons plus the badges and the Raw|Rendered toggle do not
+         fit on a phone - collapse the buttons to their icons. The accessible
+         name survives via title/aria-label (set through data-i18n-attr). */
+      #copy-btn .label, #share-btn .label, #download-btn .label { display: none; }
+      #copy-btn, #share-btn, #download-btn { padding: 0.4375rem 0.625rem; }
     }
 
     .foot {
@@ -1283,13 +1288,17 @@
           <button type="button" data-mode="rendered" role="tab" aria-selected="false">Rendered</button>
         </div>
         <div class="result-actions">
-          <button id="copy-btn">
+          <button id="copy-btn" data-i18n-attr="title aria-label" data-i18n-attr-key="copy">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             <span class="label" data-i18n="copy">Kopieren</span>
           </button>
-          <button id="share-btn" type="button" style="display:none;">
+          <button id="share-btn" type="button" style="display:none;" data-i18n-attr="title aria-label" data-i18n-attr-key="share.btn">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
             <span class="label" data-i18n="share.btn">Teilen</span>
+          </button>
+          <button id="download-btn" type="button" data-i18n-attr="title aria-label" data-i18n-attr-key="download.btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            <span class="label" data-i18n="download.btn">Download</span>
           </button>
         </div>
       </div>
@@ -1419,6 +1428,7 @@
           'copied':            'Kopiert!',
           'share.btn':         'Teilen',
           'shared':            'Geteilt!',
+          'download.btn':      'Download',
           'hint':              'URL einfügen, dann',
           'section.recent':    'Letzte Abrufe',
           'archive.link':      'Archiv →',
@@ -1480,6 +1490,7 @@
           'copied':            'Copied!',
           'share.btn':         'Share',
           'shared':            'Shared!',
+          'download.btn':      'Download',
           'hint':              'Paste URL, then',
           'section.recent':    'Recent fetches',
           'archive.link':      'Archive →',
@@ -1664,6 +1675,7 @@
       const viewToggleEl = document.getElementById('view-toggle');
       const copyBtn = document.getElementById('copy-btn');
       const shareBtn = document.getElementById('share-btn');
+      const downloadBtn = document.getElementById('download-btn');
       const permalinkBar = document.getElementById('permalink-bar');
       const permalinkUrlEl = document.getElementById('permalink-url');
       const permalinkCopyBtn = document.getElementById('permalink-copy-btn');
@@ -1672,6 +1684,9 @@
       var rawMarkdown = '';
       var rawBody = '';
       var rawFrontmatter = '';
+      // Share id of the currently shown result, if the server minted one.
+      // Used as the download filename fallback when there is no title.
+      var currentShareId = '';
 
       var VIEW_MODE_KEY = 'pullmd-view-mode';
       var viewMode = 'raw';
@@ -1899,6 +1914,7 @@
         var parts = splitFrontmatter(text);
         rawFrontmatter = parts.frontmatter;
         rawBody = parts.body;
+        currentShareId = shareId || '';
         applyFrontmatterView();
         resultContainer.classList.add('visible');
         // Bring the result into view when triggered from a list entry deeper
@@ -1910,6 +1926,7 @@
         copyBtn.classList.remove('copied');
         shareBtn.querySelector('.label').textContent = t('share.btn');
         shareBtn.classList.remove('copied');
+        downloadBtn.querySelector('.label').textContent = t('download.btn');
         if (source) {
           var sc = sourceColors[source] || { bg: 'var(--border)', color: 'var(--fg-muted)' };
           sourceBadge.textContent = source;
@@ -2344,6 +2361,44 @@
           });
         });
       }
+
+      // Download: same payload the copy button hands out (rawMarkdown already
+      // reflects the frontmatter toggle). Unlike share this needs no browser
+      // capability check - Blob + <a download> works everywhere the PWA runs.
+      function slugifyFilename(s) {
+        return String(s)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/-{2,}/g, '-')
+          .replace(/^-+|-+$/g, '')
+          .slice(0, 60)
+          .replace(/-+$/, '');
+      }
+
+      function downloadFilename() {
+        var title = '';
+        var m = /^title:[ \t]*(.+)$/m.exec(rawFrontmatter);
+        // Frontmatter values may be quoted (lib/frontmatter.js quotes when the
+        // value needs escaping) - strip one surrounding pair.
+        if (m) title = m[1].trim().replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+        var base = slugifyFilename(title) || slugifyFilename(currentShareId) || 'pullmd';
+        return base + '.md';
+      }
+
+      downloadBtn.addEventListener('click', function () {
+        if (!rawMarkdown) return;
+        var blob = new Blob([rawMarkdown], { type: 'text/markdown;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = downloadFilename();
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        // Revoke only after the click has been handed to the browser, else
+        // Safari cancels the download.
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      });
 
       permalinkCopyBtn.addEventListener('click', function () {
         var url = permalinkUrlEl.textContent;
