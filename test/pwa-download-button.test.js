@@ -59,7 +59,13 @@ describe('PWA index.html: download button', () => {
     assert.match(handler[0], /URL\.revokeObjectURL\(url\)/);
   });
 
-  it('derives the filename from the frontmatter title, then share id, then a fallback', () => {
+  it('prefers the server suggestion over the client-side chain', () => {
+    const fn = html.match(/function downloadFilename\(\)[\s\S]*?\n      \}\n/);
+    assert.ok(fn, 'downloadFilename must exist');
+    assert.match(fn[0], /if \(currentSuggestedName\) return currentSuggestedName;/);
+  });
+
+  it('keeps the client-side fallback: frontmatter title, then share id, then a literal', () => {
     const fn = html.match(/function downloadFilename\(\)[\s\S]*?\n      \}\n/);
     assert.ok(fn, 'downloadFilename must exist');
     assert.match(fn[0], /title:/, 'must read title: out of the frontmatter');
@@ -69,6 +75,18 @@ describe('PWA index.html: download button', () => {
     assert.match(fn[0], /base \+ '\.md'/);
     // The share id must actually be captured when a result is shown.
     assert.match(html, /currentShareId = shareId \|\| '';/);
+  });
+
+  it('captures the server suggestion from every result path', () => {
+    // showResult owns the state, so a result without a suggestion resets it
+    // instead of inheriting the previous conversion's name.
+    assert.match(html, /function showResult\(text, source, shareId, suggestedName\)/);
+    assert.match(html, /currentSuggestedName = suggestedName \|\| '';/);
+    // Plain /api + the two upload routes read the header; the SSE path has no
+    // headers by then and carries the name in the result event payload.
+    const headerReads = html.match(/res\.headers\.get\('X-Suggested-Filename'\)/g) || [];
+    assert.equal(headerReads.length, 3, 'the /api, /api/html and /api/file fetches must read the header');
+    assert.match(html, /d\.suggestedFilename \|\| ''/);
   });
 
   it('slugifies dependency-free: lowercase, dashes, collapsed, trimmed, capped', () => {

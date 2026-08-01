@@ -1690,6 +1690,10 @@
       // Share id of the currently shown result, if the server minted one.
       // Used as the download filename fallback when there is no title.
       var currentShareId = '';
+      // X-Suggested-Filename from the server, when the response carried one.
+      // Empty on the SSE path and against older servers - the client-side
+      // fallback chain in downloadFilename() covers those.
+      var currentSuggestedName = '';
 
       var VIEW_MODE_KEY = 'pullmd-view-mode';
       var viewMode = 'raw';
@@ -1911,13 +1915,14 @@
         setCharsBadge(rawMarkdown.length);
       }
 
-      function showResult(text, source, shareId) {
+      function showResult(text, source, shareId, suggestedName) {
         hideLoading();
         errorEl.classList.remove('visible');
         var parts = splitFrontmatter(text);
         rawFrontmatter = parts.frontmatter;
         rawBody = parts.body;
         currentShareId = shareId || '';
+        currentSuggestedName = suggestedName || '';
         applyFrontmatterView();
         resultContainer.classList.add('visible');
         // Bring the result into view when triggered from a list entry deeper
@@ -2058,7 +2063,7 @@
                 resolve();
                 return;
               }
-              showResult(d.markdown, d.source || '', d.shareId || '');
+              showResult(d.markdown, d.source || '', d.shareId || '', d.suggestedFilename || '');
               resolve();
             } catch (err) { es.close(); cleanup(); reject(err); }
           });
@@ -2112,12 +2117,13 @@
           }
           var source = res.headers.get('X-Source') || '';
           var shareId = res.headers.get('X-Share-Id') || '';
+          var suggestedName = res.headers.get('X-Suggested-Filename') || '';
           const text = await res.text();
           if (!text.trim()) {
             showError(t('err.empty'));
             return;
           }
-          showResult(text, source, shareId);
+          showResult(text, source, shareId, suggestedName);
         } catch (err) {
           if (err.name === 'AbortError') return;
           showError(t('err.network'));
@@ -2252,7 +2258,7 @@
             }
             var d = await res.json();
             if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
-            showResult(d.markdown, d.source || '', '');
+            showResult(d.markdown, d.source || '', '', res.headers.get('X-Suggested-Filename') || '');
           } catch (err) {
             showError(t('err.network'));
           }
@@ -2290,7 +2296,7 @@
             }
             var d = await res.json();
             if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
-            showResult(d.markdown, d.source || '', '');
+            showResult(d.markdown, d.source || '', '', res.headers.get('X-Suggested-Filename') || '');
           } catch (err) {
             showError(t('err.network'));
           }
@@ -2379,6 +2385,9 @@
       }
 
       function downloadFilename() {
+        // The server knows the extraction source and the original URL, so its
+        // suggestion wins whenever there is one (see lib/filename.js).
+        if (currentSuggestedName) return currentSuggestedName;
         var title = '';
         var m = /^title:[ \t]*(.+)$/m.exec(rawFrontmatter);
         // Frontmatter values may be quoted (lib/frontmatter.js quotes when the

@@ -745,6 +745,10 @@ Then: claude mcp list to verify.</pre>
             <td lang="de">8-stellige Hex-ID, aufrufbar als <code>/s/&lt;id&gt;</code>. Fehlt bei <code>/api/html</code> und <code>/api/file</code>, weil lokale Dateien nicht gecacht werden.</td>
             <td lang="en">8-hex id, openable as <code>/s/&lt;id&gt;</code>. Absent on <code>/api/html</code> and <code>/api/file</code>, since local files are never cached.</td>
           </tr>
+          <tr><td><code>X-Suggested-Filename</code></td>
+            <td lang="de">Vorgeschlagener Dateiname für den Download, z. B. <code>YT-vortrag-titel-dQw4w9WgXcQ.md</code>. YouTube bekommt Titel plus Video-ID, Bilder, Audio und Dokumente den ursprünglichen Dateinamen, alles andere den Titel. Self-Hoster können mit <code>PULLMD_FILENAME_DATE_PREFIX</code> ein Datum voranstellen.</td>
+            <td lang="en">Suggested download filename, e.g. <code>YT-talk-title-dQw4w9WgXcQ.md</code>. YouTube gets title plus video id, images, audio and documents keep their original file name, everything else uses the title. Self-hosters can prepend a date with <code>PULLMD_FILENAME_DATE_PREFIX</code>.</td>
+          </tr>
           <tr><td><code>X-Transcript-Status</code></td>
             <td lang="de">Nur YouTube: <code>ok</code> · <code>none</code> · <code>blocked</code> · <code>error</code>. <code>blocked</code> (Rate-Limit, HTTP 429) und <code>error</code> sind vorübergehend und werden nicht gecacht - später erneut versuchen. <code>none</code> heißt, das Video hat wirklich kein Transkript.</td>
             <td lang="en">YouTube only: <code>ok</code> · <code>none</code> · <code>blocked</code> · <code>error</code>. <code>blocked</code> (rate limit, HTTP 429) and <code>error</code> are transient and not cached - retry later. <code>none</code> means the video genuinely has no transcript.</td>

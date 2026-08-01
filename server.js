@@ -8,6 +8,7 @@ import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
 import { qualityScore } from './lib/scoring.js';
 import { buildFrontmatter, mergeMediaFrontmatter, mergeFrontmatter, validateFrontmatterFields } from './lib/frontmatter.js';
 import { queryExtract } from './lib/query-extract.js';
+import { suggestFilename } from './lib/filename.js';
 import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
@@ -113,6 +114,25 @@ export function createApp(overrides = {}) {
   const auth = overrides.auth || null;
   const oauth = overrides.oauth || null;
   const disablePublicHistory = overrides.disablePublicHistory ?? readDisablePublicHistoryEnv();
+  // Optional date prefix for the suggested download filename, e.g.
+  // "YYYY-MM-DD-HH-mm-ss-". Unset = no prefix.
+  const filenameDatePrefix = overrides.filenameDatePrefix ?? (process.env.PULLMD_FILENAME_DATE_PREFIX || '');
+
+  // Suggest a download filename to the client. Cosmetic by nature: a failure
+  // here must never cost the caller their markdown, hence the swallowed catch.
+  function filenameFor(opts) {
+    try {
+      return suggestFilename({ ...opts, datePrefixFormat: filenameDatePrefix, now: new Date() });
+    } catch (err) {
+      console.warn('Suggested-filename generation failed:', err.message);
+      return null;
+    }
+  }
+
+  function setFilenameHeader(res, opts) {
+    const name = filenameFor(opts);
+    if (name) res.set('X-Suggested-Filename', name);
+  }
 
   const gate = auth ? auth.requireAuth() : (req, res, next) => next();
 
@@ -285,6 +305,15 @@ export function createApp(overrides = {}) {
       }
     }
 
+    // Prefer the H1 of what we are about to serve over the stored title: after
+    // a refresh the row in hand is the pre-refresh one.
+    setFilenameHeader(res, {
+      source: entry.source,
+      title: markdown.match(/^#\s+(.+)$/m)?.[1] || entry.title,
+      url: entry.url,
+      shareId: req.params.id,
+    });
+
     const format = req.query.format;
     if (format === 'text') {
       res.set('Content-Type', 'text/plain; charset=utf-8');
@@ -389,6 +418,7 @@ export function createApp(overrides = {}) {
           res.set('X-Source', cached.source);
           res.set('X-Quality', String(cachedQuality));
           if (cached.share_id) res.set('X-Share-Id', cached.share_id);
+          setFilenameHeader(res, { source: cached.source, title: outMeta.title, url, shareId: cached.share_id });
           if (ex) setExtractHeaders(res, ex);
           if (cache) cache.logExtraction({
             url, source: cached.source, quality: cachedQuality, markdownLen: baseMd.length,
@@ -452,6 +482,7 @@ export function createApp(overrides = {}) {
         res.set('X-Source', 'reddit');
         res.set('X-Quality', String(quality));
         if (shareId) res.set('X-Share-Id', shareId);
+        setFilenameHeader(res, { source: 'reddit', title: titleMatch?.[1] || null, url, shareId });
         if (ex) setExtractHeaders(res, ex);
         if (cache) cache.logExtraction({
           url, source: 'reddit', quality, markdownLen: baseMd.length,
@@ -534,6 +565,7 @@ export function createApp(overrides = {}) {
         res.set('X-Source', 'hackernews');
         res.set('X-Quality', String(quality));
         if (shareId) res.set('X-Share-Id', shareId);
+        setFilenameHeader(res, { source: 'hackernews', title: titleMatch?.[1] || null, url, shareId });
         if (ex) setExtractHeaders(res, ex);
         if (cache) cache.logExtraction({
           url, source: 'hackernews', quality, markdownLen: baseMd.length,
@@ -603,6 +635,12 @@ export function createApp(overrides = {}) {
       if (ex && wantFrontmatter) outMd = mergeFrontmatter(outMd, extractFrontmatterFields(ex));
 
       res.set('X-Source', result.source);
+      setFilenameHeader(res, {
+        source: result.source,
+        title: result.metadata?.title || result.title,
+        url,
+        shareId,
+      });
       if (result.transcriptStatus) res.set('X-Transcript-Status', result.transcriptStatus);
       if (result.metadata?.quality !== undefined) {
         res.set('X-Quality', String(result.metadata.quality));
@@ -682,6 +720,14 @@ export function createApp(overrides = {}) {
       const finalMd = fm + result.markdown;
 
       res.set('X-Source', result.source);
+      // The upload has no URL of its own - the original file name is the next
+      // best basename source for the fallback chain.
+      setFilenameHeader(res, {
+        source: result.source,
+        title: result.metadata?.title || result.title,
+        url: url || filename,
+        shareId: null,
+      });
       if (result.metadata?.quality !== undefined) {
         res.set('X-Quality', String(result.metadata.quality));
       }
@@ -748,6 +794,14 @@ export function createApp(overrides = {}) {
         : finalMd;
 
       res.set('X-Source', result.source);
+      // Uploaded documents are exactly the case the file-source rule exists for:
+      // the original file name beats a title guessed out of the document.
+      setFilenameHeader(res, {
+        source: result.source,
+        title: result.metadata?.title || result.title,
+        url: filename,
+        shareId: null,
+      });
       if (result.metadata?.quality !== undefined) {
         res.set('X-Quality', String(result.metadata.quality));
       }
@@ -832,6 +886,14 @@ export function createApp(overrides = {}) {
                 : fm + baseMd,
               source: cached.source,
               shareId: cached.share_id || null,
+              // SSE headers are long gone by the time the result exists, so the
+              // suggestion travels in the payload instead of X-Suggested-Filename.
+              suggestedFilename: filenameFor({
+                source: cached.source,
+                title: titleMatchCached?.[1] || cached.title,
+                url,
+                shareId: cached.share_id,
+              }),
             });
             cache.logExtraction({
               url, source: cached.source, quality: cachedQuality, markdownLen: (fm + baseMd).length,
@@ -870,7 +932,10 @@ export function createApp(overrides = {}) {
         const outMdReddit = wantFrontmatter
           ? mergeMediaFrontmatter(fm + baseMd, redditMeta, 'reddit')
           : fm + baseMd;
-        send('result', { markdown: outMdReddit, source: 'reddit', shareId: shareId || null });
+        send('result', {
+          markdown: outMdReddit, source: 'reddit', shareId: shareId || null,
+          suggestedFilename: filenameFor({ source: 'reddit', title: titleMatch?.[1] || null, url, shareId }),
+        });
         if (cache) cache.logExtraction({ url, source: 'reddit', quality, markdownLen: baseMd.length, extractorReason: null, durationMs: Date.now() - t0, client, cached: false });
         return res.end();
       }
@@ -901,7 +966,10 @@ export function createApp(overrides = {}) {
           const outMdHn = wantFrontmatter
             ? mergeMediaFrontmatter(fm + baseMd, hnMeta, 'hackernews')
             : fm + baseMd;
-          send('result', { markdown: outMdHn, source: 'hackernews', shareId: shareId || null });
+          send('result', {
+            markdown: outMdHn, source: 'hackernews', shareId: shareId || null,
+            suggestedFilename: filenameFor({ source: 'hackernews', title: titleMatch?.[1] || null, url, shareId }),
+          });
           if (cache) cache.logExtraction({ url, source: 'hackernews', quality, markdownLen: baseMd.length, extractorReason: null, durationMs: Date.now() - t0, client, cached: false });
           return res.end();
         } catch (err) {
@@ -936,7 +1004,16 @@ export function createApp(overrides = {}) {
         ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
         : finalMd;
 
-      send('result', { markdown: outMd, source: result.source, shareId: shareId || null, transcriptStatus: result.transcriptStatus || null });
+      send('result', {
+        markdown: outMd, source: result.source, shareId: shareId || null,
+        transcriptStatus: result.transcriptStatus || null,
+        suggestedFilename: filenameFor({
+          source: result.source,
+          title: result.metadata?.title || result.title,
+          url,
+          shareId,
+        }),
+      });
       if (cache) cache.logExtraction({
         url, source: result.source,
         quality: result.metadata?.quality,
