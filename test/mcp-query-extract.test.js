@@ -96,6 +96,28 @@ describe('MCP read_url - query-extract: tool schema', () => {
     assert.ok(props.query, 'query param must be present');
     assert.ok(props.max_tokens, 'max_tokens param must be present');
   });
+
+  // Discoverability regression: agents only reach for `query` if the schema
+  // tells them WHEN to use it. Assert on content markers, not exact strings,
+  // so wording can be polished but a silent revert to a mechanism-only
+  // description ("BM25 over the converted markdown") fails here.
+  it('describes query by its trigger condition, not its mechanism', async () => {
+    const app = createApp({ cache: createCache(':memory:') });
+    const j = await listTools(app);
+    const readUrl = j.result.tools.find(t => t.name === 'read_url');
+    const props = readUrl.inputSchema.properties;
+
+    assert.match(readUrl.description, /query/i, 'tool description must mention query');
+
+    const q = props.query.description;
+    assert.match(q, /when you need|Set this when/i, 'query must state its trigger condition');
+    assert.ok(!/bm25/i.test(q), 'query description must not name the mechanism (BM25)');
+    assert.match(q, /70-95%/, 'query description must keep the token-saving figure');
+    assert.match(q, /natural language/i, 'query description must ask for natural language');
+
+    const mt = props.max_tokens.description;
+    assert.match(mt, /no effect without/i, 'max_tokens must state it is inert without query');
+  });
 });
 
 describe('MCP read_url - query-extract: byte-identical without query', () => {

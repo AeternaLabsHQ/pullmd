@@ -54,8 +54,8 @@ The response is `text/markdown` — ready to use as-is.
 | `pdf`           | —       | `ocr` → high-quality OCR conversion for PDFs (table-grade output; needs a server-side OCR key). Bypasses cache. |
 | `yt_timecodes`  | `links` | YouTube transcripts: `links` (clickable timestamps), `plain` (`[MM:SS]`), `none`. |
 | `yt_chunk`      | `30`    | YouTube transcript block size in seconds; `0` = per original snippet.       |
-| `query`         | —       | Return only the sections relevant to this text instead of the whole page (BM25 over the converted Markdown, no LLM). Empty/absent = full page, unchanged. |
-| `max_tokens`    | `600`   | Token budget for `query` (64–20000). Only validated when `query` is set.     |
+| `query`         | —       | Set this when you need specific information from a page rather than the whole document: pass the question you are trying to answer, in natural language, and get back only the matching sections - typically 70-95% fewer tokens on long pages. No LLM involved. Empty/absent = full page, unchanged. |
+| `max_tokens`    | `600`   | Token budget for `query` (64–20000). No effect without `query`. Raise it when the answer likely spans several sections; leave the default for single-fact lookups. Only validated when `query` is set. |
 | `lang`          | `de`    | Language for the comments-section header (`de` or `en`).                    |
 
 **Response headers worth checking:**
@@ -134,7 +134,7 @@ Need to read a URL?
 
 - PullMD caches results for 1 hour. Use `nocache=true` if you need the latest version. `render=force|skip`, `extractor=`, `pdf=ocr`, and explicit `yt_*` params also bypass the cache.
 - For pages with important comments or discussions (forums, HN, Reddit), add `comments=true` to include the discussion below the post. Reddit and Hacker News URLs are auto-detected and use dedicated pipelines; `comment_depth` controls how deep the tree goes.
-- When the page is long and you only need one aspect of it, add `query=<what you are looking for>` instead of pulling the whole thing — it returns just the matching sections and reports the token saving in `X-Extract-*`. It falls back to the full page when nothing matches, so it is safe to try.
+- When you need specific information from a page rather than the whole document, add `query=<the question you are trying to answer>`, phrased in natural language - it returns just the matching sections (typically 70-95% fewer tokens on long pages) and reports the saving in `X-Extract-*`. It falls back to the full page when nothing matches, so it is safe to try. Omit it only when you genuinely need the complete document - summarizing, translating, archiving.
 - For JS-rendered apps where the auto-fallback didn't fire (e.g. content lives in a tab the heuristic didn't reach), `render=force` re-extracts via headless Chromium.
 - Reddit URLs are automatically detected (incl. `redd.it` short links and `/r/<sub>/s/<id>` share links) and use a specialized extraction pipeline that handles posts, comments, galleries, and videos.
 - Add `frontmatter=true` when you want metadata: extraction source and quality always; for Reddit posts also subreddit, author, upvotes, and publish date; for media/YouTube/OCR results duration, image size, and LLM token usage (cost tracking).

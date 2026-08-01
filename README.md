@@ -354,7 +354,8 @@ Returns clean Markdown (text/markdown). Optional query params:
   nocache=true          bypass the 1h cache and refetch
   render=force|skip     override the auto Playwright fallback
   pdf=ocr               high-quality PDF conversion (tables)
-  query=<text>          return only the sections relevant to <text>
+  query=<text>          got a specific question? pass it and get back only
+                        the matching sections (70-95% fewer tokens)
   max_tokens=N          budget for query= (default 600, 64-20000)
   lang=de|en            language for the comments section header
 
@@ -370,8 +371,9 @@ Reddit URLs are auto-detected (incl. redd.it short links and /s/ shares).
 Hacker News URLs are auto-detected too — items, comment permalinks, and the
 front/newest/ask/show/jobs listings.
 Use this whenever you would otherwise fetch raw HTML — the markdown is
-much cleaner and saves significant context window space. For a long page
-where you only need one thing, add query= and get just that.
+much cleaner and saves significant context window space. When you only
+need specific information rather than the whole document, pass your
+question as query= and get back just the relevant sections.
 ```
 
 ### 2. Claude Code skill
@@ -509,8 +511,8 @@ for it.
 | `pdf`           | —       | `ocr` → route PDFs through the [OCR tier](#high-quality-pdf-ocr). Bypasses cache.  |
 | `yt_timecodes` / `yt_chunk` | see [YouTube](#youtube-transcripts) | Transcript format overrides. Bypass cache when set. |
 | `lang`          | `de`    | Comments-section header language (`de` or `en`).                                   |
-| `query`         | —       | Return only the sections relevant to this text instead of the full page (see [Query-scoped extraction](#query-scoped-extraction)). Empty/whitespace-only is treated as absent — output is unchanged. |
-| `max_tokens`    | `600`   | Token budget for `query` extraction (`64`–`20000`). Only validated when `query` is non-empty; an invalid value returns `400`. |
+| `query`         | —       | Set this when you need specific information from a page rather than the whole document: pass the question, get back only the matching sections (see [Query-scoped extraction](#query-scoped-extraction)). Empty/whitespace-only is treated as absent — output is unchanged. |
+| `max_tokens`    | `600`   | Token budget for `query` extraction (`64`–`20000`). No effect without `query`; raise it when the answer likely spans several sections. Only validated when `query` is non-empty; an invalid value returns `400`. |
 
 Both `query` and `max_tokens` are also available on the MCP `read_url` tool.
 
@@ -527,9 +529,11 @@ Both `query` and `max_tokens` are also available on the MCP `read_url` tool.
 
 ### Query-scoped extraction
 
-Pass `?query=<text>` on `GET /api` (or the `query` param on the MCP `read_url`
-tool) to get back only the sections of the page relevant to that text instead
-of the full Markdown body:
+When you have a specific question about a long page, you rarely need the whole
+document. Pass the question as `?query=<text>` on `GET /api` (or the `query`
+param on the MCP `read_url` tool) to get back only the sections relevant to it
+instead of the full Markdown body - typically 70-95% fewer tokens on long
+pages:
 
 ```
 GET /api?url=https://example.com/long-article&query=how+does+caching+work
