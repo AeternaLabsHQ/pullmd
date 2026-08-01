@@ -484,7 +484,10 @@
       border-color: var(--good);
       color: var(--good);
     }
-    .result-actions { display: inline-flex; align-items: center; gap: 0.375rem; }
+    /* margin-left:auto keeps the actions pinned right even when flex-wrap
+       moves them to their own line - space-between alone left-aligns a
+       single wrapped item, which breaks the muscle memory for Copy. */
+    .result-actions { display: inline-flex; align-items: center; gap: 0.375rem; margin-left: auto; }
 
     .permalink-bar {
       display: none;
