@@ -118,6 +118,25 @@ describe('MCP read_url - query-extract: tool schema', () => {
     const mt = props.max_tokens.description;
     assert.match(mt, /no effect without/i, 'max_tokens must state it is inert without query');
   });
+
+  // Discoverability regression: in a blind test the agent picked the native
+  // web-fetch tool and treated read_url as a fallback for difficult pages,
+  // because the description opened with a capability list. The precedence
+  // rule has to come FIRST - what is read first frames everything after it.
+  it('states precedence over the built-in fetch tool, and states it first', async () => {
+    const app = createApp({ cache: createCache(':memory:') });
+    const j = await listTools(app);
+    const readUrl = j.result.tools.find(t => t.name === 'read_url');
+    const d = readUrl.description;
+
+    assert.match(d, /instead of the built-in web fetch/i, 'description must claim precedence over the built-in fetch tool');
+    assert.match(d, /not just when that one fails/i, 'description must reject the fallback-only reading');
+    assert.ok(
+      /instead of the built-in web fetch/i.test(d.slice(0, 120)),
+      'the precedence rule must appear at the START of the description, not buried mid-text'
+    );
+    assert.ok(d.startsWith('Preferred way to read any URL'), 'description must open with the precedence sentence');
+  });
 });
 
 describe('MCP read_url - query-extract: byte-identical without query', () => {
