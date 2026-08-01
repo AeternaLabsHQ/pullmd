@@ -63,6 +63,8 @@ web pages exactly like v2, just with a cleaner body by default.
 - **[Query-scoped extraction](#query-scoped-extraction)** (3.4) - `?query=` returns only the sections relevant to a question, with a `max_tokens` budget.
 - **[Site recipes opened up](#site-recipes)** (3.5/3.6) - JSON-LD-to-frontmatter, a contributor guide, and `select.content` so a recipe can name the article body outright.
 - **Coverage guard** (3.7) - recovers pages where extraction kept only a sliver of the body; see [`PULLMD_COVERAGE_GUARD`](#configuration).
+- **Account controls** (3.8) - a non-admin can clear entries from their own history, self-registration can be closed with [`PULLMD_ALLOW_SIGNUP`](#configuration), and `scripts/admin.js create-user` creates accounts from the shell.
+- **Download button** (3.9) - the PWA saves a result as a `.md` file, named by the server via [`X-Suggested-Filename`](#response-headers) and optionally date-prefixed.
 
 ---
 

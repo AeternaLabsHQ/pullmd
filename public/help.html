@@ -325,6 +325,8 @@
         <li><strong>Query-Extraktion</strong> (v3.4) - <code>?query=</code> liefert nur die zur Frage passenden Abschnitte statt der ganzen Seite, siehe <a href="#query">Query-Extraktion</a>.</li>
         <li><strong>Site-Recipes</strong> (v3.5/v3.6) - pro Host konfigurierbare Extraktion, inklusive Frontmatter aus JSON-LD und <code>select.content</code>, um den Artikel-Body direkt zu benennen.</li>
         <li><strong>Coverage Guard</strong> (v3.7) - erkennt Extraktionen, die nur einen Bruchteil der Seite behalten haben, und holt den fehlenden Teil nach.</li>
+        <li><strong>Kontenverwaltung</strong> (v3.8) - wer kein Admin ist, kann Einträge aus der eigenen Historie löschen; die Selbstregistrierung lässt sich schließen, und Konten lassen sich per CLI anlegen, siehe <a href="#auth">Authentifizierung</a>.</li>
+        <li><strong>Download-Button</strong> (v3.9) - speichert das Ergebnis als <code>.md</code>-Datei; den Dateinamen schlägt der Server vor (<code>X-Suggested-Filename</code>), auf Wunsch mit Datums-Präfix.</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li><strong>Hacker News</strong> (v3.1) - a dedicated pipeline for items, comment permalinks and listings, producing a clean nested comment tree instead of layout-table soup.</li>
@@ -334,6 +336,8 @@
         <li><strong>Query extraction</strong> (v3.4) - <code>?query=</code> returns only the sections relevant to your question instead of the whole page, see <a href="#query">Query extraction</a>.</li>
         <li><strong>Site recipes</strong> (v3.5/v3.6) - per-host extraction tuning, including frontmatter from JSON-LD and <code>select.content</code> to name the article body outright.</li>
         <li><strong>Coverage guard</strong> (v3.7) - detects extractions that kept only a sliver of the page and recovers the rest.</li>
+        <li><strong>Account controls</strong> (v3.8) - a non-admin can delete entries from their own history, self-registration can be closed, and accounts can be created from the CLI, see <a href="#auth">Authentication</a>.</li>
+        <li><strong>Download button</strong> (v3.9) - saves the result as a <code>.md</code> file, named by the server (<code>X-Suggested-Filename</code>), optionally with a date prefix.</li>
       </ul>
     </section>
 
