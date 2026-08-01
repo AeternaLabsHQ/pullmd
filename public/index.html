@@ -716,6 +716,18 @@
       white-space: pre;
     }
 
+    /* Frontmatter box in the rendered view: same code-block tokens, only
+       quieter and tighter, so it reads as metadata above the article. */
+    #result-rendered pre.fm-block {
+      margin: 0 0 1.25rem;
+      font-size: 0.75rem;
+    }
+    #result-rendered pre.fm-block code {
+      color: var(--fg-muted);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
     #result-rendered blockquote {
       margin: 0.75rem 0;
       padding: 0.125rem 0 0.125rem 0.875rem;
@@ -1688,15 +1700,36 @@
         window.marked.setOptions({ gfm: true, breaks: false, pedantic: false });
       }
 
+      // `---\nkey: value\n---\n\n` -> `key: value`. Inside a code box the fences
+      // are just markdown delimiters with nothing left to delimit, so they go.
+      function frontmatterInner(fm) {
+        var m = /^---\n([\s\S]*?)\n---/.exec(fm);
+        return (m ? m[1] : fm).replace(/\s+$/, '');
+      }
+
+      // Frontmatter is YAML, not markdown: parsed by marked, `key: value`
+      // followed by `---` becomes a setext heading and the whole block turns
+      // into one giant title. So only the body goes through marked, and the
+      // block is prepended as a plain code box when the toggle asks for it.
       function renderRenderedView() {
         if (!window.marked || !window.DOMPurify) {
           resultRenderedEl.textContent = rawMarkdown;
           renderedStale = false;
           return;
         }
-        var html = window.marked.parse(rawMarkdown || '');
+        var html = window.marked.parse(rawBody || '');
         var clean = window.DOMPurify.sanitize(html, PURIFY_CONFIG);
         resultRenderedEl.innerHTML = clean;
+        if (frontmatterToggle.checked && rawFrontmatter) {
+          var pre = document.createElement('pre');
+          pre.className = 'fm-block';
+          var code = document.createElement('code');
+          // textContent, never innerHTML: the block carries user-controlled
+          // page titles and URLs and must never be parsed as markup.
+          code.textContent = frontmatterInner(rawFrontmatter);
+          pre.appendChild(code);
+          resultRenderedEl.insertBefore(pre, resultRenderedEl.firstChild);
+        }
         var links = resultRenderedEl.querySelectorAll('a');
         for (var i = 0; i < links.length; i++) {
           links[i].setAttribute('target', '_blank');
