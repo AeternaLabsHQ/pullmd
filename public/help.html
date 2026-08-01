@@ -447,7 +447,8 @@ Returns clean Markdown (text/markdown). Optional query params:
   render=force|skip     override the auto headless-Chromium fallback
   extractor=readability|trafilatura|playwright   force one extractor
   pdf=ocr               high-quality PDF conversion (tables)
-  query=<text>          return only the sections relevant to <text>
+  query=&lt;text&gt;          got a specific question? pass it and get back only
+                        the matching sections (70-95% fewer tokens)
   max_tokens=N          budget for query= (default 600, 64-20000)
   lang=de|en            language for the comments section header
 
@@ -464,8 +465,9 @@ Reddit URLs are auto-detected (incl. redd.it short links and /s/ shares).
 Hacker News URLs are auto-detected too — items, comment permalinks, and the
 front/newest/ask/show/jobs listings.
 Use this whenever you would otherwise fetch raw HTML — the markdown is
-much cleaner and saves significant context window space. For a long page
-where you only need one thing, add query= and get just that.</pre>
+much cleaner and saves significant context window space. When you only
+need specific information rather than the whole document, pass your
+question as query= and get back just the relevant sections.</pre>
       </div>
 
       <h3 lang="de">Option 2 — Claude Code Skill</h3>
@@ -704,12 +706,12 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">Language for the comments header (<code>de</code> or <code>en</code>).</td>
           </tr>
           <tr><td><code>query</code></td><td>—</td>
-            <td lang="de">Liefert nur die zur Anfrage passenden Abschnitte statt der ganzen Seite, siehe <a href="#query">Query-Extraktion</a>.</td>
-            <td lang="en">Returns only the sections relevant to this text instead of the whole page, see <a href="#query">Query extraction</a>.</td>
+            <td lang="de">Für eine konkrete Frage an eine lange Seite: Frage hier übergeben, zurück kommen nur die passenden Abschnitte statt der ganzen Seite, siehe <a href="#query">Query-Extraktion</a>.</td>
+            <td lang="en">For a specific question about a long page: pass the question here and get back only the matching sections instead of the whole page, see <a href="#query">Query extraction</a>.</td>
           </tr>
           <tr><td><code>max_tokens</code></td><td><code>600</code></td>
-            <td lang="de">Token-Budget für <code>query</code> (64–20000). Wird nur geprüft, wenn <code>query</code> gesetzt ist; ein ungültiger Wert liefert <code>400</code>.</td>
-            <td lang="en">Token budget for <code>query</code> (64–20000). Only validated when <code>query</code> is set; an invalid value returns <code>400</code>.</td>
+            <td lang="de">Token-Budget für <code>query</code> (64–20000). Ohne <code>query</code> wirkungslos; höher setzen, wenn die Antwort über mehrere Abschnitte verteilt liegt. Wird nur geprüft, wenn <code>query</code> gesetzt ist; ein ungültiger Wert liefert <code>400</code>.</td>
+            <td lang="en">Token budget for <code>query</code> (64–20000). No effect without <code>query</code>; raise it when the answer likely spans several sections. Only validated when <code>query</code> is set; an invalid value returns <code>400</code>.</td>
           </tr>
         </tbody>
       </table>
@@ -772,8 +774,8 @@ Then: claude mcp list to verify.</pre>
     <!-- ===================================================== -->
     <section id="query">
       <h2><span lang="de">Query-Extraktion</span><span lang="en">Query extraction</span><span class="kicker">?query=</span></h2>
-      <p lang="de">Bei langen Seiten braucht ein Agent selten alles. <code>?query=</code> liefert nur die Abschnitte, die zur Frage passen:</p>
-      <p lang="en">On long pages an agent rarely needs everything. <code>?query=</code> returns just the sections that match:</p>
+      <p lang="de">Wer eine konkrete Frage an eine lange Seite hat, braucht selten die ganze Seite. <code>?query=</code> nimmt die Frage in natürlicher Sprache entgegen und liefert nur die passenden Abschnitte - auf langen Seiten typischerweise 70-95 % weniger Tokens. Die ganze Seite lohnt sich dann noch, wenn man sie wirklich komplett braucht: zusammenfassen, übersetzen, archivieren.</p>
+      <p lang="en">When you have a specific question about a long page, you rarely need the whole page. <code>?query=</code> takes that question in natural language and returns only the matching sections - typically 70-95% fewer tokens on long pages. Fetching the full page still makes sense when you genuinely need all of it: summarizing, translating, archiving.</p>
       <div class="copybox">
         <div class="copybox-header">
           <span class="copybox-label">example</span>

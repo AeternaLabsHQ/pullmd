@@ -9,6 +9,14 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- **`query` is now described by when to use it, not by how it works.** The MCP `read_url` schema, the bundled Claude Code skill, the README and the in-app help page all described the parameter mechanically ("return only the sections relevant to this text", "BM25 over the converted Markdown"), which told an agent what the feature does but never that it should reach for it. In practice the parameter went unused: a model reading the old description had no trigger condition to match against. All four surfaces now lead with the trigger - when you need specific information from a page rather than the whole document, pass the question you are trying to answer, in natural language - name the payoff (typically 70-95% fewer tokens on long pages), and frame the full-page fetch as the case that needs a reason (summarizing, translating, archiving). `max_tokens` additionally states that it has no effect without `query`. Text only: no parameter, default, validation or response shape changed, and nothing changes for an existing integration except how likely an agent is to use the parameter at all.
+
+---
+
 ## [3.8.0] - 2026-07-31
 
 ### Added
