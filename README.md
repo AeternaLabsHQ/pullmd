@@ -26,7 +26,7 @@ emits a leaner, token-efficient body by default. See
 
 It ships as:
 
-- a **PWA frontend** with raw/rendered and live-frontmatter view toggles, one-tap sharing of the output to other apps (Web Share API), dark/paper themes, history, archive, share links, and conversion of local HTML files (drag-and-drop on desktop, file picker on desktop and mobile)
+- a **PWA frontend** with raw/rendered and live-frontmatter view toggles, one-tap sharing of the output to other apps (Web Share API), a download button that saves the result as a `.md` file under the server-suggested name, dark/paper themes, history, archive, share links, and conversion of local HTML files (drag-and-drop on desktop, file picker on desktop and mobile)
 - a **REST API** at `GET /api?url=…`
 - an **MCP server** at `POST /mcp` (Streamable-HTTP transport, stateless)
 - a **Claude Code skill** as a downloadable zip
@@ -273,6 +273,12 @@ Create an account without opening self-registration (useful when
 docker compose exec pullmd node scripts/admin.js create-user someone@example.com
 ```
 
+Both commands read the password from stdin, so they need it attached:
+`docker compose exec`, `docker exec -it`, or a pipe
+(`echo "…" | docker exec -i <container> node scripts/admin.js …`). A plain
+`docker exec` without `-i` aborts with an error and exit code 2 instead of
+doing nothing.
+
 ### Auth boundary
 
 | Endpoint                                                         | Auth required (when mode != disabled) |
@@ -342,7 +348,8 @@ below with your hostname (e.g. `https://pullmd.example.com`).
 Drop into any chat agent (ChatGPT, Claude, Gemini, …):
 
 ```
-When you need to read a web page, fetch via PullMD instead of raw HTML:
+When you need to read a web page, fetch it via PullMD instead of your
+built-in fetch/browse tool - not just when that one fails:
 
   GET ${PULLMD_URL}/api?url=<URL>
 
@@ -522,6 +529,7 @@ Both `query` and `max_tokens` are also available on the MCP `read_url` tool.
 - `X-Source` — `reddit` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
 - `X-Quality` — `0.0`–`1.0` extraction confidence
 - `X-Share-Id` — the 8-hex permalink id
+- `X-Suggested-Filename` — a download filename for this conversion, e.g. `YT-some-talk-dQw4w9WgXcQ.md`. YouTube gets title plus video id, images/audio/documents keep the original file name from the URL, everything else uses the title; `PULLMD_FILENAME_DATE_PREFIX` prepends a date. Also on `/s/:id`, `POST /api/html` and `POST /api/file`; on `/api/stream` the same value arrives as `suggestedFilename` in the `result` event, since SSE has no headers to carry it.
 - `X-Transcript-Status` — YouTube only: `ok` · `none` · `blocked` · `error`. `blocked` (YouTube rate-limited the transcript fetch, HTTP 429) and `error` are transient and not cached — retry later; `none` means the video genuinely has no transcript
 - `X-Extracted` — `true` / `false`. Present only when `query` is active.
 - `X-Extract-Confidence` — `high` · `medium` · `low`. Present whenever `X-Extracted` is present, except when the page was already small enough that extraction was skipped.

@@ -433,7 +433,8 @@
             <span lang="de">Kopieren</span><span lang="en">Copy</span>
           </button>
         </div>
-        <pre id="agent-prompt">When you need to read a web page, fetch via PullMD instead of raw HTML:
+        <pre id="agent-prompt">When you need to read a web page, fetch it via PullMD instead of your
+built-in fetch/browse tool - not just when that one fails:
 
   GET __PULLMD_URL__/api?url=&lt;URL&gt;
 
@@ -746,8 +747,8 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">8-hex id, openable as <code>/s/&lt;id&gt;</code>. Absent on <code>/api/html</code> and <code>/api/file</code>, since local files are never cached.</td>
           </tr>
           <tr><td><code>X-Suggested-Filename</code></td>
-            <td lang="de">Vorgeschlagener Dateiname für den Download, z. B. <code>YT-vortrag-titel-dQw4w9WgXcQ.md</code>. YouTube bekommt Titel plus Video-ID, Bilder, Audio und Dokumente den ursprünglichen Dateinamen, alles andere den Titel. Self-Hoster können mit <code>PULLMD_FILENAME_DATE_PREFIX</code> ein Datum voranstellen.</td>
-            <td lang="en">Suggested download filename, e.g. <code>YT-talk-title-dQw4w9WgXcQ.md</code>. YouTube gets title plus video id, images, audio and documents keep their original file name, everything else uses the title. Self-hosters can prepend a date with <code>PULLMD_FILENAME_DATE_PREFIX</code>.</td>
+            <td lang="de">Vorgeschlagener Dateiname für den Download, z. B. <code>YT-vortrag-titel-dQw4w9WgXcQ.md</code>. YouTube bekommt Titel plus Video-ID, Bilder, Audio und Dokumente den ursprünglichen Dateinamen, alles andere den Titel. Self-Hoster können mit <code>PULLMD_FILENAME_DATE_PREFIX</code> ein Datum voranstellen (Vorlage mit den Platzhaltern <code>YYYY MM DD HH mm ss</code>, z. B. <code>YYYY-MM-DD-</code>). Der Download-Button in der Web-Oberfläche speichert das Ergebnis unter genau diesem Namen. Bei <code>/api/stream</code> gibt es keine Header, dort steckt derselbe Wert als <code>suggestedFilename</code> im <code>result</code>-Event.</td>
+            <td lang="en">Suggested download filename, e.g. <code>YT-talk-title-dQw4w9WgXcQ.md</code>. YouTube gets title plus video id, images, audio and documents keep their original file name, everything else uses the title. Self-hosters can prepend a date with <code>PULLMD_FILENAME_DATE_PREFIX</code> (a template with the tokens <code>YYYY MM DD HH mm ss</code>, e.g. <code>YYYY-MM-DD-</code>). The download button in the web UI saves the result under exactly this name. <code>/api/stream</code> has no headers, so there the same value travels as <code>suggestedFilename</code> in the <code>result</code> event.</td>
           </tr>
           <tr><td><code>X-Transcript-Status</code></td>
             <td lang="de">Nur YouTube: <code>ok</code> · <code>none</code> · <code>blocked</code> · <code>error</code>. <code>blocked</code> (Rate-Limit, HTTP 429) und <code>error</code> sind vorübergehend und werden nicht gecacht - später erneut versuchen. <code>none</code> heißt, das Video hat wirklich kein Transkript.</td>
@@ -1033,8 +1034,8 @@ docker compose exec pullmd node scripts/admin.js reset-password someone@example.
         <li><code>make-admin &lt;email&gt;</code> - promotes an existing account to admin. Deliberately a separate step.</li>
         <li><code>reset-password &lt;email&gt;</code> - sets a new password and drops all of that user's open sessions.</li>
       </ul>
-      <p class="muted" lang="de">Ohne Docker läuft derselbe Befehl als <code>node scripts/admin.js …</code> im Verzeichnis der Instanz. <strong>Wichtig:</strong> <code>create-user</code> und <code>reset-password</code> lesen das Passwort von der Standardeingabe, es braucht also <code>docker compose exec</code> oder <code>docker exec -it</code>. Ein <code>docker exec</code> ohne <code>-i</code> hängt die Eingabe nicht an: Der Befehl gibt nur <code>New password:</code> aus und endet mit Code 0, ohne etwas anzulegen.</p>
-      <p class="muted" lang="en">Without Docker the same command runs as <code>node scripts/admin.js …</code> in the instance's directory. <strong>Important:</strong> <code>create-user</code> and <code>reset-password</code> read the password from standard input, so use <code>docker compose exec</code> or <code>docker exec -it</code>. A plain <code>docker exec</code> without <code>-i</code> does not attach input: the command prints <code>New password:</code> and exits with code 0 without creating anything.</p>
+      <p class="muted" lang="de">Ohne Docker läuft derselbe Befehl als <code>node scripts/admin.js …</code> im Verzeichnis der Instanz. <strong>Wichtig:</strong> <code>create-user</code> und <code>reset-password</code> lesen das Passwort von der Standardeingabe, es braucht also <code>docker compose exec</code> oder <code>docker exec -it</code>. Ein <code>docker exec</code> ohne <code>-i</code> hängt die Eingabe nicht an; der Befehl bricht dann mit einer Meldung und Code 2 ab und nennt die funktionierenden Aufrufe. Alternativ lässt sich das Passwort hineinpipen: <code>echo "…" | docker exec -i &lt;container&gt; node scripts/admin.js …</code>.</p>
+      <p class="muted" lang="en">Without Docker the same command runs as <code>node scripts/admin.js …</code> in the instance's directory. <strong>Important:</strong> <code>create-user</code> and <code>reset-password</code> read the password from standard input, so use <code>docker compose exec</code> or <code>docker exec -it</code>. A plain <code>docker exec</code> without <code>-i</code> does not attach input; the command then aborts with a message and exit code 2 that names the invocations which do work. You can also pipe the password in: <code>echo "…" | docker exec -i &lt;container&gt; node scripts/admin.js …</code>.</p>
     </section>
 
     <!-- ===================================================== -->

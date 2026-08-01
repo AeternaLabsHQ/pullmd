@@ -63,6 +63,7 @@ The response is `text/markdown` — ready to use as-is.
 - `X-Source` — `reddit` · `hackernews` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
 - `X-Quality` — `0.0–1.0` extraction confidence (low values mean the static extraction was thin or noisy)
 - `X-Share-Id` — 8-hex permalink, openable as `__PULLMD_URL__/s/<id>` (absent for `/api/html` — local conversions are never cached or shared)
+- `X-Suggested-Filename` — a ready-made filename for this conversion (e.g. `YT-some-talk-dQw4w9WgXcQ.md`); use it when you save the output to a file instead of inventing a name.
 - `X-Transcript-Status` — YouTube only: `ok` / `none` / `blocked` / `error`. `blocked` and `error` are transient (rate limit) and not cached — retry later; `none` means the video has no transcript at all.
 - `X-Extracted` / `X-Extract-Confidence` / `X-Extract-Sections` / `X-Extract-Original-Tokens` / `X-Extract-Returned-Tokens` — only when `query` is active; the last two show how much context the extraction saved.
 
