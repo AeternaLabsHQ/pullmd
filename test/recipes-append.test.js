@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { RecipeSchema, mergeRecipes } from '../lib/recipes.js';
-import { extractHtml } from '../lib/web.js';
+import { extractHtml, extractWeb } from '../lib/web.js';
 
 const block = (over = {}) => ({
   title: 'Trend',
@@ -161,5 +161,56 @@ describe('append blocks in the extraction pipeline', () => {
     const r = await extractHtml(PAGE, { url: 'https://example.com/a', recipes: [stale], extractor: 'readability' });
     assert.ok(r.markdown.includes('LEAD'));
     assert.ok(!r.markdown.includes('```json'));
+  });
+});
+
+describe('append blocks do not leak into the render decision', () => {
+  // The static extraction here is deliberately thin: forcing extractor=trafilatura
+  // with no sidecar configured always produces an extractorReason containing
+  // "fell back to ..." (see convertWithReadability), and the body is short
+  // enough that the base result.markdown (header + body, WITHOUT the append
+  // block) stays under the 500-char renderDecision floor. quality is kept
+  // >=0.5 (article tag + heading + a healthy markdown/rawHtml ratio) so the
+  // "low quality" trigger cannot also explain a render - only the "thin (<500c)"
+  // trigger can. The append block itself is sized well past 500 chars, so if
+  // it were attached to result.markdown BEFORE renderDecision ran, the "thin"
+  // trigger would falsely read as satisfied and skip the Playwright call.
+  const rows = [];
+  for (let i = 0; i < 20; i++) {
+    rows.push({ date: `2026-08-${String(i + 1).padStart(2, '0')}`, t: { max: 20 + i } });
+  }
+  const STATE = JSON.stringify({ 'p_city_local/forecast': { longTerm: rows } });
+  const THIN_PAGE = `<html><head><title>Doc</title>
+    <script id="ng-state" type="application/json">${STATE}</script></head><body>
+    <article><h2>Heading</h2><p>Some short paragraph text here for context.</p></article>
+  </body></html>`;
+
+  const recipe = RecipeSchema.parse({
+    name: 'thin-append', host: 'example.com',
+    append: [{
+      title: 'Trend', script: '#ng-state',
+      path: ['p_city_local/forecast', 'longTerm'],
+      fields: { datum: ['date'], max_c: ['t', 'max'] },
+    }],
+  });
+
+  const fetchHtml = (html) => async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (k) => (k.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
+    text: async () => html,
+  });
+
+  it('still calls the Playwright render client when the append block alone would push the result over the length floor', async () => {
+    let renderCalled = false;
+    const result = await extractWeb('https://example.com/thin', {
+      fetch: fetchHtml(THIN_PAGE),
+      extractor: 'trafilatura',
+      recipes: [recipe],
+      renderClient: async () => { renderCalled = true; return THIN_PAGE; },
+    });
+    assert.ok(renderCalled, 'the append block must not hide a thin static extraction from the render decision');
+    assert.ok(result.metadata.quality >= 0.5, 'test setup check: quality must not be the reason a render happens');
+    assert.match(result.markdown, /## Trend\n/, 'the append block must still end up in the final markdown');
   });
 });
