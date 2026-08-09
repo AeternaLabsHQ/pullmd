@@ -60,6 +60,19 @@ describe('resolveSegments', () => {
     assert.equal(resolveSegments(BLOB, ['p_city_local/forecast', 'longTerm', 99]), undefined);
     assert.equal(resolveSegments(null, ['a']), undefined);
   });
+
+  it('never resolves an inherited property such as "constructor" or "__proto__"', () => {
+    assert.equal(resolveSegments({ a: 1 }, ['constructor']), undefined);
+    assert.equal(resolveSegments({ a: 1 }, ['__proto__']), undefined);
+    assert.equal(resolveSegments({ a: { b: 1 } }, ['a', 'constructor']), undefined);
+  });
+
+  it('never resolves a string segment against an array (e.g. "length")', () => {
+    const arr = ['x', 'y', 'z'];
+    assert.equal(resolveSegments(arr, ['length']), undefined);
+    // Even a numeric-looking string is rejected - arrays are for integer segments only.
+    assert.equal(resolveSegments(arr, ['0']), undefined);
+  });
 });
 
 describe('projectRows', () => {
@@ -179,7 +192,32 @@ describe('renderAppendBlocks', () => {
       { ...bulk, title: 'A' }, { ...bulk, title: 'B' }, { ...bulk, title: 'C' },
     ]);
     assert.ok(Buffer.byteLength(markdown, 'utf8') <= 132 * 1024, 'document cap must hold');
-    assert.ok(notes.some((n) => n.includes('übersprungen')), `expected a skip note, got ${JSON.stringify(notes)}`);
+    // The genuine document-budget-exhaustion note names the budget as the cause.
+    assert.ok(notes.includes('C (übersprungen, Budget erschöpft)'), `expected a budget-exhausted note, got ${JSON.stringify(notes)}`);
+  });
+
+  it('names an oversized single row as its own cause, distinct from document budget exhaustion', () => {
+    // A single row whose own serialized size already exceeds the per-block
+    // budget - reached with plenty of document budget still available (this
+    // is the first and only block), so `kept === 0` here is NOT the document
+    // budget running out. The note must say so instead of blaming the budget.
+    const html = wrap(JSON.stringify({
+      'p_city_local/forecast': { longTerm: [{ pad: 'z'.repeat(70000) }] },
+    }));
+    const spec = { title: 'Huge', script: '#ng-state', path: ['p_city_local/forecast', 'longTerm'], limit: 1 };
+    const { markdown, notes } = renderAppendBlocks(html, [spec]);
+    assert.equal(markdown, '');
+    assert.deepEqual(notes, ['Huge (übersprungen, einzelner Datensatz zu groß)']);
+    // The two skip reasons must never share wording - an operator reading the
+    // note needs to know which lever to pull.
+    assert.notEqual(notes[0], 'Huge (übersprungen, Budget erschöpft)');
+  });
+
+  it('uses the singular "Zeile" when exactly one row is kept', () => {
+    const html = wrap(JSON.stringify({ 'p_city_local/forecast': { longTerm: [BLOB['p_city_local/forecast'].longTerm[0]] } }));
+    const { markdown, notes } = renderAppendBlocks(html, [SPEC]);
+    assert.deepEqual(notes, ['16-Tage-Trend (1 Zeile)']);
+    assert.ok(!markdown.includes('1 Zeilen'), 'must not say "1 Zeilen"');
   });
 
   it('keeps the assembled block within the 64 KB cap even at the schema max title length', () => {

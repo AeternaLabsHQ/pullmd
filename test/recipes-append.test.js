@@ -50,6 +50,13 @@ describe('recipe append schema', () => {
     assert.throws(() => parse([block({ title: '' })]));
   });
 
+  it('rejects a title containing a line break', () => {
+    // A newline lets the title carry its own fence-opener line, opening the
+    // code fence early and leaving the JSON body unfenced in the output.
+    assert.throws(() => parse([block({ title: 'Foo\n```\nevil' })]));
+    assert.throws(() => parse([block({ title: 'Foo\r\nbar' })]));
+  });
+
   it('rejects limit outside 1..1000', () => {
     assert.throws(() => parse([block({ limit: 0 })]));
     assert.throws(() => parse([block({ limit: 1001 })]));
@@ -212,5 +219,31 @@ describe('append blocks do not leak into the render decision', () => {
     assert.ok(renderCalled, 'the append block must not hide a thin static extraction from the render decision');
     assert.ok(result.metadata.quality >= 0.5, 'test setup check: quality must not be the reason a render happens');
     assert.match(result.markdown, /## Trend\n/, 'the append block must still end up in the final markdown');
+  });
+});
+
+describe('append blocks on the comments return path', () => {
+  // extractHtml() hardcodes comments = false, so this early-return branch of
+  // convertWithReadability (the `if (comments) { ... return finish(...); }`
+  // path) is only reachable through extractWeb() with comments: true - which
+  // is exactly how GET /api?comments=true&url=<non-Reddit URL> reaches it.
+  const fetchHtml = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (k) => (k.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
+    text: async () => PAGE,
+  });
+
+  it('still carries the append block when comments=true short-circuits to the comments branch', async () => {
+    const result = await extractWeb('https://example.com/a', {
+      fetch: fetchHtml,
+      recipes: [recipeWith({})],
+      comments: true,
+      render: 'skip',
+    });
+    assert.equal(result.source, 'readability');
+    assert.match(result.markdown, /## Trend\n\n```json\n/);
+    assert.ok(result.markdown.includes('{"datum":"2026-08-08","max_c":26}'));
+    assert.match(result.metadata.extractorReason, /append: Trend \(2 Zeilen\)/);
   });
 });

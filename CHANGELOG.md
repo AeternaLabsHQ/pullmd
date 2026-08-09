@@ -11,7 +11,11 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
-<!-- Renamed to the dated version heading when the release is cut. -->
+<!-- Renamed to the dated version heading when the release is cut. Every other
+     version heading resolves through the reference-link list at the end of
+     this file - add the matching `[X.Y.Z]: .../releases/tag/vX.Y.Z` line
+     there at the same time, or this heading renders as literal bracketed
+     text. -->
 
 ### Added
 
