@@ -181,4 +181,16 @@ describe('renderAppendBlocks', () => {
     assert.ok(Buffer.byteLength(markdown, 'utf8') <= 132 * 1024, 'document cap must hold');
     assert.ok(notes.some((n) => n.includes('übersprungen')), `expected a skip note, got ${JSON.stringify(notes)}`);
   });
+
+  it('keeps the assembled block within the 64 KB cap even at the schema max title length', () => {
+    const longTitle = 'T'.repeat(120); // recipe schema caps title at 120 chars
+    const many = Array.from({ length: 4000 }, (_, i) => ({
+      date: `d${i}`, airTemperature: { max: { celsius: i } }, pad: 'x'.repeat(200),
+    }));
+    const html = wrap(JSON.stringify({ 'p_city_local/forecast': { longTerm: many } }));
+    const { markdown } = renderAppendBlocks(html, [{ ...SPEC, title: longTitle, limit: 1000, fields: undefined }]);
+    assert.ok(Buffer.byteLength(markdown, 'utf8') <= 64 * 1024, 'the whole block, including heading and fence chrome, must respect the cap');
+    const body = markdown.split('```json\n')[1].split('\n```')[0];
+    assert.ok(Array.isArray(JSON.parse(body)), 'truncated output must still be valid JSON');
+  });
 });
