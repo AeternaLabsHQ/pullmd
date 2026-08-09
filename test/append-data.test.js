@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseJsonScript, resolveSegments, projectRows } from '../lib/append-data.js';
+import { parseJsonScript, resolveSegments, projectRows, renderAppendBlocks } from '../lib/append-data.js';
 import * as cheerio from 'cheerio';
 
 const wrap = (json, id = 'ng-state') =>
@@ -103,5 +103,82 @@ describe('projectRows', () => {
 
   it('applies limit to an array even without fields', () => {
     assert.equal(projectRows(rows, undefined, 1).length, 1);
+  });
+});
+
+const SPEC = {
+  title: '16-Tage-Trend',
+  script: '#ng-state',
+  path: ['p_city_local/forecast', 'longTerm'],
+  fields: { datum: ['date'], max_c: ['airTemperature', 'max', 'celsius'] },
+  limit: 200,
+};
+
+describe('renderAppendBlocks', () => {
+  it('renders a heading and a fenced json block with one row per line', () => {
+    const { markdown, notes } = renderAppendBlocks(wrap(JSON.stringify(BLOB)), [SPEC]);
+    assert.match(markdown, /\n## 16-Tage-Trend\n/);
+    assert.match(markdown, /```json\n\[\n/);
+    assert.match(markdown, /\n\]\n```/);
+    assert.ok(markdown.includes('{"datum":"2026-08-08","max_c":26}'));
+    assert.deepEqual(notes, ['16-Tage-Trend (2 Zeilen)']);
+  });
+
+  it('produces valid JSON inside the fence', () => {
+    const { markdown } = renderAppendBlocks(wrap(JSON.stringify(BLOB)), [SPEC]);
+    const body = markdown.split('```json\n')[1].split('\n```')[0];
+    assert.equal(JSON.parse(body).length, 2);
+  });
+
+  it('returns empty markdown for every failure mode without throwing', () => {
+    const ok = JSON.stringify(BLOB);
+    const cases = [
+      [wrap(ok), [{ ...SPEC, script: '#nope' }]],
+      [wrap('{ broken'), [SPEC]],
+      [wrap(ok), [{ ...SPEC, path: ['p_city_local/forecast', 'nope'] }]],
+      [wrap(JSON.stringify({ 'p_city_local/forecast': { longTerm: 'a string' } })), [SPEC]],
+      [wrap(ok), []],
+    ];
+    for (const [html, specs] of cases) {
+      const { markdown, notes } = renderAppendBlocks(html, specs);
+      assert.equal(markdown, '');
+      assert.deepEqual(notes, []);
+    }
+  });
+
+  it('parses the same script only once across several blocks', () => {
+    const original = JSON.parse;
+    let calls = 0;
+    JSON.parse = (...args) => { calls++; return original(...args); };
+    try {
+      renderAppendBlocks(wrap(JSON.stringify(BLOB)), [SPEC, { ...SPEC, title: 'Zweiter' }]);
+    } finally {
+      JSON.parse = original;
+    }
+    assert.equal(calls, 1, 'the blob must be parsed once, not once per block');
+  });
+
+  it('truncates at the per-block byte cap and says so beside the fence', () => {
+    const many = Array.from({ length: 4000 }, (_, i) => ({
+      date: `d${i}`, airTemperature: { max: { celsius: i } }, pad: 'x'.repeat(200),
+    }));
+    const html = wrap(JSON.stringify({ 'p_city_local/forecast': { longTerm: many } }));
+    const { markdown, notes } = renderAppendBlocks(html, [{ ...SPEC, limit: 1000, fields: undefined }]);
+    assert.ok(Buffer.byteLength(markdown, 'utf8') < 80 * 1024, 'must stay near the 64 KB cap');
+    assert.match(markdown, /Gekürzt: \d+ von \d+ Zeilen ausgegeben\./);
+    assert.match(notes[0], /von/);
+    const body = markdown.split('```json\n')[1].split('\n```')[0];
+    assert.ok(Array.isArray(JSON.parse(body)), 'truncated output must still be valid JSON');
+  });
+
+  it('skips a block when the document budget is exhausted', () => {
+    const many = Array.from({ length: 4000 }, (_, i) => ({ pad: 'y'.repeat(200), i }));
+    const html = wrap(JSON.stringify({ 'p_city_local/forecast': { longTerm: many } }));
+    const bulk = { ...SPEC, limit: 1000, fields: undefined };
+    const { markdown, notes } = renderAppendBlocks(html, [
+      { ...bulk, title: 'A' }, { ...bulk, title: 'B' }, { ...bulk, title: 'C' },
+    ]);
+    assert.ok(Buffer.byteLength(markdown, 'utf8') <= 132 * 1024, 'document cap must hold');
+    assert.ok(notes.some((n) => n.includes('übersprungen')), `expected a skip note, got ${JSON.stringify(notes)}`);
   });
 });
