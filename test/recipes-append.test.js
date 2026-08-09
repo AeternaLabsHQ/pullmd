@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { RecipeSchema, mergeRecipes } from '../lib/recipes.js';
+import { extractHtml } from '../lib/web.js';
 
 const block = (over = {}) => ({
   title: 'Trend',
@@ -79,5 +80,86 @@ describe('mergeRecipes append', () => {
 
   it('yields an empty list when no recipe defines append', () => {
     assert.deepEqual(mergeRecipes([]).appendBlocks, []);
+  });
+});
+
+const PROSE = 'This paragraph is deliberately long enough that the recipe-selected body clears the minimum length floor on its own, without help from any of the surrounding blocks on the page. The floor exists to catch selectors that have gone stale after a site redesign.';
+
+const STATE = JSON.stringify({
+  'p_city_local/forecast': {
+    longTerm: [
+      { date: '2026-08-08', t: { max: 26 } },
+      { date: '2026-08-09', t: { max: 34 } },
+    ],
+  },
+});
+
+const PAGE = `<html><head><title>Doc</title>
+  <script id="ng-state" type="application/json">${STATE}</script></head><body>
+  <div class="lead"><p>LEAD ${PROSE}</p></div>
+</body></html>`;
+
+const APPEND = [{
+  title: 'Trend',
+  script: '#ng-state',
+  path: ['p_city_local/forecast', 'longTerm'],
+  fields: { datum: ['date'], max_c: ['t', 'max'] },
+}];
+
+const recipeWith = (extra) => RecipeSchema.parse({
+  name: 'append-it', host: 'example.com', append: APPEND, ...extra,
+});
+
+describe('append blocks in the extraction pipeline', () => {
+  it('appends the block on the recipe-content path', async () => {
+    const r = await extractHtml(PAGE, {
+      url: 'https://example.com/a',
+      recipes: [recipeWith({ select: { content: ['.lead'] } })],
+      extractor: 'readability',
+    });
+    assert.equal(r.source, 'recipe-content');
+    assert.ok(r.markdown.includes('LEAD'), 'body must still be there');
+    assert.match(r.markdown, /## Trend\n\n```json\n/);
+    assert.ok(r.markdown.trimEnd().endsWith('```'), 'block must sit at the very end');
+    assert.ok(r.markdown.includes('{"datum":"2026-08-08","max_c":26}'));
+    assert.match(r.metadata.extractorReason, /append: Trend \(2 Zeilen\)/);
+  });
+
+  it('appends the block on the readability path too', async () => {
+    const r = await extractHtml(PAGE, {
+      url: 'https://example.com/a',
+      recipes: [recipeWith({})],
+      extractor: 'readability',
+    });
+    assert.notEqual(r.source, 'recipe-content');
+    assert.match(r.markdown, /## Trend\n/);
+  });
+
+  it('leaves quality untouched but grows contentLength', async () => {
+    const opts = { url: 'https://example.com/a', extractor: 'readability' };
+    const plain = await extractHtml(PAGE, { ...opts, recipes: [RecipeSchema.parse({ name: 'n', host: 'example.com' })] });
+    const withBlock = await extractHtml(PAGE, { ...opts, recipes: [recipeWith({})] });
+    assert.equal(withBlock.metadata.quality, plain.metadata.quality);
+    assert.ok(withBlock.metadata.contentLength > plain.metadata.contentLength);
+  });
+
+  it('changes nothing when the recipe has no append blocks', async () => {
+    const r = await extractHtml(PAGE, {
+      url: 'https://example.com/a',
+      recipes: [RecipeSchema.parse({ name: 'n', host: 'example.com' })],
+      extractor: 'readability',
+    });
+    assert.ok(!r.markdown.includes('```json'));
+    assert.ok(!/append:/.test(r.metadata.extractorReason || ''));
+  });
+
+  it('degrades to the plain document when the path is stale', async () => {
+    const stale = RecipeSchema.parse({
+      name: 'stale', host: 'example.com',
+      append: [{ ...APPEND[0], path: ['p_city_local/forecast', 'gone'] }],
+    });
+    const r = await extractHtml(PAGE, { url: 'https://example.com/a', recipes: [stale], extractor: 'readability' });
+    assert.ok(r.markdown.includes('LEAD'));
+    assert.ok(!r.markdown.includes('```json'));
   });
 });
