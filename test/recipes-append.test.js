@@ -40,9 +40,23 @@ describe('recipe append schema', () => {
     assert.throws(() => parse([block({ title: 'x'.repeat(121) })]));
   });
 
+  it('accepts a title of exactly 120 characters', () => {
+    const title = 'x'.repeat(120);
+    assert.equal(parse([block({ title })]).append[0].title, title);
+  });
+
+  it('rejects an empty title', () => {
+    assert.throws(() => parse([block({ title: '' })]));
+  });
+
   it('rejects limit outside 1..1000', () => {
     assert.throws(() => parse([block({ limit: 0 })]));
     assert.throws(() => parse([block({ limit: 1001 })]));
+  });
+
+  it('accepts limit at the 1..1000 boundaries', () => {
+    assert.equal(parse([block({ limit: 1 })]).append[0].limit, 1);
+    assert.equal(parse([block({ limit: 1000 })]).append[0].limit, 1000);
   });
 
   it('rejects an unknown key inside a block', () => {
