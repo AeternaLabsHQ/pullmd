@@ -9,6 +9,19 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- Site-Rezepte können strukturierte Daten aus eingebetteten JSON-Zustandsblöcken
+  (SSR-State von Single-Page-Frameworks) lesen und als JSON-Codeblock ans Ende des
+  Dokuments hängen. Neues optionales Rezeptfeld `append` mit Skript-Selektor,
+  Segment-Pfad, optionaler Feldprojektion und Zeilenlimit. Greift bei Seiten, deren
+  Zahlen nur noch als Diagramm gerendert werden und daher per CSS-Selektor nicht
+  erreichbar sind. Ausgabegröße ist fest gedeckelt.
+
+---
+
 ## [3.9.0] - 2026-08-01
 
 ### Added
