@@ -294,6 +294,7 @@ doing nothing.
 | `/api/history`, `/api/archive`                                   |                 yes                  |
 | `DELETE /api/cache/:id`, `DELETE /api/cache`                     |                 yes                  |
 | `/api/stats`, `/api/storage`, `/api/config` (aggregate)          |                  no                  |
+| `/api/status`, `/api/recipes/status` (health)                    |                  no                  |
 
 Cache deletes are scoped to the caller. An admin (and every caller in
 `disabled` mode) removes the shared, URL-deduped cache row, which affects
@@ -501,6 +502,7 @@ for it.
 | `GET /api/stats`       | Extraction telemetry (sources, quality, latency). `?window=-7 days`.             |
 | `GET /api/config`      | Which optional tiers this instance has enabled (auth mode, markitdown, vision, STT, PDF OCR, YouTube). The PWA reads it to show or hide controls. |
 | `GET /api/recipes/status` | Which [site recipes](#site-recipes) loaded, which were rejected, and any frontmatter fields dropped by the allowlist. |
+| `GET /api/status`      | Health of the extraction sidecars (trafilatura, Playwright, markitdown). `200` when every configured sidecar answers, `503` when one is down. See [Monitoring](#monitoring). |
 | `POST /mcp`            | Streamable-HTTP MCP endpoint (3 tools: `read_url`, `get_share`, `list_recent`). |
 | `GET /pullmd.zip`      | Claude Code skill bundle, with this instance's URL baked in (`/web-reader.zip` redirects here). |
 | `GET /help`            | Bilingual user/agent setup guide.                                                |
@@ -628,6 +630,33 @@ Reported as [#41](https://github.com/AeternaLabsHQ/pullmd/issues/41), shipped in
 - **`/s/:id`** does the same on-demand refresh, so share links double as live endpoints.
 - Cache rows are pruned **90 days** after the last write. `/s/:id` hits keep the row alive (since they trigger refresh + write); read-only access does not extend the TTL.
 - If the source is unreachable on refresh, the last good snapshot is served — share links keep working even when the original URL dies.
+
+---
+
+## Monitoring
+
+`GET /api/status` reports whether the extraction sidecars are reachable:
+
+```json
+{
+  "ok": false,
+  "version": "3.9.0",
+  "services": {
+    "trafilatura": { "status": "ok", "latencyMs": 3 },
+    "playwright":  { "status": "down", "error": "unreachable" },
+    "markitdown":  { "status": "not-configured" }
+  }
+}
+```
+
+- `status` is `ok`, `down`, or `not-configured`. A sidecar you never configured is not a failure — self-hosting without Playwright or markitdown is a supported setup.
+- `error` is one of `unreachable`, `timeout`, `unhealthy` (answered `200` but reports itself broken), `http <code>`, or `misconfigured`. Deliberately a closed vocabulary: the endpoint is public and must not echo internal hostnames.
+- HTTP **`200`** when every configured sidecar answers, **`503`** when at least one is down, so a plain HTTP check catches it without keyword matching.
+- Results are cached for 5 seconds and concurrent callers share one round of probes, so polling it cannot amplify into internal traffic.
+
+Why it exists: a broken sidecar does not take PullMD down, it silently degrades extraction quality — pages that need a browser render come back near-empty while everything still answers `200`. Without an explicit check that can go unnoticed for a long time.
+
+**Uptime Kuma:** monitor type *HTTP(s)*, URL `https://<your-host>/api/status`, accepted status codes `200-299`. On an instance with authentication enabled the endpoint stays reachable without credentials.
 
 ---
 

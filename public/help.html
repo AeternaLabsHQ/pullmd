@@ -632,6 +632,10 @@ Then: claude mcp list to verify.</pre>
             <td lang="de">Welche <a href="#recipes">Site-Recipes</a> geladen bzw. abgelehnt wurden.</td>
             <td lang="en">Which <a href="#recipes">site recipes</a> loaded or were rejected.</td>
           </tr>
+          <tr><td><code>GET /api/status</code></td>
+            <td lang="de">Erreichbarkeit der Extraktions-Sidecars (trafilatura, Playwright, markitdown). <code>200</code> wenn alle konfigurierten antworten, <code>503</code> sobald einer ausfällt — gedacht für externes Monitoring.</td>
+            <td lang="en">Health of the extraction sidecars (trafilatura, Playwright, markitdown). <code>200</code> when every configured one answers, <code>503</code> as soon as one is down — meant for external monitoring.</td>
+          </tr>
           <tr><td><code>POST /mcp</code></td>
             <td lang="de">MCP-Server (Streamable-HTTP, stateless), drei Tools.</td>
             <td lang="en">MCP server (Streamable HTTP, stateless), three tools.</td>
