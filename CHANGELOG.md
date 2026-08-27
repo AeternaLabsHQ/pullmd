@@ -9,6 +9,30 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [Unreleased]
+
+<!-- Renamed to the dated version heading when the release is cut. Every other
+     version heading resolves through the reference-link list at the end of
+     this file - add the matching `[X.Y.Z]: .../releases/tag/vX.Y.Z` line
+     there at the same time, or this heading renders as literal bracketed
+     text. -->
+
+---
+
+## [3.10.0] - 2026-08-27
+
+### Added
+
+- **`GET /api/status` reports sidecar health for external monitoring.** It probes the `/health` endpoint of every configured extraction sidecar (trafilatura, Playwright, markitdown) in parallel and answers `200` when they all respond, `503` as soon as one is down, so a plain HTTP check catches it without keyword matching. A sidecar that was never configured counts as `not-configured`, not as a failure. Error reasons are a closed vocabulary (`unreachable`, `timeout`, `unhealthy`, `http <code>`, `misconfigured`) because the endpoint is public and must not echo internal hostnames. Results are cached for 5 seconds and concurrent callers share one round of probes. A broken sidecar does not take the service down, it silently degrades extraction quality — this makes that state observable.
+
+- **Site-recipes can now read structured data from embedded JSON state blocks.** Single-page frameworks render state as SSR blobs in `<script>` elements for the initial HTML. The new optional recipe field `append` extracts this data (by script selector and segment path, with optional field projection and row limit), serializes it as JSON, and appends it to the end of the document as a fenced code block. Output size is capped. The feature exists for pages where numerical data is only rendered as a chart and is therefore unreachable by CSS selectors.
+
+### Fixed
+
+- **`playwright-stealth` is now version-pinned** in `playwright-sidecar/requirements.txt`, like every other sidecar dependency. It was the only unpinned one, so any rebuild could have pulled an incompatible release into the image unnoticed.
+
+---
+
 ## [3.9.0] - 2026-08-01
 
 ### Added
@@ -394,6 +418,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.10.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.10.0
 [3.9.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.9.0
 [3.8.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.8.0
 [3.7.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.7.1

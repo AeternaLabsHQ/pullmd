@@ -10,10 +10,11 @@ import { buildFrontmatter, mergeMediaFrontmatter, mergeFrontmatter, validateFron
 import { queryExtract } from './lib/query-extract.js';
 import { suggestFilename } from './lib/filename.js';
 import { mcpHandler } from './lib/mcp.js';
-import { renderHelp, renderIndex, getSkillZip, publicUrlFor } from './lib/distrib.js';
+import { renderHelp, renderIndex, getSkillZip, publicUrlFor, PULLMD_VERSION } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
 import { assertUrlAllowed, SsrfError } from './lib/ssrf.js';
 import { ignoredModelEnvWarning } from './lib/llm/providers.js';
+import { createStatusChecker } from './lib/status.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -113,6 +114,7 @@ export function createApp(overrides = {}) {
   const cache = overrides.cache || null;
   const auth = overrides.auth || null;
   const oauth = overrides.oauth || null;
+  const statusChecker = overrides.statusChecker || createStatusChecker();
   const disablePublicHistory = overrides.disablePublicHistory ?? readDisablePublicHistoryEnv();
   // Optional date prefix for the suggested download filename, e.g.
   // "YYYY-MM-DD-HH-mm-ss-". Unset = no prefix.
@@ -1028,6 +1030,25 @@ export function createApp(overrides = {}) {
       send('error', { message: String(err?.message ?? err) || 'Internal error' });
       res.end();
     }
+  });
+
+  // Sidecar health for external monitoring. Ungated like the other aggregate
+  // endpoints, because a monitor polls it without credentials, and it says no
+  // more about the instance than /api/config already does.
+  //
+  // 503 on degraded is deliberate: a plain HTTP monitor has to catch a dead
+  // sidecar too. The Playwright sidecar once crash-looped for eight weeks
+  // while extraction quietly fell back to empty results - nothing was watching
+  // because there was nothing to watch.
+  app.get('/api/status', async (req, res) => {
+    let status;
+    try {
+      status = await statusChecker();
+    } catch (err) {
+      console.warn('Status check failed:', err.message);
+      status = { ok: false, version: PULLMD_VERSION, services: {}, error: 'check-failed' };
+    }
+    res.status(status.ok ? 200 : 503).json(status);
   });
 
   app.get('/api/recipes/status', (req, res) => {
