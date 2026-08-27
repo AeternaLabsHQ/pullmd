@@ -19,6 +19,14 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.10.1] - 2026-08-27
+
+### Fixed
+
+- **The Playwright sidecar no longer announces itself as an automation browser.** Chromium derives its `Sec-CH-UA` header from its own identity, and `new_context(user_agent=…)` does not touch it, so every rendered request went out claiming `Chrome/147` in the User-Agent and `"HeadlessChrome";v="131"` in the header directly below it. Hosts behind a bot manager read the second one: measured against an Akamai-protected site, holding every other header constant and swapping only that brand token was the entire difference between `403` and `200` — the page then returned 138k characters of article text instead of 283 characters of "Access Denied". The User-Agent pool was never the problem, and neither was the requesting IP. The sidecar now derives the Client-Hints metadata (brand, version, platform, mobile flag) from the User-Agent it actually sends, so the two agree. For a non-Chromium User-Agent — the iPhone profile behind `mobileUa` — it strips the `Sec-CH-UA*` headers instead, because Safari sends no Client Hints and inventing one would be a fresh contradiction. Both paths are best-effort: a failure is logged and the render proceeds. `playwright-stealth` does not cover this, since it patches JavaScript properties rather than request headers.
+
+---
+
 ## [3.10.0] - 2026-08-27
 
 ### Added
@@ -418,6 +426,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.10.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.10.1
 [3.10.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.10.0
 [3.9.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.9.0
 [3.8.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.8.0
