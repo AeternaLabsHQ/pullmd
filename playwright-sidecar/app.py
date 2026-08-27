@@ -9,6 +9,8 @@ from pydantic import BaseModel
 from playwright.async_api import async_playwright, TimeoutError as PWTimeout
 import importlib.metadata
 
+from ua_metadata import build_ua_metadata
+
 logging.basicConfig(level=logging.INFO)
 
 # Last updated: 2026-05-02
@@ -41,6 +43,40 @@ except (ImportError, AttributeError):
         async def _apply_stealth(page):
             pass
         log.warning("playwright-stealth not installed; running without bot-detection mitigation")
+
+
+async def _align_client_hints(context, page, user_agent: str, mobile: bool) -> None:
+    """Make Sec-CH-UA agree with the User-Agent we claim.
+
+    Chromium builds Sec-CH-UA from its own identity, so overriding the UA on
+    the context leaves the request advertising `"HeadlessChrome";v="<real>"`
+    one header below a UA that says Chrome. Bot rules key on exactly that:
+    with everything else held constant, only swapping that brand token decides
+    whether an Akamai-protected host answers 200 or 403.
+
+    Chromium-based UA -> rewrite the metadata to match. Anything else (the
+    iPhone/Safari device profile) -> drop the header, because Safari sends no
+    Client Hints and a fabricated one would be a fresh contradiction.
+
+    Best-effort throughout: this is camouflage, never a reason to fail a
+    render that would otherwise succeed.
+    """
+    metadata = build_ua_metadata(user_agent, mobile=mobile)
+
+    if metadata is None:
+        async def _strip(route):
+            headers = {k: v for k, v in route.request.headers.items()
+                       if not k.lower().startswith("sec-ch-ua")}
+            await route.continue_(headers=headers)
+        await page.route("**/*", _strip)
+        return
+
+    session = await context.new_cdp_session(page)
+    await session.send("Emulation.setUserAgentOverride", {
+        "userAgent": user_agent,
+        "platform": metadata["platform"],
+        "userAgentMetadata": metadata,
+    })
 
 
 @asynccontextmanager
@@ -81,20 +117,23 @@ async def _render(url: str, wait_for: str | None = None, wait_timeout_ms: int | 
         device = state["pw"].devices.get("iPhone 13")
         if device is None:
             # Fallback: hand-crafted mobile context if the device profile is unavailable
+            effective_ua = (
+                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
+                "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+            )
             context = await state["browser"].new_context(
-                user_agent=(
-                    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
-                    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-                ),
+                user_agent=effective_ua,
                 viewport={"width": 390, "height": 844},
                 device_scale_factor=3,
                 is_mobile=True,
                 has_touch=True,
             )
         else:
+            effective_ua = device.get("user_agent", "")
             context = await state["browser"].new_context(**device)
     else:
-        context = await state["browser"].new_context(user_agent=user_agent or USER_AGENT)
+        effective_ua = user_agent or USER_AGENT
+        context = await state["browser"].new_context(user_agent=effective_ua)
 
     try:
         page = await context.new_page()
@@ -102,6 +141,10 @@ async def _render(url: str, wait_for: str | None = None, wait_timeout_ms: int | 
             await _apply_stealth(page)
         except Exception as e:
             log.warning("stealth apply failed (non-fatal): %s", e)
+        try:
+            await _align_client_hints(context, page, effective_ua, mobile_ua)
+        except Exception as e:
+            log.warning("client-hints alignment failed (non-fatal): %s", e)
         await page.goto(url, wait_until="domcontentloaded", timeout=NAV_TIMEOUT_MS)
 
         if wait_for:

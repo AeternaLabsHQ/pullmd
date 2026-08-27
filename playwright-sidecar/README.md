@@ -35,6 +35,23 @@ networks:
     driver: bridge
 ```
 
+## Identity
+
+The rendered request has to be internally consistent. Chromium builds its
+`Sec-CH-UA` header from its own identity, and overriding the User-Agent on the
+browser context does not touch it — so by default a request goes out claiming
+`Chrome/147` in one header and `"HeadlessChrome";v="131"` in the next. Bot
+rules read the second one: holding everything else constant and swapping only
+that brand token is the difference between `200` and `403` on hosts behind a
+bot manager.
+
+The sidecar therefore rewrites the Client-Hints metadata to match the
+User-Agent it sends (brand, version, platform, mobile flag). For a
+non-Chromium User-Agent — the iPhone profile from `mobileUa` — it strips the
+`Sec-CH-UA*` headers instead, because Safari sends no Client Hints and a
+fabricated one would be a fresh contradiction. Both are best-effort: a failure
+here is logged and the render proceeds.
+
 ## Resource footprint
 
 - Image size: **~3.7 GB** (Microsoft Playwright base image bundles Chromium, Firefox, WebKit binaries)
