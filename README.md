@@ -66,6 +66,7 @@ web pages exactly like v2, just with a cleaner body by default.
 - **Account controls** (3.8) - a non-admin can clear entries from their own history, self-registration can be closed with [`PULLMD_ALLOW_SIGNUP`](#configuration), and `scripts/admin.js create-user` creates accounts from the shell.
 - **Download button** (3.9) - the PWA saves a result as a `.md` file, named by the server via [`X-Suggested-Filename`](#response-headers) and optionally date-prefixed.
 - **[Sidecar health endpoint](#monitoring)** (3.10) - `GET /api/status` answers `503` when a configured sidecar stops responding, so a dead renderer shows up as an alert instead of quietly degrading extraction.
+- **Configurable cache retention** (3.11) - [`PULLMD_CACHE_RETENTION_DAYS`](#configuration) sets how long cache rows and share links live; default 90 days, `0` keeps them forever.
 
 ---
 

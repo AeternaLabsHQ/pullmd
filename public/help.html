@@ -328,6 +328,7 @@
         <li><strong>Kontenverwaltung</strong> (v3.8) - wer kein Admin ist, kann Einträge aus der eigenen Historie löschen; die Selbstregistrierung lässt sich schließen, und Konten lassen sich per CLI anlegen, siehe <a href="#auth">Authentifizierung</a>.</li>
         <li><strong>Download-Button</strong> (v3.9) - speichert das Ergebnis als <code>.md</code>-Datei; den Dateinamen schlägt der Server vor (<code>X-Suggested-Filename</code>), auf Wunsch mit Datums-Präfix.</li>
         <li><strong>Sidecar-Health</strong> (v3.10) - <code>GET /api/status</code> meldet, ob die Extraktions-Sidecars antworten, und liefert <code>503</code> sobald einer ausfällt. Für externes Monitoring gedacht: ein toter Renderer nimmt den Dienst nicht runter, er verschlechtert nur still das Ergebnis.</li>
+        <li><strong>Cache-Aufbewahrung</strong> (v3.11) - <code>PULLMD_CACHE_RETENTION_DAYS</code> legt fest, wie lange Cache-Einträge und Share-Links leben; Standard 90 Tage, <code>0</code> = unbegrenzt.</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li><strong>Hacker News</strong> (v3.1) - a dedicated pipeline for items, comment permalinks and listings, producing a clean nested comment tree instead of layout-table soup.</li>
@@ -340,6 +341,7 @@
         <li><strong>Account controls</strong> (v3.8) - a non-admin can delete entries from their own history, self-registration can be closed, and accounts can be created from the CLI, see <a href="#auth">Authentication</a>.</li>
         <li><strong>Download button</strong> (v3.9) - saves the result as a <code>.md</code> file, named by the server (<code>X-Suggested-Filename</code>), optionally with a date prefix.</li>
         <li><strong>Sidecar health</strong> (v3.10) - <code>GET /api/status</code> reports whether the extraction sidecars respond, and answers <code>503</code> as soon as one is down. Meant for external monitoring: a dead renderer does not take the service down, it just quietly degrades the result.</li>
+        <li><strong>Cache retention</strong> (v3.11) - <code>PULLMD_CACHE_RETENTION_DAYS</code> sets how long cache rows and share links live; default 90 days, <code>0</code> keeps them forever.</li>
       </ul>
     </section>
 
