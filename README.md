@@ -219,6 +219,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `PULLMD_ALLOWED_HOSTS` | no | Comma-separated CIDRs and/or exact hostnames that may be fetched even though they resolve into a blocked range. Empty by default = every internal target is blocked. See [SSRF protection](#ssrf-protection). |
 | `PULLMD_SITE_RECIPES`  | no       | Path to a JSON file of extra [site recipes](#site-recipes), merged on top of the built-ins. Alternative to `data/site-recipes.json`. |
 | `PULLMD_FILENAME_DATE_PREFIX` | no | Prefix template for the suggested download filename (`X-Suggested-Filename`). Unset = no prefix. Tokens `YYYY MM DD HH mm ss` are substituted in local time, all other characters pass through; anything outside `A-Za-z0-9._-` ends up as a hyphen. Example: `YYYY-MM-DD-HH-mm-ss-` gives `2026-08-01-13-33-42-YT-some-talk-dQw4w9WgXcQ.md`. |
+| `PULLMD_CACHE_RETENTION_DAYS` | no | How long cache rows survive without a re-fetch, in days. Default: `90`. `0` = unlimited: nothing is ever pruned, so the cache doubles as an archive. Invalid values warn once at startup and fall back to `90`. Share links expire with their row - `/s/:id` stops resolving once the row is older than the retention window. Lowering the value on a running instance prunes every row older than the new value on the next cache write (any conversion). |
 | `PULLMD_COVERAGE_GUARD` | no | Set to `off` to disable the coverage guard. Default (unset): on. The guard notices when an extraction kept only a sliver of the page - the failure mode of page-builder one-pagers, whose chapters sit in flat sibling containers that Readability's single-candidate scoring discards - and re-converts the container holding the body instead. It only ever grows the result, records `source: coverage-guard`, and explains itself in `metadata.extractorReason`. |
 
 `PUBLIC_URL` matters for self-hosting: the help page and downloadable
@@ -629,7 +630,7 @@ Reported as [#41](https://github.com/AeternaLabsHQ/pullmd/issues/41), shipped in
 
 - **`/api?url=…`** re-fetches from source if the cache row is older than **1 hour**.
 - **`/s/:id`** does the same on-demand refresh, so share links double as live endpoints.
-- Cache rows are pruned **90 days** after the last write. `/s/:id` hits keep the row alive (since they trigger refresh + write); read-only access does not extend the TTL.
+- Cache rows are pruned `PULLMD_CACHE_RETENTION_DAYS` days (default **90**; `0` keeps them forever) after the last write. `/s/:id` hits keep the row alive (since they trigger refresh + write); read-only access does not extend the TTL.
 - If the source is unreachable on refresh, the last good snapshot is served — share links keep working even when the original URL dies.
 
 ---
@@ -791,7 +792,7 @@ To write or contribute a recipe, see the **[site-recipe contributor guide](./SIT
 - `lib/render-decision.js` — Predicate that decides when to fall back to Playwright (readability-fellback + thin, body-soup signature, or quality < 0.5; plus `force` / `skip` overrides).
 - `lib/playwright-client.js` — HTTP client for the Playwright sidecar with `AbortSignal` propagation for SSE-disconnect cancellation.
 - `lib/scoring.js` — Quality scoring used to pick between extractors and as a render-trigger heuristic.
-- `lib/cache.js` — SQLite cache (`better-sqlite3`) with 90-day TTL and 8-hex share ids.
+- `lib/cache.js` — SQLite cache (`better-sqlite3`) with configurable retention (default 90 days) and 8-hex share ids.
 - `lib/mcp.js` — Stateless MCP server registering the three tools.
 - `lib/distrib.js` — Public-URL substitution in `/help` and `/pullmd.zip`.
 - `trafilatura-sidecar/` — Python sidecar (FastAPI) wrapping Trafilatura.

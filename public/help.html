@@ -393,11 +393,11 @@
           </tr>
           <tr>
             <td lang="de"><strong>Share-Link-Lebensdauer</strong></td>
-            <td lang="de"><code>90 Tage</code></td>
-            <td lang="de">Bei jedem Re-Fetch (=> Cache schreibt). Auch <code>/s/:id</code>-Aufrufe verlängern, da sie nach 1 h einen Re-Fetch auslösen.</td>
+            <td lang="de"><code>90 Tage</code> (Standard)</td>
+            <td lang="de">Bei jedem Re-Fetch (=> Cache schreibt). Auch <code>/s/:id</code>-Aufrufe verlängern, da sie nach 1 h einen Re-Fetch auslösen. Einstellbar über <code>PULLMD_CACHE_RETENTION_DAYS</code>; <code>0</code> = unbegrenzt.</td>
             <td lang="en"><strong>Share link lifetime</strong></td>
-            <td lang="en"><code>90 days</code></td>
-            <td lang="en">On every re-fetch (= cache write). <code>/s/:id</code> requests extend it too, since they trigger a re-fetch after 1h.</td>
+            <td lang="en"><code>90 days</code> (default)</td>
+            <td lang="en">On every re-fetch (= cache write). <code>/s/:id</code> requests extend it too, since they trigger a re-fetch after 1h. Configurable via <code>PULLMD_CACHE_RETENTION_DAYS</code>; <code>0</code> = unlimited.</td>
           </tr>
         </tbody>
       </table>
@@ -408,13 +408,13 @@
         <li>Cache &lt; 1 h alt → liefert die gespeicherte Version sofort.</li>
         <li>Cache ≥ 1 h alt → ruft die Quelle frisch ab, schreibt zurück, liefert das neue Markdown.</li>
         <li>Quelle nicht erreichbar (404, Netzwerk, …) → liefert den letzten gespeicherten Stand als Snapshot. Keine Stille-Failure-Lücke.</li>
-        <li>Cache &gt; 90 Tage ohne Re-Fetch → Eintrag wird beim nächsten Schreibvorgang gelöscht; Share-Link gibt 404 zurück.</li>
+        <li>Cache &gt; Aufbewahrungsfrist (Standard 90 Tage) ohne Re-Fetch → Eintrag wird beim nächsten Schreibvorgang gelöscht; Share-Link gibt 404 zurück.</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li>Cache &lt; 1 h old → returns the stored version immediately.</li>
         <li>Cache ≥ 1 h old → re-fetches the source, writes back, serves the new markdown.</li>
         <li>Source unreachable (404, network, …) → falls back to the last stored snapshot. No silent failure.</li>
-        <li>Cache &gt; 90 days without a re-fetch → entry is pruned on next write; share link returns 404.</li>
+        <li>Cache &gt; the retention period (default 90 days) without a re-fetch → entry is pruned on next write; share link returns 404.</li>
       </ul>
 
       <h3 lang="de">Tipp: Subreddit als Live-Feed</h3>
@@ -891,7 +891,7 @@ Then: claude mcp list to verify.</pre>
         <li>Wenn der Eintrag &lt; 1 h alt ist: Sofortantwort aus dem Cache. Sonst: frischer Fetch der Quelle und schreibt zurück.</li>
         <li>Die ID bleibt stabil — Re-Fetch ändert nur Inhalt + <code>created_at</code>, nicht die <code>share_id</code>.</li>
         <li>Damit ist der Share-Link auch ein <em>Live-Endpoint</em>: ein KI-Agent kann ihn als festen URL benutzen und kriegt automatisch frisches Markdown.</li>
-        <li>Maximales Alter im Cache: 90 Tage ohne Re-Fetch. Da aber jeder <code>/s/:id</code>-Aufruf nach 1 h einen Re-Fetch auslöst, verlängert sich die Lebensdauer mit jeder Nutzung.</li>
+        <li>Maximales Alter im Cache: <code>PULLMD_CACHE_RETENTION_DAYS</code> (Standard 90 Tage, <code>0</code> = unbegrenzt) ohne Re-Fetch. Da aber jeder <code>/s/:id</code>-Aufruf nach 1 h einen Re-Fetch auslöst, verlängert sich die Lebensdauer mit jeder Nutzung.</li>
         <li>Ist die Quelle nicht erreichbar, wird der letzte Snapshot zurückgegeben — der Link bleibt also auch bei toten Seiten nutzbar.</li>
       </ul>
       <ul class="doc-list" lang="en">
@@ -899,7 +899,7 @@ Then: claude mcp list to verify.</pre>
         <li>If the row is &lt; 1h old: instant cache response. Otherwise: fresh fetch from the source, written back to cache.</li>
         <li>The ID is stable — refresh only updates content + <code>created_at</code>, not the <code>share_id</code>.</li>
         <li>This makes the share link a <em>live endpoint</em>: an AI agent can pin it as a fixed URL and automatically get refreshed markdown.</li>
-        <li>Max age in cache: 90 days without a refresh. But since every <code>/s/:id</code> hit older than 1h triggers a refresh, lifetime extends with usage.</li>
+        <li>Max age in cache: <code>PULLMD_CACHE_RETENTION_DAYS</code> (default 90 days, <code>0</code> = unlimited) without a refresh. But since every <code>/s/:id</code> hit older than 1h triggers a refresh, lifetime extends with usage.</li>
         <li>If the source is unreachable, the last snapshot is returned — so the link keeps working even if the source dies.</li>
       </ul>
     </section>
