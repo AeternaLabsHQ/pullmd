@@ -1450,6 +1450,7 @@
           'stat.dbSize':       'DB-Größe',
           'stat.ttl':          'TTL',
           'stat.days':         '{n} Tage',
+          'stat.unlimited':    'unbegrenzt',
           'status.fetching':   'Lade Seite …',
           'status.extracting': 'Extrahiere Inhalt ({source}) …',
           'status.rendering':  'Seite ist JavaScript-gerendert — versuche es im Browser nochmal …',
@@ -1512,6 +1513,7 @@
           'stat.dbSize':       'DB size',
           'stat.ttl':          'TTL',
           'stat.days':         '{n} days',
+          'stat.unlimited':    'unlimited',
           'status.fetching':   'Loading page …',
           'status.extracting': 'Extracting content ({source}) …',
           'status.rendering':  'Page is JavaScript-rendered — retrying in browser …',
@@ -2620,7 +2622,8 @@
           );
           stat(t('stat.requests7d'), String(s.requests7d), t('stat.cacheHits', { pct: hitRate }));
           stat(t('stat.dbSize'), sizeMb + ' MB');
-          stat(t('stat.ttl'), t('stat.days', { n: s.retentionDays }));
+          // retentionDays 0 (or missing) means the server never prunes.
+          stat(t('stat.ttl'), s.retentionDays > 0 ? t('stat.days', { n: s.retentionDays }) : t('stat.unlimited'));
           footer.style.display = '';
         } catch (e) {}
       }
