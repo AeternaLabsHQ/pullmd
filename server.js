@@ -2,7 +2,7 @@ import express from 'express';
 import { extractPost, normalizeRedditUrl } from './lib/reddit.js';
 import { extractHn, normalizeHnUrl } from './lib/hackernews.js';
 import { extractWeb, extractHtml, extractFile } from './lib/web.js';
-import { createCache } from './lib/cache.js';
+import { createCache, readCacheRetentionDays } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
 import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
 import { qualityScore } from './lib/scoring.js';
@@ -119,6 +119,9 @@ export function createApp(overrides = {}) {
   // Optional date prefix for the suggested download filename, e.g.
   // "YYYY-MM-DD-HH-mm-ss-". Unset = no prefix.
   const filenameDatePrefix = overrides.filenameDatePrefix ?? (process.env.PULLMD_FILENAME_DATE_PREFIX || '');
+  // Only used for the cache-less /api/storage answer; with a cache attached the
+  // cache reports its own configured retention.
+  const cacheRetentionDays = overrides.retentionDays ?? readCacheRetentionDays();
 
   // Suggest a download filename to the client. Cosmetic by nature: a failure
   // here must never cost the caller their markdown, hence the swallowed catch.
@@ -1070,7 +1073,7 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api/storage', (req, res) => {
-    if (!cache) return res.json({ total: 0, retentionDays: 90 });
+    if (!cache) return res.json({ total: 0, retentionDays: cacheRetentionDays });
     res.json(cache.storageStats());
   });
 
@@ -1164,7 +1167,9 @@ export function createApp(overrides = {}) {
 const isDirectRun = process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, '/'));
 if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
   const port = process.env.PORT || 3000;
-  const cache = createCache(process.env.CACHE_DB || './data/cache.db');
+  // Read once so a malformed value warns a single time and cache + app agree.
+  const retentionDays = readCacheRetentionDays();
+  const cache = createCache(process.env.CACHE_DB || './data/cache.db', { retentionDays });
   const mode = process.env.PULLMD_AUTH_MODE || 'disabled';
   const auth = createAuth({ db: cache.db, mode, env: process.env, publicUrl: process.env.PUBLIC_URL });
   try {
@@ -1219,7 +1224,7 @@ if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
     console.log('OAuth disabled (set OAUTH_JWT_SECRET to enable claude.ai web connector flow)');
   }
 
-  const app = createApp({ cache, auth, oauth });
+  const app = createApp({ cache, auth, oauth, retentionDays });
   app.listen(port, () => {
     console.log(`PullMD running on http://localhost:${port} (auth: ${mode})`);
   });

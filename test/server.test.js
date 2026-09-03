@@ -1240,6 +1240,24 @@ describe('DISABLE_PUBLIC_HISTORY', () => {
   });
 });
 
+describe('GET /api/storage - retention', () => {
+  it('reports the configured retention when no cache is attached', async () => {
+    const app = createApp({ retentionDays: 7 });
+    const res = await request(app, '/api/storage');
+    assert.equal(res.status, 200);
+    const data = JSON.parse(res.body);
+    assert.equal(data.total, 0);
+    assert.equal(data.retentionDays, 7);
+  });
+
+  it('reports retentionDays 0 for an unlimited cache', async () => {
+    const app = createApp({ cache: createCache(':memory:', { retentionDays: 0 }) });
+    const res = await request(app, '/api/storage');
+    assert.equal(res.status, 200);
+    assert.equal(JSON.parse(res.body).retentionDays, 0);
+  });
+});
+
 describe('GET /api/config - markitdown flag', () => {
   it('reports markitdown:false when MARKITDOWN_URL is unset', async () => {
     const prev = process.env.MARKITDOWN_URL;

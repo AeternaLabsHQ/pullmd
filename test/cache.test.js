@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCache } from '../lib/cache.js';
+import { createCache, readCacheRetentionDays, DEFAULT_CACHE_RETENTION_DAYS, MAX_CACHE_RETENTION_DAYS } from '../lib/cache.js';
 
 describe('cache', () => {
   let cache;
@@ -256,5 +256,161 @@ describe('cache — meta table', () => {
     const c = createCache(':memory:');
     c.setRecipesInvalidatedAt('2026-05-06 12:00:00');
     assert.equal(c.getMeta('recipes_invalidated_at'), '2026-05-06 12:00:00');
+  });
+});
+
+describe('readCacheRetentionDays', () => {
+  // Collecting stub so a malformed value never prints to the test output.
+  function collector() {
+    const calls = [];
+    return { warn: (msg) => calls.push(msg), calls };
+  }
+
+  it('falls back to the default when the variable is unset', () => {
+    const { warn, calls } = collector();
+    assert.equal(readCacheRetentionDays({}, warn), DEFAULT_CACHE_RETENTION_DAYS);
+    assert.equal(DEFAULT_CACHE_RETENTION_DAYS, 90);
+    assert.deepEqual(calls, [], 'an unset variable must not warn');
+  });
+
+  it('treats null, empty and whitespace-only values as unset, silently', () => {
+    for (const raw of [null, '', '   ']) {
+      const { warn, calls } = collector();
+      assert.equal(readCacheRetentionDays({ PULLMD_CACHE_RETENTION_DAYS: raw }, warn), 90);
+      assert.deepEqual(calls, [], `${JSON.stringify(raw)} must not warn`);
+    }
+  });
+
+  it('parses non-negative integers and trims surrounding whitespace', () => {
+    for (const [raw, expected] of [['30', 30], ['  30 ', 30], ['0', 0], ['365', 365]]) {
+      const { warn, calls } = collector();
+      assert.equal(readCacheRetentionDays({ PULLMD_CACHE_RETENTION_DAYS: raw }, warn), expected);
+      assert.deepEqual(calls, [], `${JSON.stringify(raw)} must not warn`);
+    }
+  });
+
+  it('warns exactly once and falls back to the default on malformed values', () => {
+    for (const raw of ['abc', '-5', '1.5', '1e3', '90days']) {
+      const { warn, calls } = collector();
+      assert.equal(readCacheRetentionDays({ PULLMD_CACHE_RETENTION_DAYS: raw }, warn), 90);
+      assert.equal(calls.length, 1, `${raw} must warn exactly once`);
+      assert.match(calls[0], /PULLMD_CACHE_RETENTION_DAYS/);
+      assert.ok(calls[0].includes(raw), `the warning must name the offending value ${raw}`);
+      assert.ok(calls[0].includes('90'), 'the warning must name the fallback');
+    }
+  });
+
+  it('accepts the maximum retention without warning', () => {
+    const { warn, calls } = collector();
+    assert.equal(readCacheRetentionDays({ PULLMD_CACHE_RETENTION_DAYS: '36500' }, warn), 36500);
+    assert.equal(MAX_CACHE_RETENTION_DAYS, 36500);
+    assert.deepEqual(calls, [], 'the maximum must not warn');
+  });
+
+  it('rejects values above the maximum, including ones that overflow to Infinity', () => {
+    for (const raw of ['36501', '9999999', '9'.repeat(400)]) {
+      const { warn, calls } = collector();
+      assert.equal(readCacheRetentionDays({ PULLMD_CACHE_RETENTION_DAYS: raw }, warn), 90);
+      assert.equal(calls.length, 1, `${raw.slice(0, 12)} must warn exactly once`);
+      assert.match(calls[0], /PULLMD_CACHE_RETENTION_DAYS/);
+      assert.ok(calls[0].includes('36500'), 'the warning must name the accepted range');
+    }
+  });
+});
+
+describe('cache retention option', () => {
+  const entry = (url) => ({ url, title: 'T', markdown: '# T', source: 'readability' });
+
+  function backdate(cache, url, days) {
+    cache.db.prepare(`UPDATE conversions SET created_at = datetime('now', '-${days} days') WHERE url = ?`).run(url);
+  }
+
+  const countUrl = (cache, url) =>
+    cache.db.prepare('SELECT COUNT(*) c FROM conversions WHERE url = ?').get(url).c;
+
+  const orphanCount = (cache) =>
+    cache.db.prepare('SELECT COUNT(*) c FROM user_fetches WHERE cache_id NOT IN (SELECT id FROM conversions)').get().c;
+
+  it('defaults to 90 days and exposes the value read-only', () => {
+    const c = createCache(':memory:');
+    assert.equal(c.retentionDays, 90);
+    assert.equal(c.storageStats().retentionDays, 90);
+    assert.throws(() => { c.retentionDays = 5; }, TypeError, 'retentionDays must not be writable');
+  });
+
+  it('reports and applies a custom retention in storageStats', () => {
+    const c = createCache(':memory:', { retentionDays: 30 });
+    assert.equal(c.retentionDays, 30);
+    c.put(entry('https://aging.com'));
+    backdate(c, 'https://aging.com', 25);
+    c.put(entry('https://young.com'));
+    backdate(c, 'https://young.com', 15);
+    const s = c.storageStats();
+    assert.equal(s.retentionDays, 30);
+    assert.equal(s.expiringSoon, 1, 'only the 25-day row is inside the 20-day expiry window');
+  });
+
+  it('applies the custom retention to share-link lookups', () => {
+    const c = createCache(':memory:', { retentionDays: 30 });
+    const agedId = c.put(entry('https://aged.com'));
+    const freshId = c.put(entry('https://fresh.com'));
+    backdate(c, 'https://aged.com', 31);
+    backdate(c, 'https://fresh.com', 29);
+    assert.equal(c.getByShareId(agedId), null, '31 days is past a 30-day retention');
+    assert.ok(c.getByShareId(freshId), '29 days is still inside a 30-day retention');
+  });
+
+  it('prunes past the custom retention on the next put and sweeps orphaned fetches', () => {
+    const c = createCache(':memory:', { retentionDays: 30 });
+    const uid = c.db.prepare('INSERT INTO users (email, password_hash) VALUES (?, ?)').run('u@x.y', 'h').lastInsertRowid;
+    c.put({ ...entry('https://aged.com'), user_id: uid });
+    backdate(c, 'https://aged.com', 31);
+    c.put({ ...entry('https://fresh.com'), user_id: uid });
+    assert.equal(countUrl(c, 'https://aged.com'), 0, 'the aged conversion must be pruned');
+    assert.equal(countUrl(c, 'https://fresh.com'), 1);
+    assert.equal(orphanCount(c), 0, 'its user_fetches row must be swept');
+  });
+
+  it('clamps the expiring-soon window to 0 days for retentions below 10 days', () => {
+    const c = createCache(':memory:', { retentionDays: 5 });
+    c.put(entry('https://now.com'));
+    assert.equal(c.storageStats().expiringSoon, 1, 'with a 0-day window every row is expiring soon');
+  });
+
+  it('never ages anything out when retention is 0 (unlimited)', () => {
+    const c = createCache(':memory:', { retentionDays: 0 });
+    const shareId = c.put(entry('https://ancient.com'));
+    backdate(c, 'https://ancient.com', 400);
+    c.put(entry('https://fresh.com'));
+    assert.ok(c.getByShareId(shareId), 'share lookups must have no age condition');
+    assert.equal(countUrl(c, 'https://ancient.com'), 1, 'put() must not prune when unlimited');
+    const s = c.storageStats();
+    assert.equal(s.expiringSoon, 0);
+    assert.equal(s.retentionDays, 0);
+  });
+
+  it('rejects retention values that are not non-negative integers', () => {
+    for (const bad of [-1, 1.5, '30', NaN]) {
+      assert.throws(
+        () => createCache(':memory:', { retentionDays: bad }),
+        { name: 'TypeError', message: /retentionDays/ },
+        `${String(bad)} must be rejected`,
+      );
+    }
+  });
+
+  it('rejects retention values above the maximum', () => {
+    assert.throws(
+      () => createCache(':memory:', { retentionDays: MAX_CACHE_RETENTION_DAYS + 1 }),
+      { name: 'TypeError', message: /retentionDays/ },
+      'a retention past the maximum must be rejected',
+    );
+  });
+
+  it('still builds a usable date modifier at the maximum retention', () => {
+    const c = createCache(':memory:', { retentionDays: MAX_CACHE_RETENTION_DAYS });
+    assert.equal(c.storageStats().retentionDays, 36500);
+    const shareId = c.put(entry('https://maxed.com'));
+    assert.ok(c.getByShareId(shareId), 'the SQLite date modifier must stay inside its valid range');
   });
 });

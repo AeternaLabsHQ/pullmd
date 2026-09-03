@@ -43,6 +43,8 @@ services:
       - PULLMD_AUTH_TOKEN=${PULLMD_AUTH_TOKEN:-}
       # OAuth 2.1 for MCP clients (claude.ai web, Claude Desktop) — opt-in, see README.
       - OAUTH_JWT_SECRET=${OAUTH_JWT_SECRET:-}
+      # Cache retention in days; 0 = keep forever. Default 90.
+      - PULLMD_CACHE_RETENTION_DAYS=${PULLMD_CACHE_RETENTION_DAYS:-}
       - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data
