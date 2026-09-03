@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCache, readCacheRetentionDays, DEFAULT_CACHE_RETENTION_DAYS } from '../lib/cache.js';
+import { createCache, readCacheRetentionDays, DEFAULT_CACHE_RETENTION_DAYS, MAX_CACHE_RETENTION_DAYS } from '../lib/cache.js';
 
 describe('cache', () => {
   let cache;
@@ -299,6 +299,23 @@ describe('readCacheRetentionDays', () => {
       assert.ok(calls[0].includes('90'), 'the warning must name the fallback');
     }
   });
+
+  it('accepts the maximum retention without warning', () => {
+    const { warn, calls } = collector();
+    assert.equal(readCacheRetentionDays({ PULLMD_CACHE_RETENTION_DAYS: '36500' }, warn), 36500);
+    assert.equal(MAX_CACHE_RETENTION_DAYS, 36500);
+    assert.deepEqual(calls, [], 'the maximum must not warn');
+  });
+
+  it('rejects values above the maximum, including ones that overflow to Infinity', () => {
+    for (const raw of ['36501', '9999999', '9'.repeat(400)]) {
+      const { warn, calls } = collector();
+      assert.equal(readCacheRetentionDays({ PULLMD_CACHE_RETENTION_DAYS: raw }, warn), 90);
+      assert.equal(calls.length, 1, `${raw.slice(0, 12)} must warn exactly once`);
+      assert.match(calls[0], /PULLMD_CACHE_RETENTION_DAYS/);
+      assert.ok(calls[0].includes('36500'), 'the warning must name the accepted range');
+    }
+  });
 });
 
 describe('cache retention option', () => {
@@ -380,5 +397,20 @@ describe('cache retention option', () => {
         `${String(bad)} must be rejected`,
       );
     }
+  });
+
+  it('rejects retention values above the maximum', () => {
+    assert.throws(
+      () => createCache(':memory:', { retentionDays: MAX_CACHE_RETENTION_DAYS + 1 }),
+      { name: 'TypeError', message: /retentionDays/ },
+      'a retention past the maximum must be rejected',
+    );
+  });
+
+  it('still builds a usable date modifier at the maximum retention', () => {
+    const c = createCache(':memory:', { retentionDays: MAX_CACHE_RETENTION_DAYS });
+    assert.equal(c.storageStats().retentionDays, 36500);
+    const shareId = c.put(entry('https://maxed.com'));
+    assert.ok(c.getByShareId(shareId), 'the SQLite date modifier must stay inside its valid range');
   });
 });
