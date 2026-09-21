@@ -100,7 +100,7 @@ describe('cache', () => {
   it('returns a share_id on put', () => {
     const shareId = cache.put({ url: 'https://share.com', title: 'Share', markdown: '# Share', source: 'readability' });
     assert.ok(shareId);
-    assert.equal(shareId.length, 8);
+    assert.match(shareId, /^[0-9a-f]{32}$/);
   });
 
   it('preserves share_id on re-put', () => {
@@ -108,6 +108,12 @@ describe('cache', () => {
     cache.put({ url: 'https://keep.com', title: 'V2', markdown: '# V2', source: 'readability' });
     const hit = cache.get('https://keep.com');
     assert.equal(hit.share_id, id1);
+  });
+
+  it('still resolves legacy 8-char share ids', () => {
+    cache.put({ url: 'https://legacy.com', title: 'Legacy', markdown: '# Legacy', source: 'readability' });
+    cache.db.prepare("UPDATE conversions SET share_id = 'deadbeef' WHERE url = ?").run('https://legacy.com');
+    assert.equal(cache.getByShareId('deadbeef').title, 'Legacy');
   });
 
   it('retrieves entry by share_id', () => {

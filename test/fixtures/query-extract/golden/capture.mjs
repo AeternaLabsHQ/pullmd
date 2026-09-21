@@ -7,7 +7,7 @@
 //
 // Run from the repo root: node test/fixtures/query-extract/golden/capture.mjs
 //
-// Normalization: share ids are random 8-char hex -> "00000000"; ISO timestamps
+// Normalization: share ids are random 32-char hex -> "00000000" (kept at 8 zeros so the goldens stay byte-identical); ISO timestamps
 // (the dynamic `fetched` field) -> epoch.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -40,7 +40,7 @@ export function buildFixtureApp() {
 
 export function normalize(body) {
   return body
-    .replace(/\b[0-9a-f]{8}\b/g, '00000000')
+    .replace(/\b[0-9a-f]{32}\b/g, '00000000')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, '1970-01-01T00:00:00.000Z');
 }
 

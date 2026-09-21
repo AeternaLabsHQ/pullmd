@@ -51,3 +51,26 @@ describe('rate limiter', () => {
     }
   });
 });
+
+describe('rate limiter key eviction', () => {
+  it('sweeps keys whose window has fully expired once the map grows large', () => {
+    let now = 1_000_000;
+    const rl = createRateLimiter({ windowMs: 1000, max: 5, now: () => now });
+    for (let i = 0; i < 10_000; i++) rl.check(`ip-${i}`);
+    assert.equal(rl.size(), 10_000);
+    now += 2000;
+    rl.check('fresh');
+    assert.equal(rl.size(), 1);
+  });
+
+  it('keeps keys that still have live timestamps during a sweep', () => {
+    let now = 1_000_000;
+    const rl = createRateLimiter({ windowMs: 1000, max: 5, now: () => now });
+    for (let i = 0; i < 9_999; i++) rl.check(`old-${i}`);
+    now += 500;
+    rl.check('young');
+    now += 700;
+    rl.check('trigger');
+    assert.equal(rl.size(), 2);
+  });
+});

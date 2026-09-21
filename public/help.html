@@ -466,7 +466,7 @@ Response headers worth checking:
                  trafilatura | playwright | recipe-content |
                  coverage-guard | markitdown | youtube | pdf-ocr | ...
   X-Quality      0.0-1.0 extraction confidence
-  X-Share-Id     8-hex permalink, openable as /s/&lt;id&gt;
+  X-Share-Id     32-hex permalink, openable as /s/&lt;id&gt;
   X-Transcript-Status  youtube only: ok | none | blocked | error
                  (blocked/error = transient, not cached — retry later)
 
@@ -755,8 +755,8 @@ Then: claude mcp list to verify.</pre>
             <td lang="en"><code>0.0</code>–<code>1.0</code> extraction confidence. Low values mean thin or noisy output.</td>
           </tr>
           <tr><td><code>X-Share-Id</code></td>
-            <td lang="de">8-stellige Hex-ID, aufrufbar als <code>/s/&lt;id&gt;</code>. Fehlt bei <code>/api/html</code> und <code>/api/file</code>, weil lokale Dateien nicht gecacht werden.</td>
-            <td lang="en">8-hex id, openable as <code>/s/&lt;id&gt;</code>. Absent on <code>/api/html</code> and <code>/api/file</code>, since local files are never cached.</td>
+            <td lang="de">32-stellige Hex-ID, aufrufbar als <code>/s/&lt;id&gt;</code>. Fehlt bei <code>/api/html</code> und <code>/api/file</code>, weil lokale Dateien nicht gecacht werden.</td>
+            <td lang="en">32-hex id, openable as <code>/s/&lt;id&gt;</code>. Absent on <code>/api/html</code> and <code>/api/file</code>, since local files are never cached.</td>
           </tr>
           <tr><td><code>X-Suggested-Filename</code></td>
             <td lang="de">Vorgeschlagener Dateiname für den Download, z. B. <code>YT-vortrag-titel-dQw4w9WgXcQ.md</code>. YouTube bekommt Titel plus Video-ID, Bilder, Audio und Dokumente den ursprünglichen Dateinamen, alles andere den Titel. Self-Hoster können mit <code>PULLMD_FILENAME_DATE_PREFIX</code> ein Datum voranstellen (Vorlage mit den Platzhaltern <code>YYYY MM DD HH mm ss</code>, z. B. <code>YYYY-MM-DD-</code>). Der Download-Button in der Web-Oberfläche speichert das Ergebnis unter genau diesem Namen. Bei <code>/api/stream</code> gibt es keine Header, dort steckt derselbe Wert als <code>suggestedFilename</code> im <code>result</code>-Event.</td>
@@ -886,8 +886,8 @@ Then: claude mcp list to verify.</pre>
     <!-- ===================================================== -->
     <section id="share">
       <h2><span lang="de">Share-Links</span><span lang="en">Share links</span><span class="kicker">/s/:id</span></h2>
-      <p lang="de">Jeder Pull bekommt eine 8-stellige Hex-ID als Share-Link, der den exakten Markdown-Stand zurückliefert. Die ID erscheint im Response-Header <code>X-Share-Id</code> und in der Share-Bar unter dem URL-Feld.</p>
-      <p lang="en">Every pull gets an 8-hex share ID returning the exact markdown snapshot. The ID surfaces in the response header <code>X-Share-Id</code> and in the share bar below the URL field.</p>
+      <p lang="de">Jeder Pull bekommt eine 32-stellige Hex-ID (128 Bit Zufall, nicht erratbar) als Share-Link, der den exakten Markdown-Stand zurückliefert. Die ID erscheint im Response-Header <code>X-Share-Id</code> und in der Share-Bar unter dem URL-Feld.</p>
+      <p lang="en">Every pull gets a 32-hex share ID (128 random bits, not guessable) returning the exact markdown snapshot. The ID surfaces in the response header <code>X-Share-Id</code> and in the share bar below the URL field.</p>
       <ul class="doc-list" lang="de">
         <li><code>GET /s/:id</code> liefert den Markdown (Content-Type <code>text/markdown</code>).</li>
         <li>Wenn der Eintrag &lt; 1 h alt ist: Sofortantwort aus dem Cache. Sonst: frischer Fetch der Quelle und schreibt zurück.</li>

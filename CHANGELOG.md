@@ -17,6 +17,17 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
      there at the same time, or this heading renders as literal bracketed
      text. -->
 
+## [3.12.0] - 2026-09-21
+
+### Security
+
+- **Share links can no longer be enumerated** (closes #58, reported by [@kta1kri](https://github.com/kta1kri)). Share ids were 32 random bits (8 hex characters) and `/s/:id` had no throttling, so a script guessing ids at a few thousand requests per second could have walked the entire id space in days and discovered every cached conversion on an instance, including on instances that set `DISABLE_PUBLIC_HISTORY=true` precisely to hide them. New ids are 128 bits (32 hex characters). Existing 8-character links keep working, because the column is text and nothing ever checked the length. On top of that, `/s/:id` now throttles lookups of *unknown* ids to 120 per minute and client IP and answers `429` with `Retry-After` beyond that. Only misses count: a valid link is resolved before the limiter is consulted, so a script that walks hundreds of its own share links is never throttled, while an enumeration script, which sees almost nothing but misses, is. The in-process limiter shared with the OAuth routes now also evicts idle keys, since on a public unauthenticated route a client could otherwise grow its bookkeeping without bound by rotating `X-Forwarded-For`.
+- **`/api/stream` validates the URL before the cache lookup.** The SSE endpoint relied on the fetch layer's own SSRF guard, which does block the request, but it consulted the cache first, so a row cached before a host became blocked (say, by tightening `PULLMD_ALLOWED_HOSTS`) could still have been served through this path. It now runs the same up-front check as `/api` and the MCP tools; a rejection surfaces as an SSE `error` event with the `URL not allowed: …` wording, since the response headers are already flushed at that point.
+
+### Added
+
+- **`SECURITY.md`** and GitHub private vulnerability reporting for the repository. The report above had to be filed publicly because neither existed.
+
 ---
 
 ## [3.11.0] - 2026-09-03
@@ -434,6 +445,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.12.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.12.0
 [3.11.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.11.0
 [3.10.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.10.1
 [3.10.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.10.0

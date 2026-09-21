@@ -663,8 +663,8 @@ describe('POST /mcp', () => {
     assert.ok(fmEnd > 0, 'frontmatter block should be closed');
     const fm = text.slice(4, fmEnd);
     assert.match(fm, /^source: readability$/m);
-    assert.match(fm, /^share_id: [0-9a-f]{8}$/m);
-    assert.match(fm, /^share_url: https?:\/\/[^/]+\/s\/[0-9a-f]{8}$/m);
+    assert.match(fm, /^share_id: [0-9a-f]{32}$/m);
+    assert.match(fm, /^share_url: https?:\/\/[^/]+\/s\/[0-9a-f]{32}$/m);
     assert.match(fm, /^quality: 0\.8$/m);
     assert.match(fm, /^cached: false$/m);
     assert.ok(text.slice(fmEnd).includes('# Test page'), 'markdown body comes after frontmatter');
@@ -687,7 +687,7 @@ describe('POST /mcp', () => {
         }),
       });
       const text = parseSse(res.body).result.content[0].text;
-      assert.match(text, /^share_url: https:\/\/my-instance\.example\.com\/s\/[0-9a-f]{8}$/m);
+      assert.match(text, /^share_url: https:\/\/my-instance\.example\.com\/s\/[0-9a-f]{32}$/m);
     } finally {
       if (prev === undefined) delete process.env.PUBLIC_URL;
       else process.env.PUBLIC_URL = prev;
@@ -745,7 +745,7 @@ describe('POST /mcp', () => {
     assert.equal(fm.match(/^source:/gm).length, 1, 'source must appear exactly once');
     assert.equal(fm.match(/^share_id:/gm).length, 1, 'share_id must appear exactly once');
     assert.equal(fm.match(/^quality:/gm).length, 1, 'quality must appear exactly once');
-    assert.match(fm, /^share_url: https?:\/\/[^/]+\/s\/[0-9a-f]{8}$/m);
+    assert.match(fm, /^share_url: https?:\/\/[^/]+\/s\/[0-9a-f]{32}$/m);
     assert.match(fm, /^cached: false$/m);
   });
 
@@ -763,7 +763,7 @@ describe('POST /mcp', () => {
     });
     const items = JSON.parse(parseSse(res.body).result.content[0].text);
     assert.equal(items.length, 1);
-    assert.match(items[0].share_url, /^https?:\/\/[^/]+\/s\/[0-9a-f]{8}$/);
+    assert.match(items[0].share_url, /^https?:\/\/[^/]+\/s\/[0-9a-f]{32}$/);
     assert.equal(items[0].share_id, items[0].share_url.split('/').pop());
   });
 

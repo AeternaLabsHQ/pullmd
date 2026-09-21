@@ -31,7 +31,7 @@ It ships as:
 - an **MCP server** at `POST /mcp` (Streamable-HTTP transport, stateless)
 - a **Claude Code skill** as a downloadable zip
 
-Every conversion gets an 8-hex **share id** that works as a stable
+Every conversion gets a 32-hex **share id** that works as a stable
 live-endpoint: `GET /s/:id` returns the cached markdown and
 re-fetches from the source if older than one hour. Use the share id
 as a fixed URL that always returns fresh content — useful for
@@ -240,8 +240,10 @@ because Reddit's API expects a stable, identifying UA.
 instances (multi-tenant VPS, office deployments). Conversions still
 get cached and assigned share IDs; users just can't see what *other*
 users have fetched. Anyone with a known `/s/:id` link still gets
-their markdown back. Use this as a stopgap until per-user scoping
-lands.
+their markdown back. Share ids are 128 random bits, so a link cannot
+be guessed, and `/s/:id` throttles unknown-id lookups to 120 per
+minute and IP (valid links are never throttled). Use this as a
+stopgap until per-user scoping lands.
 
 ---
 
@@ -377,7 +379,7 @@ Response headers worth checking:
   X-Source       reddit | hackernews | cloudflare | readability | trafilatura |
                  playwright | markitdown | youtube | pdf-ocr | ...
   X-Quality      0.0-1.0 extraction confidence
-  X-Share-Id     8-hex permalink, openable as /s/<id>
+  X-Share-Id     32-hex permalink, openable as /s/<id>
   X-Transcript-Status  youtube only: ok | none | blocked | error
                  (blocked/error = transient, not cached — retry later)
 
@@ -535,7 +537,7 @@ Both `query` and `max_tokens` are also available on the MCP `read_url` tool.
 
 - `X-Source` — `reddit` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
 - `X-Quality` — `0.0`–`1.0` extraction confidence
-- `X-Share-Id` — the 8-hex permalink id
+- `X-Share-Id` — the 32-hex permalink id
 - `X-Suggested-Filename` — a download filename for this conversion, e.g. `YT-some-talk-dQw4w9WgXcQ.md`. YouTube gets title plus video id, images/audio/documents keep the original file name from the URL, everything else uses the title; `PULLMD_FILENAME_DATE_PREFIX` prepends a date. Also on `/s/:id`, `POST /api/html` and `POST /api/file`; on `/api/stream` the same value arrives as `suggestedFilename` in the `result` event, since SSE has no headers to carry it.
 - `X-Transcript-Status` — YouTube only: `ok` · `none` · `blocked` · `error`. `blocked` (YouTube rate-limited the transcript fetch, HTTP 429) and `error` are transient and not cached — retry later; `none` means the video genuinely has no transcript
 - `X-Extracted` — `true` / `false`. Present only when `query` is active.
@@ -793,7 +795,7 @@ To write or contribute a recipe, see the **[site-recipe contributor guide](./SIT
 - `lib/render-decision.js` — Predicate that decides when to fall back to Playwright (readability-fellback + thin, body-soup signature, or quality < 0.5; plus `force` / `skip` overrides).
 - `lib/playwright-client.js` — HTTP client for the Playwright sidecar with `AbortSignal` propagation for SSE-disconnect cancellation.
 - `lib/scoring.js` — Quality scoring used to pick between extractors and as a render-trigger heuristic.
-- `lib/cache.js` — SQLite cache (`better-sqlite3`) with configurable retention (default 90 days) and 8-hex share ids.
+- `lib/cache.js` — SQLite cache (`better-sqlite3`) with configurable retention (default 90 days) and 32-hex (128-bit) share ids.
 - `lib/mcp.js` — Stateless MCP server registering the three tools.
 - `lib/distrib.js` — Public-URL substitution in `/help` and `/pullmd.zip`.
 - `trafilatura-sidecar/` — Python sidecar (FastAPI) wrapping Trafilatura.

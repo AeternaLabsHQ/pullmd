@@ -13,6 +13,7 @@ import { mcpHandler } from './lib/mcp.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor, PULLMD_VERSION } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
 import { assertUrlAllowed, SsrfError } from './lib/ssrf.js';
+import { createRateLimiter } from './lib/oauth/rate-limit.js';
 import { ignoredModelEnvWarning } from './lib/llm/providers.js';
 import { createStatusChecker } from './lib/status.js';
 import path from 'node:path';
@@ -122,6 +123,11 @@ export function createApp(overrides = {}) {
   // Only used for the cache-less /api/storage answer; with a cache attached the
   // cache reports its own configured retention.
   const cacheRetentionDays = overrides.retentionDays ?? readCacheRetentionDays();
+  // Throttles /s/:id MISSES only (#58). A valid link is never counted, so a
+  // script that legitimately walks hundreds of its own share links stays
+  // unaffected; an enumeration script, which sees almost nothing but misses,
+  // hits the ceiling after 120 guesses per minute and IP.
+  const shareMissLimiter = overrides.shareMissLimiter ?? createRateLimiter({ windowMs: 60_000, max: 120 });
 
   // Suggest a download filename to the client. Cosmetic by nature: a failure
   // here must never cost the caller their markdown, hence the swallowed catch.
@@ -294,6 +300,11 @@ export function createApp(overrides = {}) {
 
     const entry = cache.getByShareId(req.params.id);
     if (!entry) {
+      const key = shareMissLimiter.keyFor(req);
+      if (!shareMissLimiter.check(key)) {
+        res.set('Retry-After', String(shareMissLimiter.retryAfterSeconds(key)));
+        return res.status(429).json({ error: 'rate_limited' });
+      }
       return res.status(404).json({ error: 'Share link not found or expired' });
     }
 
@@ -871,6 +882,17 @@ export function createApp(overrides = {}) {
     const t0 = Date.now();
 
     try {
+      // Same guard as /api, and deliberately ahead of the cache lookup: a row
+      // cached before a host became blocked must not be served through here.
+      // Headers are already flushed, so a rejection surfaces as an SSE error
+      // event via the catch below instead of a 403.
+      try {
+        await assertUrlAllowed(url);
+      } catch (err) {
+        if (err instanceof SsrfError) throw new Error(`URL not allowed: ${err.message}`);
+        throw err;
+      }
+
       // Cache hit fast path
       if (useCache) {
         const cached = cache.get(url);
