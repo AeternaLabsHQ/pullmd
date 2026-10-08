@@ -16,24 +16,9 @@ import { assertUrlAllowed, SsrfError } from './lib/ssrf.js';
 import { createRateLimiter } from './lib/oauth/rate-limit.js';
 import { ignoredModelEnvWarning } from './lib/llm/providers.js';
 import { createStatusChecker } from './lib/status.js';
+import { stripMarkdown } from './lib/strip-markdown.js';
 import path from 'node:path';
 import fs from 'node:fs';
-
-function stripMarkdown(md) {
-  return md
-    .replace(/^#{1,6}\s+/gm, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/__(.+?)__/g, '$1')
-    .replace(/_(.+?)_/g, '$1')
-    .replace(/~~(.+?)~~/g, '$1')
-    .replace(/!\[.*?\]\((.+?)\)/g, '$1')
-    .replace(/\[(.+?)\]\((.+?)\)/g, '$1 ($2)')
-    .replace(/^>\s?/gm, '')
-    .replace(/^[-*+]\s+/gm, '- ')
-    .replace(/^---+$/gm, '---')
-    .trim();
-}
 
 function isRedditUrl(url) {
   try {

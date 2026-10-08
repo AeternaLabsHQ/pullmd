@@ -17,6 +17,11 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
      there at the same time, or this heading renders as literal bracketed
      text. -->
 
+### Fixed
+
+- **Words no longer run together around inline formatting in list items** (closes #60, reported by [@WinFuture23](https://github.com/WinFuture23)). The Trafilatura sidecar pinned trafilatura 2.0.0, which dropped the space after `<em>` and `<strong>` inside list items and glued the `- ` marker onto the previous line: `<li><em>New!</em> This update` came out as `*New!*This update`, and with `format=text` as `New!This update`. The sidecar now pins trafilatura 2.3.1; the upstream fix landed in 2.2.0. The jump spans three upstream releases with broader extraction changes, so Trafilatura output differs beyond this bug. In a comparison on 45 real pages it also stopped gluing consecutive paragraphs together (`kostete.Der`), extracted considerably more from news front pages, and on one article page additionally kept the sidebar link lists. Because the Readability/Trafilatura choice compares the two outputs, a page can now come out of the other extractor than before; in the comparison that happened on four front pages, all of which switched to Trafilatura. The sidecar has a standalone regression test, `trafilatura-sidecar/test_extract.py`, which runs inside the built image.
+- **`format=text` resolves Markdown backslash escapes.** Both extractors escape literal punctuation in their Markdown (`\[`, `\_`, `\*`), and the plain-text conversion passed those backslashes through or, worse, read an escaped `\*` or `\_` as an emphasis marker: `n \* factorial(n-1) \* 2` became `n \ factorial(n-1) \ 2`, and `\_\_init\_\_` became `\\init\\`. Escapes now resolve to the bare character before the emphasis and link patterns run; code spans and fenced blocks keep their backslashes. trafilatura 2.3 escapes far more than 2.0 did, so without this the fix above would have traded glued words for stray backslashes.
+
 ## [3.12.0] - 2026-09-21
 
 ### Security
