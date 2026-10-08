@@ -16,12 +16,9 @@ def health():
     return {"ok": True, "trafilatura": trafilatura.__version__}
 
 
-@app.post("/extract", response_class=PlainTextResponse)
-def extract(req: ExtractRequest):
-    if not req.html:
-        raise HTTPException(status_code=400, detail="html field required")
+def to_markdown(html: str) -> str:
     result = trafilatura.extract(
-        req.html,
+        html,
         output_format="markdown",
         include_comments=False,
         include_tables=True,
@@ -30,3 +27,10 @@ def extract(req: ExtractRequest):
         favor_recall=True,
     )
     return result or ""
+
+
+@app.post("/extract", response_class=PlainTextResponse)
+def extract(req: ExtractRequest):
+    if not req.html:
+        raise HTTPException(status_code=400, detail="html field required")
+    return to_markdown(req.html)
