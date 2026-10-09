@@ -7,6 +7,7 @@ import { createAuth } from '../lib/auth.js';
 import { createOAuthStore } from '../lib/oauth/store.js';
 import { createRateLimiter } from '../lib/oauth/rate-limit.js';
 import { createLlmBudget } from '../lib/llm/budget.js';
+import { createForwardedHeaderNotice } from '../lib/proxy-notice.js';
 import { extractWeb, extractFile } from '../lib/web.js';
 
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
@@ -98,12 +99,12 @@ describe('client address for rate limiting', () => {
 });
 
 describe('session cookie Secure flag', () => {
-  async function loginCookie(trustProxy) {
-    const { cache, auth } = makeAuth('multi-user');
+  async function loginCookie(trustProxy, { publicUrl, headers = { 'x-forwarded-proto': 'https' } } = {}) {
+    const { cache, auth } = makeAuth('multi-user', publicUrl ? { publicUrl } : {});
     await auth.runMigration();
     const app = createApp({ cache, auth, ...(trustProxy !== undefined && { trustProxy }) });
     return withServer(app, async (base) => {
-      const r = await postForm(base, '/login', 'email=admin@x.y&password=adminpass1', { 'x-forwarded-proto': 'https' });
+      const r = await postForm(base, '/login', 'email=admin@x.y&password=adminpass1', headers);
       assert.equal(r.status, 302);
       return (r.headers.getSetCookie?.() || []).find((c) => c.startsWith('pullmd_session='));
     });
@@ -115,6 +116,88 @@ describe('session cookie Secure flag', () => {
 
   it('is not derived from X-Forwarded-Proto without trust proxy', async () => {
     assert.doesNotMatch(await loginCookie(undefined), /;\s*Secure/);
+  });
+
+  it('is set when PUBLIC_URL is https, without trust proxy', async () => {
+    const cookie = await loginCookie(undefined, { publicUrl: 'https://md.example.org', headers: {} });
+    assert.match(cookie, /;\s*Secure/);
+  });
+
+  it('is set when PUBLIC_URL is https, read from the auth env', async () => {
+    const cache = createCache(':memory:');
+    const auth = createAuth({
+      db: cache.db, mode: 'multi-user', argon2Opts: fastOpts,
+      env: { PULLMD_ADMIN_EMAIL: 'admin@x.y', PULLMD_ADMIN_PASSWORD: 'adminpass1', PUBLIC_URL: 'HTTPS://md.example.org/' },
+    });
+    await auth.runMigration();
+    const cookie = await withServer(createApp({ cache, auth }), async (base) => {
+      const r = await postForm(base, '/login', 'email=admin@x.y&password=adminpass1');
+      return (r.headers.getSetCookie?.() || []).find((c) => c.startsWith('pullmd_session='));
+    });
+    assert.match(cookie, /;\s*Secure/);
+  });
+
+  it('is not set for an http PUBLIC_URL on a plain http request', async () => {
+    const cookie = await loginCookie(undefined, { publicUrl: 'http://md.example.org', headers: {} });
+    assert.doesNotMatch(cookie, /;\s*Secure/);
+  });
+
+  it('is not set on a plain http request without PUBLIC_URL', async () => {
+    assert.doesNotMatch(await loginCookie(undefined, { headers: {} }), /;\s*Secure/);
+  });
+});
+
+describe('forwarded-header notice without trust proxy', () => {
+  const NOTICE = 'Requests arrive through a proxy but PULLMD_TRUST_PROXY is not set: all clients share one rate-limit bucket and the client address is the proxy\'s. See MIGRATION.md.';
+
+  function spy() {
+    const calls = [];
+    const warn = (...args) => calls.push(args.join(' '));
+    return { calls, notice: createForwardedHeaderNotice({ warn }) };
+  }
+
+  it('logs the notice once per process, however many requests carry forwarding headers', async () => {
+    const { calls, notice } = spy();
+    await withServer(createApp({ forwardedHeaderNotice: notice }), async (base) => {
+      await fetch(base + '/api/config');
+      assert.equal(calls.length, 0);
+      await fetch(base + '/api/config', { headers: { 'x-forwarded-for': '198.51.100.7' } });
+      await fetch(base + '/api/config', { headers: { 'x-forwarded-proto': 'https' } });
+      await fetch(base + '/api/config', { headers: { forwarded: 'for=198.51.100.8' } });
+    });
+    // A second app in the same process shares the notice and stays quiet.
+    await withServer(createApp({ forwardedHeaderNotice: notice }), async (base) => {
+      await fetch(base + '/api/config', { headers: { 'x-forwarded-for': '198.51.100.9' } });
+    });
+    assert.deepEqual(calls, [NOTICE]);
+  });
+
+  for (const header of ['x-forwarded-proto', 'forwarded']) {
+    it(`is triggered by ${header} alone`, async () => {
+      const { calls, notice } = spy();
+      await withServer(createApp({ forwardedHeaderNotice: notice }), async (base) => {
+        await fetch(base + '/api/config', { headers: { [header]: header === 'forwarded' ? 'proto=https' : 'https' } });
+      });
+      assert.deepEqual(calls, [NOTICE]);
+    });
+  }
+
+  it('stays quiet when trust proxy is configured', async () => {
+    const { calls, notice } = spy();
+    await withServer(createApp({ trustProxy: 1, forwardedHeaderNotice: notice }), async (base) => {
+      await fetch(base + '/api/config', { headers: { 'x-forwarded-for': '198.51.100.7' } });
+    });
+    assert.equal(calls.length, 0);
+  });
+
+  it('does not change the response', async () => {
+    const { notice } = spy();
+    await withServer(createApp({ forwardedHeaderNotice: notice }), async (base) => {
+      const plain = await fetch(base + '/api/config');
+      const proxied = await fetch(base + '/api/config', { headers: { 'x-forwarded-for': '198.51.100.7' } });
+      assert.equal(proxied.status, plain.status);
+      assert.deepEqual(await proxied.json(), await plain.json());
+    });
   });
 });
 

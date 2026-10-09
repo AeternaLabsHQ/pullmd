@@ -17,6 +17,7 @@ import { createRateLimiter } from './lib/oauth/rate-limit.js';
 import { ignoredModelEnvWarning } from './lib/llm/providers.js';
 import { createLlmBudget } from './lib/llm/budget.js';
 import { createStatusChecker } from './lib/status.js';
+import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -111,6 +112,9 @@ export function parseTrustProxy(raw) {
   return list.length ? list : false;
 }
 
+// Shared by every app in this process, so the notice is logged at most once.
+let processForwardedHeaderNotice = null;
+
 function applyTrustProxy(app, value) {
   try {
     app.set('trust proxy', value);
@@ -125,6 +129,12 @@ export function createApp(overrides = {}) {
   // Before any route: req.ip / req.secure (rate limiters, cookie flags)
   // depend on it.
   applyTrustProxy(app, overrides.trustProxy ?? parseTrustProxy(process.env.PULLMD_TRUST_PROXY));
+  if (!app.get('trust proxy')) {
+    // Behaviour stays the same; this only tells the operator once that a
+    // proxy is in front and PULLMD_TRUST_PROXY is missing.
+    app.use(overrides.forwardedHeaderNotice
+      || (processForwardedHeaderNotice ??= createForwardedHeaderNotice()));
+  }
   const extract = overrides.extractPost || extractPost;
   const extractHnFn = overrides.extractHn || extractHn;
   const extractWebFn = overrides.extractWeb || extractWeb;
