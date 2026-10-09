@@ -1,12 +1,14 @@
-# ---------- Stage 1: build native deps ----------
+# ---------- Stage 1: install deps ----------
+# better-sqlite3 and argon2 ship prebuilt musl binaries (x64 + arm64) and load
+# them at runtime, so no compiler toolchain is needed. --ignore-scripts keeps npm
+# from compiling better-sqlite3 anyway (its binding.gyp triggers an implicit
+# node-gyp rebuild) and stops dependencies from running install scripts.
 FROM node:22-alpine AS builder
-
-RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --ignore-scripts
 
 
 # ---------- Stage 2: minimal runtime ----------
