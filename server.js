@@ -1155,7 +1155,7 @@ export function createApp(overrides = {}) {
     if (!cache) {
       return res.json([]);
     }
-    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 20, 100));
     if (req.user) {
       return res.json(cache.historyForUser(req.user.id, limit));
     }
@@ -1169,7 +1169,7 @@ export function createApp(overrides = {}) {
     if (!cache) {
       return res.json({ items: [], total: 0 });
     }
-    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 50, 200));
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     if (req.user) {
       return res.json(cache.historyPageForUser(req.user.id, limit, offset));
