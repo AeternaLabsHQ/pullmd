@@ -272,8 +272,10 @@ users have fetched (the MCP `list_recent` tool follows the same rule,
 and `/api/stats` leaves out its per-domain lists). Anyone with a known
 `/s/:id` link still gets their markdown back. Share ids are 128 random bits, so a link cannot
 be guessed, and `/s/:id` throttles unknown-id lookups to 120 per
-minute and IP (valid links are never throttled). Use this as a
-stopgap until per-user scoping lands.
+minute and IP (valid links are never throttled). With sign-in
+enabled (`PULLMD_AUTH_MODE=single-admin` or `multi-user`) history is
+scoped per user anyway; the switch matters for instances without
+sign-in.
 
 ---
 
