@@ -427,6 +427,35 @@ describe('GET /api/stats', () => {
     assert.equal(stats.bySource[0].count, 2);
   });
 
+  it('includes per-domain lists without auth when public history is on', async () => {
+    const cache = createCache(':memory:');
+    const app = createApp({
+      extractWeb: async () => ({ markdown: '# Web\n\nContent', title: 'Web', source: 'trafilatura', metadata: { quality: 0.8 } }),
+      cache,
+    });
+    await request(app, '/api?url=https://example.com/a');
+    const stats = JSON.parse((await request(app, '/api/stats')).body);
+    assert.ok(Array.isArray(stats.lowQualityDomains));
+    assert.ok(Array.isArray(stats.fallbackByDomain));
+  });
+
+  it('omits per-domain lists when DISABLE_PUBLIC_HISTORY is on', async () => {
+    const cache = createCache(':memory:');
+    const app = createApp({
+      extractWeb: async () => ({ markdown: '# Web\n\nContent', title: 'Web', source: 'trafilatura', metadata: { quality: 0.8 } }),
+      cache,
+      disablePublicHistory: true,
+    });
+    await request(app, '/api?url=https://example.com/a');
+    const res = await request(app, '/api/stats');
+    assert.equal(res.status, 200);
+    const stats = JSON.parse(res.body);
+    assert.equal(stats.total, 1);
+    assert.equal(stats.bySource[0].source, 'trafilatura');
+    assert.equal(stats.lowQualityDomains, undefined);
+    assert.equal(stats.fallbackByDomain, undefined);
+  });
+
   it('returns empty when cache absent', async () => {
     const app = createApp({});
     const res = await request(app, '/api/stats');

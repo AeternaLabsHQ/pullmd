@@ -1126,7 +1126,16 @@ export function createApp(overrides = {}) {
   app.get('/api/stats', (req, res) => {
     if (!cache) return res.json({ total: 0, window: '-7 days' });
     const window = req.query.window || '-7 days';
-    res.json(cache.extractionStats(window));
+    const stats = cache.extractionStats(window);
+    // The per-domain lists name the sites that were fetched, across all
+    // users. They are included only for callers who may see the global
+    // history: the admin, or anyone when auth is off and public history is on.
+    const showDomains = isGlobalScope(req) && (!!req.user || !disablePublicHistory);
+    if (!showDomains) {
+      delete stats.lowQualityDomains;
+      delete stats.fallbackByDomain;
+    }
+    res.json(stats);
   });
 
   app.get('/api/storage', (req, res) => {
