@@ -16,9 +16,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@mozilla/readability": "^0.6.0",
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "argon2": "^0.45.1",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.3",
     "cheerio": "^1.2.0",
     "express": "^5.2.1",
     "image-size": "^2.0.4",
