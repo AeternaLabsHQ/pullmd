@@ -12,7 +12,7 @@ Until v3.12, PullMD read `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded
 | ----- | ------- |
 | unset, empty, `false`, `off`, `no`, `0` | Off (default). Forwarding headers are ignored. |
 | `1`, `2`, ... | Hop count: trust that many proxies in front of PullMD. `1` for a single reverse proxy. |
-| `true`, `yes`, `on` | Trust every hop. |
+| `true`, `yes`, `on` | Trust every hop. The client address is then the first `X-Forwarded-For` entry, which the client itself can set, so prefer a hop count or an address list. |
 | comma-separated list | Addresses, CIDRs or the keywords `loopback`, `linklocal`, `uniquelocal`, e.g. `172.18.0.0/16`. An invalid list logs a warning at startup and leaves the setting off. |
 
 A hop count trusts whatever connects to PullMD. Use it only when the container is reachable through the proxy alone (the Traefik compose file publishes no port, which is why it defaults to `1`). If the port is also published directly, as in the default `docker-compose.yml`, either stop publishing it or list the proxy's address or network instead of a count.
@@ -38,7 +38,7 @@ Requests arrive through a proxy but PULLMD_TRUST_PROXY is not set: all clients s
 
 **2. Set `PUBLIC_URL`** to the public origin, e.g. `PUBLIC_URL=https://pullmd.example.com`. Two things used to follow `X-Forwarded-Proto` / `X-Forwarded-Host` from any request and now follow them only through a trusted proxy:
 
-- the session cookie's `Secure` flag. It is set when the request arrived over HTTPS (directly, or through a trusted proxy) or when `PUBLIC_URL` starts with `https://`. A TLS-terminating proxy plus an `https://` `PUBLIC_URL` keeps the flag even without `PULLMD_TRUST_PROXY`.
+- the session cookie's `Secure` flag. It is set when the request arrived over HTTPS (directly, or through a trusted proxy) or when `PUBLIC_URL` starts with `https://`. A TLS-terminating proxy plus an `https://` `PUBLIC_URL` keeps the flag even without `PULLMD_TRUST_PROXY`. The flag does not depend on how a request arrives: if an instance with sign-in and an `https://` `PUBLIC_URL` is also opened over plain `http://` on a LAN address, browsers drop the `Secure` cookie there and login does not stick. Use the `https://` address (or `localhost`, which browsers treat as secure).
 - the base URL on `/help`, in `/pullmd.zip` and in MCP share URLs, when `PUBLIC_URL` is unset.
 
 Both bundled compose files set a `PUBLIC_URL` default (`https://${HOST_DOMAIN}` and `http://localhost:${PORT}`); set it explicitly if your public origin is something else.
