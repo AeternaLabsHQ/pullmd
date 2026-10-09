@@ -1,6 +1,8 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { substituteUrl, substituteVars, renderHelp, renderIndex, buildSkillZip, _resetCaches, publicUrlFor } from '../lib/distrib.js';
+import { readFileSync } from 'node:fs';
+import { substituteUrl, substituteVars, renderHelp, renderIndex, buildSkillZip, getSkillZip, _resetCaches, _zipCacheSize, publicUrlFor } from '../lib/distrib.js';
+import { createApp } from '../server.js';
 
 describe('substituteUrl', () => {
   it('replaces every placeholder', () => {
@@ -59,13 +61,44 @@ describe('publicUrlFor', () => {
     if (prev) process.env.PUBLIC_URL = prev;
   });
 
-  it('honors X-Forwarded-Proto and X-Forwarded-Host', () => {
+  it('takes protocol and host from the request object, not raw forwarding headers', () => {
     const prev = process.env.PUBLIC_URL;
     delete process.env.PUBLIC_URL;
-    const headers = { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'public.example' };
-    const fakeReq = { protocol: 'http', get: (k) => headers[k.toLowerCase()] || 'internal:3000' };
-    assert.equal(publicUrlFor(fakeReq), 'https://public.example');
+    const headers = { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'public.example', host: 'internal:3000' };
+    const fakeReq = { protocol: 'http', host: 'internal:3000', get: (k) => headers[k.toLowerCase()] };
+    assert.equal(publicUrlFor(fakeReq), 'http://internal:3000');
     if (prev) process.env.PUBLIC_URL = prev;
+  });
+});
+
+describe('publicUrlFor through the app (trust proxy)', () => {
+  async function helpVia(trustProxy) {
+    const prev = process.env.PUBLIC_URL;
+    delete process.env.PUBLIC_URL;
+    _resetCaches();
+    const app = createApp({ trustProxy });
+    const server = app.listen(0);
+    try {
+      const port = server.address().port;
+      const r = await fetch(`http://127.0.0.1:${port}/help`, {
+        headers: { 'X-Forwarded-Host': 'public.example', 'X-Forwarded-Proto': 'https' },
+      });
+      return { port, html: await r.text() };
+    } finally {
+      server.close();
+      if (prev) process.env.PUBLIC_URL = prev;
+    }
+  }
+
+  it('ignores forwarding headers when trust proxy is off', async () => {
+    const { port, html } = await helpVia(false);
+    assert.ok(html.includes(`http://127.0.0.1:${port}/mcp`));
+    assert.ok(!html.includes('public.example'));
+  });
+
+  it('honours forwarding headers when trust proxy is on', async () => {
+    const { html } = await helpVia(true);
+    assert.ok(html.includes('https://public.example/mcp'));
   });
 });
 
@@ -76,6 +109,18 @@ describe('renderHelp', () => {
     const html = renderHelp('https://my.host');
     assert.ok(html.includes('https://my.host/mcp'));
     assert.ok(!html.includes('__PULLMD_URL__'));
+  });
+
+  it('output equals plain placeholder substitution for an ordinary origin', () => {
+    const raw = readFileSync(new URL('../public/help.html', import.meta.url), 'utf8');
+    const base = 'https://my.host:3000';
+    assert.equal(renderHelp(base), substituteVars(raw, base));
+  });
+
+  it('HTML-escapes the substituted origin', () => {
+    const html = renderHelp('http://a"b<c>&d');
+    assert.ok(!html.includes('a"b<c>'));
+    assert.ok(html.includes('http://a&quot;b&lt;c&gt;&amp;d/mcp'));
   });
 });
 
@@ -105,5 +150,18 @@ describe('buildSkillZip', () => {
     // that DEFLATE may store it uncompressed, but to be safe, inflate one entry).
     // Smoke check: placeholder must not survive substitution.
     assert.equal(buf.indexOf(Buffer.from('__PULLMD_URL__')), -1, 'placeholder should not appear in zip');
+  });
+});
+
+describe('getSkillZip cache', () => {
+  beforeEach(() => _resetCaches());
+
+  it('keeps at most 8 entries and reuses a cached one', async () => {
+    for (let i = 0; i < 10; i++) await getSkillZip(`https://h${i}.example`);
+    assert.equal(_zipCacheSize(), 8);
+    const a = await getSkillZip('https://h9.example');
+    const b = await getSkillZip('https://h9.example');
+    assert.equal(a, b);
+    assert.equal(_zipCacheSize(), 8);
   });
 });
