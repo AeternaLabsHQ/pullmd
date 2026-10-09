@@ -384,3 +384,59 @@ describe('paid media tier budget', () => {
     assert.deepEqual(seen, [true, false]);
   });
 });
+
+describe('share refresh while the paid tier budget is used up', () => {
+  function agedImageShare() {
+    const cache = createCache(':memory:');
+    cache.put({ url: 'https://example.com/photo.jpg', title: 'Photo', markdown: 'caption text', source: 'image-caption', client: 'api' });
+    cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours')").run();
+    const shareId = cache.db.prepare('SELECT share_id FROM conversions').get().share_id;
+    return { cache, shareId };
+  }
+
+  it('keeps the snapshot and waits a full hour before fetching the source again', async () => {
+    const { cache, shareId } = agedImageShare();
+    let fetches = 0;
+    const extractWebStub = async () => {
+      fetches++;
+      return { markdown: 'plain fallback', title: 'Photo', source: 'image', noStore: true, budgetDeferred: true };
+    };
+    const app = createApp({ cache, extractWeb: extractWebStub });
+    await withServer(app, async (base) => {
+      for (let i = 0; i < 3; i++) {
+        const r = await fetch(`${base}/s/${shareId}`);
+        assert.equal(r.status, 200);
+        assert.match(await r.text(), /caption text/);
+      }
+    });
+    assert.equal(fetches, 1);
+  });
+
+  it('retries on the next hit after a transient failure that is not budget related', async () => {
+    const { cache, shareId } = agedImageShare();
+    let fetches = 0;
+    const extractWebStub = async () => {
+      fetches++;
+      return { markdown: 'placeholder', title: 'Photo', source: 'youtube', noStore: true };
+    };
+    const app = createApp({ cache, extractWeb: extractWebStub });
+    await withServer(app, async (base) => {
+      await fetch(`${base}/s/${shareId}`);
+      await fetch(`${base}/s/${shareId}`);
+    });
+    assert.equal(fetches, 2);
+  });
+
+  it('extractWeb marks a budget fallback as budgetDeferred', async () => {
+    const result = await extractWeb('https://example.com/photo.jpg', {
+      fetch: async () => ({
+        ok: true, status: 200,
+        headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
+        arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
+      }),
+      captionFn: async () => ({ markdown: 'caption', usage: null }),
+      llmAllowed: () => false,
+    });
+    assert.equal(result.budgetDeferred, true);
+  });
+});

@@ -314,7 +314,12 @@ export function createApp(overrides = {}) {
     const result = await extractWebFn(entry.url, { comments: false, llmAllowed });
     // Transient failure (e.g. YouTube 429): keep the existing good snapshot
     // instead of overwriting it with a "couldn't retrieve" placeholder.
-    if (result.noStore) return entry.markdown;
+    // A paid-tier budget deferral also restarts the refresh clock, so the
+    // source is not fetched again on every hit until the budget recovers.
+    if (result.noStore) {
+      if (result.budgetDeferred) cache.touch(entry.url);
+      return entry.markdown;
+    }
     cache.put({
       url: entry.url,
       title: result.title,
