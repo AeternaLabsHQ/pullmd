@@ -47,10 +47,17 @@ services:
       - OAUTH_JWT_SECRET=${OAUTH_JWT_SECRET:-}
       # Cache retention in days; 0 = keep forever. Default 90.
       - PULLMD_CACHE_RETENTION_DAYS=${PULLMD_CACHE_RETENTION_DAYS:-}
-      # Set only when a reverse proxy sits in front (e.g. 1 = one proxy hop).
+      # Reverse proxy in front? Empty = off: forwarding headers are ignored and
+      # the client address is the connecting peer. Behind a proxy, set it in
+      # .env: a hop count (1 = one proxy) only if the port above is not reachable
+      # directly, otherwise the proxy's address/CIDR (e.g. 172.18.0.0/16).
+      # See MIGRATION.md (v3.13.0).
       - PULLMD_TRUST_PROXY=${PULLMD_TRUST_PROXY:-}
-      # Paid media tiers (caption/transcription/PDF OCR) per user or client and hour; 0 = off. Default 30.
+      # Hourly budget for the paid media tiers (image caption, audio transcription,
+      # PDF OCR), per signed-in user or client address. Default 30; 0 = off.
       - PULLMD_LLM_RATE_LIMIT=${PULLMD_LLM_RATE_LIMIT:-}
+      # Size limit for fetched pages/documents in bytes. Default 52428800 (50 MB).
+      - PULLMD_MAX_FETCH_BYTES=${PULLMD_MAX_FETCH_BYTES:-}
       - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data

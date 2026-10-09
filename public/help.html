@@ -329,6 +329,7 @@
         <li><strong>Download-Button</strong> (v3.9) - speichert das Ergebnis als <code>.md</code>-Datei; den Dateinamen schlägt der Server vor (<code>X-Suggested-Filename</code>), auf Wunsch mit Datums-Präfix.</li>
         <li><strong>Sidecar-Health</strong> (v3.10) - <code>GET /api/status</code> meldet, ob die Extraktions-Sidecars antworten, und liefert <code>503</code> sobald einer ausfällt. Für externes Monitoring gedacht: ein toter Renderer nimmt den Dienst nicht runter, er verschlechtert nur still das Ergebnis.</li>
         <li><strong>Cache-Aufbewahrung</strong> (v3.11) - <code>PULLMD_CACHE_RETENTION_DAYS</code> legt fest, wie lange Cache-Einträge und Share-Links leben; Standard 90 Tage, <code>0</code> = unbegrenzt.</li>
+        <li><strong>Reverse-Proxy und Limits</strong> (v3.13) - <code>PULLMD_TRUST_PROXY</code> legt fest, wann Weiterleitungs-Header zählen; Login und Registrierung sind pro Client-Adresse begrenzt, die kostenpflichtigen Medien-Stufen teilen sich ein Stundenbudget, und abgerufene Seiten haben eine Größengrenze. Siehe <a href="#auth">Authentifizierung</a>.</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li><strong>Hacker News</strong> (v3.1) - a dedicated pipeline for items, comment permalinks and listings, producing a clean nested comment tree instead of layout-table soup.</li>
@@ -342,6 +343,7 @@
         <li><strong>Download button</strong> (v3.9) - saves the result as a <code>.md</code> file, named by the server (<code>X-Suggested-Filename</code>), optionally with a date prefix.</li>
         <li><strong>Sidecar health</strong> (v3.10) - <code>GET /api/status</code> reports whether the extraction sidecars respond, and answers <code>503</code> as soon as one is down. Meant for external monitoring: a dead renderer does not take the service down, it just quietly degrades the result.</li>
         <li><strong>Cache retention</strong> (v3.11) - <code>PULLMD_CACHE_RETENTION_DAYS</code> sets how long cache rows and share links live; default 90 days, <code>0</code> keeps them forever.</li>
+        <li><strong>Reverse proxy and limits</strong> (v3.13) - <code>PULLMD_TRUST_PROXY</code> decides when forwarding headers count; login and signup are limited per client address, the paid media tiers share an hourly budget, and fetched pages have a size limit. See <a href="#auth">Authentication</a>.</li>
       </ul>
     </section>
 
@@ -507,8 +509,8 @@ unzip pullmd.zip -d ~/.claude/skills/
 
       <h3 lang="de">Option 3 — MCP-Server (remote)</h3>
       <h3 lang="en">Option 3 — MCP server (remote)</h3>
-      <p lang="de">PullMD läuft als <strong>remote MCP-Server</strong> unter <code>__PULLMD_URL__/mcp</code> (Streamable-HTTP-Transport, stateless). Drei Tools: <code>read_url</code>, <code>get_share</code>, <code>list_recent</code>. Server-seitige Updates erreichen automatisch alle Clients — keine lokale Installation nötig.</p>
-      <p lang="en">PullMD runs as a <strong>remote MCP server</strong> at <code>__PULLMD_URL__/mcp</code> (Streamable-HTTP transport, stateless). Three tools: <code>read_url</code>, <code>get_share</code>, <code>list_recent</code>. Server-side updates reach every client automatically — no local install needed.</p>
+      <p lang="de">PullMD läuft als <strong>remote MCP-Server</strong> unter <code>__PULLMD_URL__/mcp</code> (Streamable-HTTP-Transport, stateless). Drei Tools: <code>read_url</code>, <code>get_share</code>, <code>list_recent</code>. Server-seitige Updates erreichen automatisch alle Clients — keine lokale Installation nötig. Ist eine Anmeldung aktiv, listet <code>list_recent</code> nur die eigenen Konversionen.</p>
+      <p lang="en">PullMD runs as a <strong>remote MCP server</strong> at <code>__PULLMD_URL__/mcp</code> (Streamable-HTTP transport, stateless). Three tools: <code>read_url</code>, <code>get_share</code>, <code>list_recent</code>. Server-side updates reach every client automatically — no local install needed. With sign-in enabled, <code>list_recent</code> lists only your own conversions.</p>
 
       <p class="muted" lang="de"><strong>Claude Code</strong> — Prompt einfügen, Claude installiert es selbst:</p>
       <p class="muted" lang="en"><strong>Claude Code</strong> — paste this prompt and Claude will install it for you:</p>
@@ -613,20 +615,20 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">Share link, refreshes itself. See <a href="#share">Share links</a>.</td>
           </tr>
           <tr><td><code>GET /api/history</code></td>
-            <td lang="de">Letzte Konversionen als JSON (<code>?limit=</code>, Default 20, max. 100).</td>
-            <td lang="en">Recent conversions as JSON (<code>?limit=</code>, default 20, max 100).</td>
+            <td lang="de">Letzte Konversionen als JSON (<code>?limit=</code>, Default 20, 1 bis 100). Angemeldete sehen ihre eigenen.</td>
+            <td lang="en">Recent conversions as JSON (<code>?limit=</code>, default 20, 1 to 100). Signed-in callers see their own.</td>
           </tr>
           <tr><td><code>GET /api/archive</code></td>
-            <td lang="de">Seitenweise durch das ganze Archiv (<code>?limit=</code> Default 50, max. 200, <code>?offset=</code>).</td>
-            <td lang="en">Paginated full archive (<code>?limit=</code> default 50, max 200, <code>?offset=</code>).</td>
+            <td lang="de">Seitenweise durch das ganze Archiv (<code>?limit=</code> Default 50, 1 bis 200, <code>?offset=</code>).</td>
+            <td lang="en">Paginated full archive (<code>?limit=</code> default 50, 1 to 200, <code>?offset=</code>).</td>
           </tr>
           <tr><td><code>GET /api/storage</code></td>
             <td lang="de">Cache-Größe und Aufbewahrungsdauer.</td>
             <td lang="en">Cache size and retention.</td>
           </tr>
           <tr><td><code>GET /api/stats</code></td>
-            <td lang="de">Extraktions-Telemetrie: Quellen, Qualität, Laufzeit (<code>?window=-7 days</code>).</td>
-            <td lang="en">Extraction telemetry: sources, quality, latency (<code>?window=-7 days</code>).</td>
+            <td lang="de">Extraktions-Telemetrie: Quellen, Qualität, Laufzeit (<code>?window=-7 days</code>). Die Listen pro Domain gibt es nur für den Admin, oder für alle, wenn Auth aus und die öffentliche History an ist.</td>
+            <td lang="en">Extraction telemetry: sources, quality, latency (<code>?window=-7 days</code>). The per-domain lists are included only for the admin, or for everyone when auth is off and public history is on.</td>
           </tr>
           <tr><td><code>GET /api/config</code></td>
             <td lang="de">Was auf dieser Instanz aktiv ist (Auth-Modus, Dokumente, Vision, STT, PDF-OCR, YouTube). Die PWA blendet danach ihre Bedienelemente ein oder aus.</td>
@@ -879,8 +881,8 @@ Then: claude mcp list to verify.</pre>
 
       <h3 lang="de">Bilder, Audio, YouTube</h3>
       <h3 lang="en">Images, audio, YouTube</h3>
-      <p lang="de">Bilder und Audio funktionieren über denselben Weg (URL oder Upload). Standardmäßig kommen nur Metadaten zurück - EXIF beim Bild, Track-Infos beim Audio. Hat die Instanz ein Vision- bzw. Speech-to-Text-Modell hinterlegt, kommt eine Bildbeschreibung bzw. ein Transkript dazu; die verwendeten Modelle und der Tokenverbrauch stehen dann im <a href="#frontmatter">Frontmatter</a>. YouTube-URLs liefern Titel, Beschreibung und Transkript, wenn die Instanz das aktiviert hat.</p>
-      <p lang="en">Images and audio work the same way (URL or upload). By default you only get metadata - EXIF for images, track info for audio. If the instance has a vision or speech-to-text model configured, you also get a caption or a transcript; the models used and the token spend then show up in the <a href="#frontmatter">frontmatter</a>. YouTube URLs return title, description and transcript when the instance enables it.</p>
+      <p lang="de">Bilder und Audio funktionieren über denselben Weg (URL oder Upload). Standardmäßig kommen nur Metadaten zurück - EXIF beim Bild, Track-Infos beim Audio. Hat die Instanz ein Vision- bzw. Speech-to-Text-Modell hinterlegt, kommt eine Bildbeschreibung bzw. ein Transkript dazu; die verwendeten Modelle und der Tokenverbrauch stehen dann im <a href="#frontmatter">Frontmatter</a>. YouTube-URLs liefern Titel, Beschreibung und Transkript, wenn die Instanz das aktiviert hat. Bildbeschreibung, Transkription und PDF-OCR teilen sich ein Stundenbudget pro Benutzer bzw. Client-Adresse (<code>PULLMD_LLM_RATE_LIMIT</code>, Standard 30); darüber hinaus kommt das Ergebnis ohne Modellaufruf zurück und wird nicht gecacht.</p>
+      <p lang="en">Images and audio work the same way (URL or upload). By default you only get metadata - EXIF for images, track info for audio. If the instance has a vision or speech-to-text model configured, you also get a caption or a transcript; the models used and the token spend then show up in the <a href="#frontmatter">frontmatter</a>. YouTube URLs return title, description and transcript when the instance enables it. Captioning, transcription and PDF OCR share an hourly budget per user or client address (<code>PULLMD_LLM_RATE_LIMIT</code>, default 30); beyond it you get the result without a model call, and it is not cached.</p>
     </section>
 
     <!-- ===================================================== -->
@@ -995,12 +997,12 @@ share_id: a3f9c2b7
       <ul class="doc-list" lang="de">
         <li><strong>Session-Cookie</strong> - der Login im Browser. Die Web-App nutzt ihn automatisch; die Sitzung hält 90 Tage und verlängert sich bei Nutzung.</li>
         <li><strong>API-Key</strong> - unter <code>/settings</code> erzeugen und als <code>Authorization: Bearer pmd_…</code> mitschicken. Der Schlüssel wird nur einmal angezeigt, danach liegt serverseitig nur noch sein Hash. Das ist der Weg für curl, Skripte und die Claude-Code-CLI.</li>
-        <li><strong>OAuth</strong> - für Clients ohne Header-Feld, namentlich Claude Desktop und claude.ai im Web. Der Client entdeckt alles Nötige selbst; man verbindet ihn mit <code>__PULLMD_URL__/mcp</code> und landet beim ersten Klick auf der Login- und Zustimmungsseite dieser Instanz.</li>
+        <li><strong>OAuth</strong> - für Clients ohne Header-Feld, namentlich Claude Desktop und claude.ai im Web. Der Client entdeckt alles Nötige selbst; man verbindet ihn mit <code>__PULLMD_URL__/mcp</code> und landet beim ersten Klick auf der Login- und Zustimmungsseite dieser Instanz. Die so ausgestellten Tokens gelten nur für <code>/mcp</code>; Skripte gegen <code>/api</code> brauchen einen API-Key.</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li><strong>Session cookie</strong> - the browser login. The web app uses it automatically; the session lasts 90 days and extends with use.</li>
         <li><strong>API key</strong> - create one at <code>/settings</code> and send it as <code>Authorization: Bearer pmd_…</code>. The key is shown once; only its hash is kept server-side. This is the path for curl, scripts and the Claude Code CLI.</li>
-        <li><strong>OAuth</strong> - for clients without a header field, namely Claude Desktop and claude.ai on the web. The client discovers what it needs on its own; point it at <code>__PULLMD_URL__/mcp</code> and the first click takes you to this instance's login and consent screen.</li>
+        <li><strong>OAuth</strong> - for clients without a header field, namely Claude Desktop and claude.ai on the web. The client discovers what it needs on its own; point it at <code>__PULLMD_URL__/mcp</code> and the first click takes you to this instance's login and consent screen. Tokens issued this way are valid on <code>/mcp</code> only; scripts calling <code>/api</code> need an API key.</li>
       </ul>
       <div class="copybox">
         <div class="copybox-header">
@@ -1017,6 +1019,10 @@ claude mcp add --transport http pullmd __PULLMD_URL__/mcp \
       </div>
       <p class="muted" lang="de">Fehlen die Zugangsdaten, antwortet die API mit <code>401</code>; im Browser wird stattdessen zur Login-Seite weitergeleitet und danach zurück zur ursprünglichen Seite.</p>
       <p class="muted" lang="en">Without credentials the API answers <code>401</code>; in the browser you are redirected to the login page and back afterwards.</p>
+      <p class="muted" lang="de">Login und Registrierung sind pro Client-Adresse begrenzt: 10 Login-Versuche pro Minute, 5 Registrierungen pro Stunde, danach kommt das Formular mit <code>429</code> und <code>Retry-After</code> zurück. Formulare (Login, Registrierung, Logout, OAuth-Zustimmung) werden nur angenommen, wenn <code>Origin</code> bzw. <code>Referer</code> diesen Host oder den Host von <code>PUBLIC_URL</code> nennt.</p>
+      <p class="muted" lang="en">Login and signup are limited per client address: 10 login attempts per minute, 5 signups per hour, after that the form comes back with <code>429</code> and <code>Retry-After</code>. Form posts (login, signup, logout, OAuth consent) are accepted only when <code>Origin</code> or <code>Referer</code> names this host or the host of <code>PUBLIC_URL</code>.</p>
+      <p class="muted" lang="de"><strong>Selbst-Hoster hinter einem Reverse-Proxy:</strong> <code>PULLMD_TRUST_PROXY</code> setzen (meist <code>1</code>, oder die Adresse des Proxys, wenn der Port auch direkt erreichbar ist) und <code>PUBLIC_URL</code> auf die öffentliche Adresse. Ohne die Einstellung teilen sich alle Clients ein Rate-Limit, weil jede Anfrage von der Adresse des Proxys zu kommen scheint. Der Proxy darf keine <code>Referrer-Policy: no-referrer</code> senden, sonst schicken Browser Formulare mit <code>Origin: null</code> ab, und der Login wird abgelehnt. Details in <a href="https://github.com/AeternaLabsHQ/pullmd/blob/main/MIGRATION.md" target="_blank" rel="noopener">MIGRATION.md</a>.</p>
+      <p class="muted" lang="en"><strong>Self-hosters behind a reverse proxy:</strong> set <code>PULLMD_TRUST_PROXY</code> (usually <code>1</code>, or the proxy's address when the port is also reachable directly) and <code>PUBLIC_URL</code> to the public address. Without the setting all clients share one rate limit, because every request appears to come from the proxy's address. The proxy must not send <code>Referrer-Policy: no-referrer</code>, or browsers post forms with <code>Origin: null</code> and login is refused. Details in <a href="https://github.com/AeternaLabsHQ/pullmd/blob/main/MIGRATION.md" target="_blank" rel="noopener">MIGRATION.md</a>.</p>
 
       <h3 lang="de">Benutzerverwaltung</h3>
       <h3 lang="en">Managing users</h3>
