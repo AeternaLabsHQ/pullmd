@@ -1,5 +1,5 @@
-fastapi==0.115.0
-uvicorn[standard]==0.32.0
+fastapi==0.141.1
+uvicorn[standard]==0.54.0
 markitdown[pptx,docx,xlsx,xls,pdf,outlook]==0.1.2
 youtube-transcript-api~=1.2.0
 beautifulsoup4>=4.12.0
