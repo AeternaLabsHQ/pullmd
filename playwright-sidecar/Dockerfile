@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright/python:v1.49.0-noble
+FROM mcr.microsoft.com/playwright/python:v1.63.0-noble
 
 LABEL org.opencontainers.image.title="PullMD Playwright sidecar"
 LABEL org.opencontainers.image.description="Headless Chromium renderer sidecar for PullMD — handles JavaScript-rendered pages."
