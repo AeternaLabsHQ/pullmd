@@ -34,6 +34,9 @@ async function setup() {
   const app = express();
   app.use(auth.middleware());
   app.get('/whoami', (req, res) => res.json({ user: req.user || null }));
+  app.get('/mcp', (req, res) => res.json({ user: req.user || null }));
+  app.get('/mcp/extra', (req, res) => res.json({ user: req.user || null }));
+  app.get('/api/mcp', (req, res) => res.json({ user: req.user || null }));
   return { app, auth, oauth, userId };
 }
 
@@ -48,7 +51,7 @@ describe('auth middleware: JWT bearer (OAuth)', () => {
     const { app, oauth, userId } = await setup();
     const jwt = await oauth.tokens.issueAccessToken({ sub: userId, scope: 'mcp:full' });
     await withServer(app, async (base) => {
-      const r = await fetch(`${base}/whoami`, {
+      const r = await fetch(`${base}/mcp`, {
         headers: { Authorization: `Bearer ${jwt}` },
       });
       const m = await r.json();
@@ -71,7 +74,7 @@ describe('auth middleware: JWT bearer (OAuth)', () => {
     });
     const jwt = await otherOauth.tokens.issueAccessToken({ sub: userId, scope: 'mcp:full' });
     await withServer(app, async (base) => {
-      const r = await fetch(`${base}/whoami`, {
+      const r = await fetch(`${base}/mcp`, {
         headers: { Authorization: `Bearer ${jwt}` },
       });
       const m = await r.json();
@@ -86,7 +89,7 @@ describe('auth middleware: JWT bearer (OAuth)', () => {
     const wrongAud = createTokens({ secret: 'x'.repeat(48), issuer: 'https://pullmd.test', audience: 'https://other/mcp' });
     const jwt = await wrongAud.issueAccessToken({ sub: userId, scope: 'mcp:full' });
     await withServer(app, async (base) => {
-      const r = await fetch(`${base}/whoami`, {
+      const r = await fetch(`${base}/mcp`, {
         headers: { Authorization: `Bearer ${jwt}` },
       });
       const m = await r.json();
@@ -108,11 +111,37 @@ describe('auth middleware: JWT bearer (OAuth)', () => {
       .setExpirationTime(Math.floor(Date.now() / 1000) - 3600)
       .sign(key);
     await withServer(app, async (base) => {
-      const r = await fetch(`${base}/whoami`, {
+      const r = await fetch(`${base}/mcp`, {
         headers: { Authorization: `Bearer ${jwt}` },
       });
       const m = await r.json();
       assert.equal(m.user, null);
+    });
+  });
+
+  it('valid JWT on /mcp/ with a query string populates req.user', async () => {
+    const { app, oauth, userId } = await setup();
+    const jwt = await oauth.tokens.issueAccessToken({ sub: userId, scope: 'mcp:full' });
+    await withServer(app, async (base) => {
+      const r = await fetch(`${base}/mcp/?x=1`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      const m = await r.json();
+      assert.equal(m.user.email, 'a@b.c');
+    });
+  });
+
+  it('valid JWT outside the MCP endpoint → req.user null', async () => {
+    const { app, oauth, userId } = await setup();
+    const jwt = await oauth.tokens.issueAccessToken({ sub: userId, scope: 'mcp:full' });
+    await withServer(app, async (base) => {
+      for (const path of ['/whoami', '/mcp/extra', '/api/mcp']) {
+        const r = await fetch(`${base}${path}`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        const m = await r.json();
+        assert.equal(m.user, null, path);
+      }
     });
   });
 
