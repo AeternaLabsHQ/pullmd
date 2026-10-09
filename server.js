@@ -10,6 +10,7 @@ import { buildFrontmatter, mergeMediaFrontmatter, mergeFrontmatter, validateFron
 import { queryExtract } from './lib/query-extract.js';
 import { suggestFilename } from './lib/filename.js';
 import { mcpHandler } from './lib/mcp.js';
+import { recentHistory, PUBLIC_HISTORY_DISABLED } from './lib/history.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor, PULLMD_VERSION } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
 import { assertUrlAllowed, SsrfError } from './lib/ssrf.js';
@@ -243,6 +244,7 @@ export function createApp(overrides = {}) {
     buildFrontmatter,
     isRedditUrl,
     llmBudget,
+    disablePublicHistory,
   });
   // CORS first so OPTIONS preflight short-circuits before `gate` would 401.
   app.use('/mcp', oauthCors);
@@ -1158,22 +1160,17 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api/history', gate, (req, res) => {
-    if (disablePublicHistory && !req.user) {
-      return res.status(403).json({ error: 'Public history is disabled on this instance.' });
-    }
-    if (!cache) {
-      return res.json([]);
-    }
     const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 20, 100));
-    if (req.user) {
-      return res.json(cache.historyForUser(req.user.id, limit));
+    const { denied, items } = recentHistory({ cache, user: req.user, disablePublicHistory, limit });
+    if (denied) {
+      return res.status(403).json({ error: PUBLIC_HISTORY_DISABLED });
     }
-    res.json(cache.history(limit));
+    res.json(items);
   });
 
   app.get('/api/archive', gate, (req, res) => {
     if (disablePublicHistory && !req.user) {
-      return res.status(403).json({ error: 'Public history is disabled on this instance.' });
+      return res.status(403).json({ error: PUBLIC_HISTORY_DISABLED });
     }
     if (!cache) {
       return res.json({ items: [], total: 0 });
