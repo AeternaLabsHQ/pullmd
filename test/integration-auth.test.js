@@ -120,6 +120,46 @@ describe('integration: auth gating in createApp', () => {
     });
   });
 
+  it('/api/stats omits per-domain lists for anonymous callers', async () => {
+    await withApp('multi-user', async (base, { cache }) => {
+      cache.logExtraction({ url: 'https://x.com/a', source: 'readability', quality: 0.1, markdownLen: 10, extractorReason: null, durationMs: 5, client: 'api', cached: false });
+      const r = await fetch(base + '/api/stats');
+      assert.equal(r.status, 200);
+      const body = await r.json();
+      assert.equal(body.total, 1);
+      assert.equal(body.lowQualityDomains, undefined);
+      assert.equal(body.fallbackByDomain, undefined);
+    });
+  });
+
+  it('/api/stats keeps per-domain lists for the admin', async () => {
+    await withApp('multi-user', async (base, { auth, cache }) => {
+      const adminId = cache.db.prepare("SELECT id FROM users").get().id;
+      const { fullKey } = auth.createApiKey(adminId, 'k');
+      const conv = await fetch(base + '/api?url=https://x.com&nocache=1', { headers: { Authorization: `Bearer ${fullKey}` } });
+      assert.equal(conv.status, 200);
+      const r = await fetch(base + '/api/stats', { headers: { Authorization: `Bearer ${fullKey}` } });
+      const body = await r.json();
+      assert.ok(body.total >= 1);
+      assert.ok(Array.isArray(body.lowQualityDomains));
+      assert.ok(Array.isArray(body.fallbackByDomain));
+    });
+  });
+
+  it('/api/stats omits per-domain lists for a non-admin user', async () => {
+    await withApp('multi-user', async (base, { auth }) => {
+      const bob = await auth.createUser({ email: 'bob@example.com', password: 'pw1234567' });
+      const { fullKey } = auth.createApiKey(bob.id, 'k');
+      const conv = await fetch(base + '/api?url=https://x.com&nocache=1', { headers: { Authorization: `Bearer ${fullKey}` } });
+      assert.equal(conv.status, 200);
+      const r = await fetch(base + '/api/stats', { headers: { Authorization: `Bearer ${fullKey}` } });
+      const body = await r.json();
+      assert.ok(body.total >= 1);
+      assert.equal(body.lowQualityDomains, undefined);
+      assert.equal(body.fallbackByDomain, undefined);
+    });
+  });
+
   it('GET /api/config exposes authMode', async () => {
     await withApp('multi-user', async (base) => {
       const r = await fetch(base + '/api/config');

@@ -1395,14 +1395,28 @@
       const slot = document.createElement('div');
       slot.className = 'auth-slot';
       slot.style.cssText = 'display:inline-flex; gap:0.5rem; align-items:center; font-size:0.875rem;';
+      // Built with createElement/textContent: the email is account data.
       if (me) {
-        slot.innerHTML = `
-          <a href="/settings" style="color: var(--fg-muted); text-decoration: none;">${me.email}</a>
-          <form method="POST" action="/logout" style="display:inline">
-            <button type="submit" style="background:transparent; border:1px solid var(--border-strong); color:var(--fg-muted); padding:0.25rem 0.5rem; border-radius:4px; cursor:pointer; font-size:0.75rem;">Log out</button>
-          </form>`;
+        const account = document.createElement('a');
+        account.href = '/settings';
+        account.style.cssText = 'color: var(--fg-muted); text-decoration: none;';
+        account.textContent = me.email || '';
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/logout';
+        form.style.display = 'inline';
+        const button = document.createElement('button');
+        button.type = 'submit';
+        button.style.cssText = 'background:transparent; border:1px solid var(--border-strong); color:var(--fg-muted); padding:0.25rem 0.5rem; border-radius:4px; cursor:pointer; font-size:0.75rem;';
+        button.textContent = 'Log out';
+        form.appendChild(button);
+        slot.append(account, form);
       } else {
-        slot.innerHTML = `<a href="/login" style="color: var(--accent); text-decoration: none;">Sign in</a>`;
+        const signIn = document.createElement('a');
+        signIn.href = '/login';
+        signIn.style.cssText = 'color: var(--accent); text-decoration: none;';
+        signIn.textContent = 'Sign in';
+        slot.appendChild(signIn);
       }
       headerActions.appendChild(slot);
       document.documentElement.dataset.loggedIn = me ? '1' : '0';

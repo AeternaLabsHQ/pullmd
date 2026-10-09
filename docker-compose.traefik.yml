@@ -45,6 +45,16 @@ services:
       - OAUTH_JWT_SECRET=${OAUTH_JWT_SECRET:-}
       # Cache retention in days; 0 = keep forever. Default 90.
       - PULLMD_CACHE_RETENTION_DAYS=${PULLMD_CACHE_RETENTION_DAYS:-}
+      # Traefik is the only peer here (no published port), so trust exactly one
+      # hop: client address and https detection come from Traefik's forwarding
+      # headers. Raise the count if another proxy sits in front of Traefik and
+      # Traefik passes its X-Forwarded-For on. See MIGRATION.md (v3.13.0).
+      - PULLMD_TRUST_PROXY=${PULLMD_TRUST_PROXY:-1}
+      # Hourly budget for the paid media tiers (image caption, audio transcription,
+      # PDF OCR), per signed-in user or client address. Default 30; 0 = off.
+      - PULLMD_LLM_RATE_LIMIT=${PULLMD_LLM_RATE_LIMIT:-}
+      # Size limit for fetched pages/documents in bytes. Default 52428800 (50 MB).
+      - PULLMD_MAX_FETCH_BYTES=${PULLMD_MAX_FETCH_BYTES:-}
       - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data

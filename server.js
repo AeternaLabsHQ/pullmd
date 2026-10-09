@@ -10,12 +10,15 @@ import { buildFrontmatter, mergeMediaFrontmatter, mergeFrontmatter, validateFron
 import { queryExtract } from './lib/query-extract.js';
 import { suggestFilename } from './lib/filename.js';
 import { mcpHandler } from './lib/mcp.js';
+import { recentHistory, PUBLIC_HISTORY_DISABLED } from './lib/history.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor, PULLMD_VERSION } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
 import { assertUrlAllowed, SsrfError } from './lib/ssrf.js';
 import { createRateLimiter } from './lib/oauth/rate-limit.js';
 import { ignoredModelEnvWarning } from './lib/llm/providers.js';
+import { createLlmBudget } from './lib/llm/budget.js';
 import { createStatusChecker } from './lib/status.js';
+import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -90,8 +93,49 @@ function readDisablePublicHistoryEnv() {
   return s === 'true' || s === '1' || s === 'yes' || s === 'on';
 }
 
+const TRUST_PROXY_OFF = new Set(['', 'false', 'off', 'no', '0']);
+const TRUST_PROXY_ON = new Set(['true', 'on', 'yes']);
+
+/**
+ * Map PULLMD_TRUST_PROXY to an Express `trust proxy` value. Unset/empty/false
+ * keeps it off (forwarding headers ignored). `true` trusts every hop, a plain
+ * integer is a hop count, anything else is a comma-separated list of
+ * addresses, CIDRs or Express keywords (loopback, linklocal, uniquelocal).
+ * Express treats the strings "true"/"1" as addresses, so they are converted.
+ */
+export function parseTrustProxy(raw) {
+  const s = String(raw ?? '').trim();
+  const lower = s.toLowerCase();
+  if (TRUST_PROXY_OFF.has(lower)) return false;
+  if (TRUST_PROXY_ON.has(lower)) return true;
+  if (/^\d+$/.test(s)) return Number(s);
+  const list = s.split(',').map((x) => x.trim()).filter(Boolean);
+  return list.length ? list : false;
+}
+
+// Shared by every app in this process, so the notice is logged at most once.
+let processForwardedHeaderNotice = null;
+
+function applyTrustProxy(app, value) {
+  try {
+    app.set('trust proxy', value);
+  } catch (err) {
+    console.warn(`Ignoring invalid PULLMD_TRUST_PROXY (${err.message}); forwarding headers stay untrusted.`);
+    app.set('trust proxy', false);
+  }
+}
+
 export function createApp(overrides = {}) {
   const app = express();
+  // Before any route: req.ip / req.secure (rate limiters, cookie flags)
+  // depend on it.
+  applyTrustProxy(app, overrides.trustProxy ?? parseTrustProxy(process.env.PULLMD_TRUST_PROXY));
+  if (!app.get('trust proxy')) {
+    // Behaviour stays the same; this only tells the operator once that a
+    // proxy is in front and PULLMD_TRUST_PROXY is missing.
+    app.use(overrides.forwardedHeaderNotice
+      || (processForwardedHeaderNotice ??= createForwardedHeaderNotice()));
+  }
   const extract = overrides.extractPost || extractPost;
   const extractHnFn = overrides.extractHn || extractHn;
   const extractWebFn = overrides.extractWeb || extractWeb;
@@ -113,6 +157,10 @@ export function createApp(overrides = {}) {
   // unaffected; an enumeration script, which sees almost nothing but misses,
   // hits the ceiling after 120 guesses per minute and IP.
   const shareMissLimiter = overrides.shareMissLimiter ?? createRateLimiter({ windowMs: 60_000, max: 120 });
+  // Hourly budget for paid provider tiers (image caption, audio transcription,
+  // PDF OCR), per user or client address. Over budget the request falls back
+  // to the non-provider path instead of failing (PULLMD_LLM_RATE_LIMIT).
+  const llmBudget = overrides.llmBudget ?? createLlmBudget();
 
   // Suggest a download filename to the client. Cosmetic by nature: a failure
   // here must never cost the caller their markdown, hence the swallowed catch.
@@ -195,6 +243,8 @@ export function createApp(overrides = {}) {
     qualityScore,
     buildFrontmatter,
     isRedditUrl,
+    llmBudget,
+    disablePublicHistory,
   });
   // CORS first so OPTIONS preflight short-circuits before `gate` would 401.
   app.use('/mcp', oauthCors);
@@ -214,7 +264,7 @@ export function createApp(overrides = {}) {
   // Refresh a stale share-cache entry by re-extracting from its source URL.
   // Best-effort: infers comments/lang from the cached markdown; falls back
   // to the existing markdown on extraction failure (e.g. dead source).
-  async function refreshShareEntry(entry, client) {
+  async function refreshShareEntry(entry, client, llmAllowed) {
     const md = entry.markdown || '';
     const hadComments = md.includes('\n## Kommentare') || md.includes('\n## Comments');
     const inferredLang = md.includes('\n## Comments') ? 'en' : 'de';
@@ -261,10 +311,15 @@ export function createApp(overrides = {}) {
       });
       return baseMd;
     }
-    const result = await extractWebFn(entry.url, { comments: false });
+    const result = await extractWebFn(entry.url, { comments: false, llmAllowed });
     // Transient failure (e.g. YouTube 429): keep the existing good snapshot
     // instead of overwriting it with a "couldn't retrieve" placeholder.
-    if (result.noStore) return entry.markdown;
+    // A paid-tier budget deferral also restarts the refresh clock, so the
+    // source is not fetched again on every hit until the budget recovers.
+    if (result.noStore) {
+      if (result.budgetDeferred) cache.touch(entry.url);
+      return entry.markdown;
+    }
     cache.put({
       url: entry.url,
       title: result.title,
@@ -299,7 +354,7 @@ export function createApp(overrides = {}) {
     if (ageMs > STALE_MS) {
       const client = detectClient(req.headers['user-agent'], req.headers['x-client-mode']);
       try {
-        markdown = await refreshShareEntry(entry, client);
+        markdown = await refreshShareEntry(entry, client, llmBudget.forRequest(req));
       } catch (err) {
         // Source is unreachable / failed — serve the stale snapshot.
         console.warn('Share-link refresh failed for', entry.url, '—', err.message);
@@ -610,6 +665,7 @@ export function createApp(overrides = {}) {
         ytTimecodes: validYtTimecodes,
         ytChunk: validYtChunk,
         pdfOcr: pdf === 'ocr',
+        llmAllowed: llmBudget.forRequest(req),
       });
 
       let shareId = null;
@@ -783,7 +839,7 @@ export function createApp(overrides = {}) {
     const t0 = Date.now();
 
     try {
-      const result = await extractFileFn(req.body, { filename, contentType, pdfOcr: pdf === 'ocr' });
+      const result = await extractFileFn(req.body, { filename, contentType, pdfOcr: pdf === 'ocr', llmAllowed: llmBudget.forRequest(req) });
 
       const fm = wantFrontmatter
         ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId: null })
@@ -998,6 +1054,7 @@ export function createApp(overrides = {}) {
         ytTimecodes: validYtTimecodes,
         ytChunk: validYtChunk,
         pdfOcr: pdf === 'ocr',
+        llmAllowed: llmBudget.forRequest(req),
         emit,
         signal: ac.signal,
       });
@@ -1076,7 +1133,16 @@ export function createApp(overrides = {}) {
   app.get('/api/stats', (req, res) => {
     if (!cache) return res.json({ total: 0, window: '-7 days' });
     const window = req.query.window || '-7 days';
-    res.json(cache.extractionStats(window));
+    const stats = cache.extractionStats(window);
+    // The per-domain lists name the sites that were fetched, across all
+    // users. They are included only for callers who may see the global
+    // history: the admin, or anyone when auth is off and public history is on.
+    const showDomains = isGlobalScope(req) && (!!req.user || !disablePublicHistory);
+    if (!showDomains) {
+      delete stats.lowQualityDomains;
+      delete stats.fallbackByDomain;
+    }
+    res.json(stats);
   });
 
   app.get('/api/storage', (req, res) => {
@@ -1099,27 +1165,22 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api/history', gate, (req, res) => {
-    if (disablePublicHistory && !req.user) {
-      return res.status(403).json({ error: 'Public history is disabled on this instance.' });
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 20, 100));
+    const { denied, items } = recentHistory({ cache, user: req.user, disablePublicHistory, limit });
+    if (denied) {
+      return res.status(403).json({ error: PUBLIC_HISTORY_DISABLED });
     }
-    if (!cache) {
-      return res.json([]);
-    }
-    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
-    if (req.user) {
-      return res.json(cache.historyForUser(req.user.id, limit));
-    }
-    res.json(cache.history(limit));
+    res.json(items);
   });
 
   app.get('/api/archive', gate, (req, res) => {
     if (disablePublicHistory && !req.user) {
-      return res.status(403).json({ error: 'Public history is disabled on this instance.' });
+      return res.status(403).json({ error: PUBLIC_HISTORY_DISABLED });
     }
     if (!cache) {
       return res.json({ items: [], total: 0 });
     }
-    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const limit = Math.max(1, Math.min(parseInt(req.query.limit, 10) || 50, 200));
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
     if (req.user) {
       return res.json(cache.historyPageForUser(req.user.id, limit, offset));

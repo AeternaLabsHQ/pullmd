@@ -27,6 +27,30 @@ describe('renderViaSidecar', () => {
     assert.match(html, /<h1>Rendered<\/h1>/);
   });
 
+  it('decodes a streamed sidecar response the same way as text()', async () => {
+    process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
+    const bytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('<html><body>Grüße ✓</body></html>')]);
+    const expected = await new Response(bytes).text();
+    const html = await renderViaSidecar('https://example.com', { fetch: async () => new Response(bytes) });
+    assert.equal(html, expected);
+  });
+
+  it('rejects a sidecar response above the body size limit', async () => {
+    process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
+    const prev = process.env.PULLMD_MAX_FETCH_BYTES;
+    process.env.PULLMD_MAX_FETCH_BYTES = String(1024 * 1024);
+    try {
+      const stream = new ReadableStream({ pull(c) { c.enqueue(new Uint8Array(64 * 1024)); } });
+      await assert.rejects(
+        () => renderViaSidecar('https://example.com', { fetch: async () => new Response(stream) }),
+        /larger than the 1 MB limit/,
+      );
+    } finally {
+      if (prev === undefined) delete process.env.PULLMD_MAX_FETCH_BYTES;
+      else process.env.PULLMD_MAX_FETCH_BYTES = prev;
+    }
+  });
+
   it('throws on non-2xx response', async () => {
     process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
     const fetchStub = async () => ({ ok: false, status: 503, text: async () => 'busy' });

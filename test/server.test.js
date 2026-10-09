@@ -427,6 +427,35 @@ describe('GET /api/stats', () => {
     assert.equal(stats.bySource[0].count, 2);
   });
 
+  it('includes per-domain lists without auth when public history is on', async () => {
+    const cache = createCache(':memory:');
+    const app = createApp({
+      extractWeb: async () => ({ markdown: '# Web\n\nContent', title: 'Web', source: 'trafilatura', metadata: { quality: 0.8 } }),
+      cache,
+    });
+    await request(app, '/api?url=https://example.com/a');
+    const stats = JSON.parse((await request(app, '/api/stats')).body);
+    assert.ok(Array.isArray(stats.lowQualityDomains));
+    assert.ok(Array.isArray(stats.fallbackByDomain));
+  });
+
+  it('omits per-domain lists when DISABLE_PUBLIC_HISTORY is on', async () => {
+    const cache = createCache(':memory:');
+    const app = createApp({
+      extractWeb: async () => ({ markdown: '# Web\n\nContent', title: 'Web', source: 'trafilatura', metadata: { quality: 0.8 } }),
+      cache,
+      disablePublicHistory: true,
+    });
+    await request(app, '/api?url=https://example.com/a');
+    const res = await request(app, '/api/stats');
+    assert.equal(res.status, 200);
+    const stats = JSON.parse(res.body);
+    assert.equal(stats.total, 1);
+    assert.equal(stats.bySource[0].source, 'trafilatura');
+    assert.equal(stats.lowQualityDomains, undefined);
+    assert.equal(stats.fallbackByDomain, undefined);
+  });
+
   it('returns empty when cache absent', async () => {
     const app = createApp({});
     const res = await request(app, '/api/stats');
@@ -457,6 +486,33 @@ describe('GET /api/history', () => {
     const res = await request(app, '/api/history?limit=3');
     const data = JSON.parse(res.body);
     assert.equal(data.length, 3);
+  });
+
+  it('clamps limit to the range 1..100', async () => {
+    const cache = createCache(':memory:');
+    for (let i = 0; i < 5; i++) {
+      cache.put({ url: `https://example.com/${i}`, title: `T${i}`, markdown: `# ${i}`, source: 'readability' });
+    }
+    const app = createApp({ cache });
+    assert.equal(JSON.parse((await request(app, '/api/history?limit=-1')).body).length, 1);
+    assert.equal(JSON.parse((await request(app, '/api/history?limit=0')).body).length, 5);
+    assert.equal(JSON.parse((await request(app, '/api/history?limit=abc')).body).length, 5);
+    const archive = JSON.parse((await request(app, '/api/archive?limit=-1')).body);
+    assert.equal(archive.items.length, 1);
+    assert.equal(archive.total, 5);
+  });
+});
+
+describe('cache history limits', () => {
+  it('clamps limit and offset at the store level', () => {
+    const cache = createCache(':memory:');
+    for (let i = 0; i < 5; i++) {
+      cache.put({ url: `https://example.com/${i}`, title: `T${i}`, markdown: `# ${i}`, source: 'readability' });
+    }
+    assert.equal(cache.history(-1).length, 1);
+    const page = cache.historyPage(-1, -3);
+    assert.equal(page.items.length, 1);
+    assert.equal(page.items[0].url, cache.history(1)[0].url, 'negative offset starts at the newest row');
   });
 });
 

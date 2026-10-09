@@ -67,6 +67,7 @@ web pages exactly like v2, just with a cleaner body by default.
 - **Download button** (3.9) - the PWA saves a result as a `.md` file, named by the server via [`X-Suggested-Filename`](#response-headers) and optionally date-prefixed.
 - **[Sidecar health endpoint](#monitoring)** (3.10) - `GET /api/status` answers `503` when a configured sidecar stops responding, so a dead renderer shows up as an alert instead of quietly degrading extraction.
 - **Configurable cache retention** (3.11) - [`PULLMD_CACHE_RETENTION_DAYS`](#configuration) sets how long cache rows and share links live; default 90 days, `0` keeps them forever.
+- **Reverse-proxy setting and request limits** (3.13) - [`PULLMD_TRUST_PROXY`](#behind-another-reverse-proxy) decides when forwarding headers count, login and signup are rate-limited, the paid media tiers share an hourly budget, and outbound fetches have a size limit. Proxy users: see [`MIGRATION.md`](./MIGRATION.md#action-required-if-you-run-behind-a-reverse-proxy).
 
 ---
 
@@ -170,6 +171,31 @@ echo "HOST_DOMAIN=pullmd.example.com" > .env
 docker compose -f docker-compose.traefik.yml up -d
 ```
 
+This file sets `PULLMD_TRUST_PROXY=1`: Traefik is the only peer (no port is
+published), so PullMD takes the client address and the `https` scheme from
+Traefik's forwarding headers.
+
+### Behind another reverse proxy
+
+PullMD ignores `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host`
+unless `PULLMD_TRUST_PROXY` says the connecting peer is a proxy. Behind nginx,
+Caddy, a tunnel or a load balancer, set:
+
+```bash
+PULLMD_TRUST_PROXY=1                          # one proxy hop, port not reachable directly
+# or: PULLMD_TRUST_PROXY=172.18.0.0/16       # the proxy's address/network
+PUBLIC_URL=https://pullmd.example.com
+```
+
+A hop count trusts whatever connects, so use it only when the container port is
+not published to anyone but the proxy; otherwise list the proxy's address.
+Without the setting, all clients share one rate-limit bucket (login, signup,
+share-link misses, OAuth, media budget) and PullMD logs a one-time warning.
+`PUBLIC_URL` keeps the session cookie `Secure` and is accepted as this site's
+host by the login form check. Do not send `Referrer-Policy: no-referrer` for
+PullMD's pages: browsers then post forms with `Origin: null`, which is refused.
+See [`MIGRATION.md`](./MIGRATION.md#action-required-if-you-run-behind-a-reverse-proxy).
+
 ### Local development (no Docker)
 
 ```bash
@@ -191,7 +217,8 @@ All variables go in `.env` (copy from `.env.example`):
 | Variable               | Required | Purpose                                                                                              |
 | ---------------------- | -------- | ---------------------------------------------------------------------------------------------------- |
 | `HOST_DOMAIN`          | Traefik variant only | Public hostname without scheme. Used by Traefik routing and as fallback for `PUBLIC_URL`. Unused by the default compose. |
-| `PUBLIC_URL`           | no       | Full public origin embedded in `/help` and the skill zip. Defaults to `https://${HOST_DOMAIN}`.     |
+| `PUBLIC_URL`           | no       | Full public origin embedded in `/help` and the skill zip. Defaults to `https://${HOST_DOMAIN}`. An `https://` value also marks the session cookie `Secure`, and its host is accepted by the same-origin check on login and other form posts. |
+| `PULLMD_TRUST_PROXY`   | behind a reverse proxy | When to honour `X-Forwarded-*`. Off by default. `1`, `2`, ... = hop count; `true` = every hop (the client address is then the first `X-Forwarded-For` entry, which the client can set; prefer a hop count); or a comma-separated list of addresses, CIDRs or `loopback` / `linklocal` / `uniquelocal`. An invalid list warns and stays off. `docker-compose.traefik.yml` sets `1`. See [Behind another reverse proxy](#behind-another-reverse-proxy). |
 | `TRAFILATURA_URL`      | no       | URL of the Trafilatura sidecar's `/extract` endpoint. Unset → skip Trafilatura, Readability only.    |
 | `PLAYWRIGHT_URL`       | no       | URL of the Playwright sidecar's `/render` endpoint. Unset → skip Playwright fallback for JS pages.   |
 | `MARKITDOWN_URL`       | no       | URL of the MarkItDown sidecar's `/convert` endpoint. Unset → document-conversion path disabled; `POST /api/file` returns `502`. |
@@ -199,6 +226,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `PULLMD_STT_API_KEY` / `…_BASE_URL` / `…_MODEL` | no | Audio transcription via an OpenAI-compatible `/audio/transcriptions` endpoint. Enabled when the key is set. `_MODEL` defaults to `whisper-1`. |
 | `PULLMD_LLM_API_KEY` / `…_BASE_URL` | no | Shared fallback credentials for vision + STT when the per-modality vars are unset. Key and base URL only - there is no `PULLMD_LLM_MODEL`, and setting one is ignored (the server warns at startup). |
 | `PULLMD_PDF_OCR_API_KEY` / `…_BASE_URL` / `…_MODEL` | no | Opt-in high-quality PDF→Markdown via an OCR provider that preserves tables (reference: Mistral OCR `mistral-ocr-latest`). Triggered per request with `?pdf=ocr` or a recipe `fetch.pdf: ocr`. Default PDF handling stays the free markitdown path. `_MODEL` defaults to `mistral-ocr-latest`. |
+| `PULLMD_LLM_RATE_LIMIT` | no | Hourly budget shared by image captioning, audio transcription and PDF OCR, per signed-in user or client address. Default `30`; `0` = off. Over budget the request falls back to the no-provider path, and that result is not cached. |
 | `MARKITDOWN_YOUTUBE`   | no       | Set to `true` to route YouTube URLs through the markitdown sidecar (returns title + description + transcript). No API key required. Default: off. |
 | `MARKITDOWN_YT_TIMECODES` | no (sidecar) | Default timecode format in transcripts: `links` (YouTube timestamp links, default), `plain` (bare `[MM:SS]` labels), `none` (transcript text only). Overridable per-request via `?yt_timecodes=`. |
 | `MARKITDOWN_YT_CHUNK`  | no (sidecar) | Transcript block size in seconds (default `30`). `0` keeps the original per-snippet granularity. Overridable per-request via `?yt_chunk=`. |
@@ -207,7 +235,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `REDDIT_CLIENT_ID`     | no       | OAuth credentials for Reddit. Without them, PullMD uses the public JSON API (lower rate limit).     |
 | `REDDIT_CLIENT_SECRET` | no       |                                                                                                      |
 | `REDDIT_USER_AGENT`    | no       | Reddit requires a unique UA. Default: `PullMD/1.0 (URL-to-Markdown service)`.                       |
-| `DISABLE_PUBLIC_HISTORY` | no     | When `true`, hides the global recent-conversions list and archive (`/api/history` + `/api/archive` return 403, frontend hides the section). `/s/:id` share links keep working. Default: `false`. |
+| `DISABLE_PUBLIC_HISTORY` | no     | When `true`, hides the global recent-conversions list and archive (`/api/history` + `/api/archive` return 403, the MCP `list_recent` tool returns an error, `/api/stats` omits its per-domain lists, frontend hides the section). `/s/:id` share links keep working. Default: `false`. |
 | `PULLMD_USER_AGENT`    | no       | Pin a single outbound User-Agent for every web fetch. Disables rotation. Useful for CI or when one specific UA is known to work. |
 | `PULLMD_UA_FEED_URL`   | no       | URL of a JSON feed of current real-world UAs. Default: [WinFuture23/real-world-user-agents](https://github.com/WinFuture23/real-world-user-agents). Set to an empty string to disable live refresh and rely on the built-in seed pool. |
 | `PULLMD_AUTH_MODE`     | no       | `disabled` (default) / `single-admin` / `multi-user`. See "Authentication" below.                   |
@@ -218,6 +246,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `PULLMD_SOURCE_HEADER` | no       | Set to `true` to restore the legacy inline source header in the body (`# Title` + `**domain** · date` + url; for Reddit the `**r/sub** · u/user · N ↑` line). Default (unset): clean body - just the H1 title; source/date/post meta live in the frontmatter. |
 | `PULLMD_FRONTMATTER_FIELDS` | no  | Comma-separated allowlist of frontmatter fields to emit (e.g. `title,url,source,llm_tokens`). Unset = all fields. Trims tokens. Unknown names are ignored with a startup warning. |
 | `PULLMD_ALLOWED_HOSTS` | no | Comma-separated CIDRs and/or exact hostnames that may be fetched even though they resolve into a blocked range. Empty by default = every internal target is blocked. See [SSRF protection](#ssrf-protection). |
+| `PULLMD_MAX_FETCH_BYTES` | no | Size limit in bytes for fetched pages and documents and for the Playwright sidecar's response. Default `52428800` (50 MB). A larger response fails with an extraction error. A page fetch also has to deliver headers plus body within 60 s. |
 | `PULLMD_SITE_RECIPES`  | no       | Path to a JSON file of extra [site recipes](#site-recipes), merged on top of the built-ins. Alternative to `data/site-recipes.json`. |
 | `PULLMD_FILENAME_DATE_PREFIX` | no | Prefix template for the suggested download filename (`X-Suggested-Filename`). Unset = no prefix. Tokens `YYYY MM DD HH mm ss` are substituted in local time, all other characters pass through; anything outside `A-Za-z0-9._-` ends up as a hyphen. Example: `YYYY-MM-DD-HH-mm-ss-` gives `2026-08-01-13-33-42-YT-some-talk-dQw4w9WgXcQ.md`. |
 | `PULLMD_CACHE_RETENTION_DAYS` | no | How long cache rows survive without a re-fetch, in days. Default: `90`. `0` = unlimited: nothing is ever pruned, so the cache doubles as an archive. The accepted range is `0` to `36500` (100 years); anything else warns once at startup and falls back to `90`. Share links expire with their row - `/s/:id` stops resolving once the row is older than the retention window. Lowering the value on a running instance prunes every row older than the new value on the next cache write (any conversion). |
@@ -239,11 +268,14 @@ because Reddit's API expects a stable, identifying UA.
 `DISABLE_PUBLIC_HISTORY=true` is the privacy switch for shared
 instances (multi-tenant VPS, office deployments). Conversions still
 get cached and assigned share IDs; users just can't see what *other*
-users have fetched. Anyone with a known `/s/:id` link still gets
-their markdown back. Share ids are 128 random bits, so a link cannot
+users have fetched (the MCP `list_recent` tool follows the same rule,
+and `/api/stats` leaves out its per-domain lists). Anyone with a known
+`/s/:id` link still gets their markdown back. Share ids are 128 random bits, so a link cannot
 be guessed, and `/s/:id` throttles unknown-id lookups to 120 per
-minute and IP (valid links are never throttled). Use this as a
-stopgap until per-user scoping lands.
+minute and IP (valid links are never throttled). With sign-in
+enabled (`PULLMD_AUTH_MODE=single-admin` or `multi-user`) history is
+scoped per user anyway; the switch matters for instances without
+sign-in.
 
 ---
 
@@ -301,6 +333,11 @@ doing nothing.
 | `/api/stats`, `/api/storage`, `/api/config` (aggregate)          |                  no                  |
 | `/api/status`, `/api/recipes/status` (health)                    |                  no                  |
 
+`/api/stats` returns its per-domain lists (`lowQualityDomains`,
+`fallbackByDomain`) only to the admin, or to everyone when auth is off and
+public history is on; the aggregate counts are public. Signed-in callers of
+`/api/history` and MCP `list_recent` get their own conversions.
+
 Cache deletes are scoped to the caller. An admin (and every caller in
 `disabled` mode) removes the shared, URL-deduped cache row, which affects
 every user's history. A regular user only unlinks the entry from their own
@@ -309,7 +346,7 @@ response says which happened via `"scope": "user" | "global"`.
 
 ### Authentication paths
 
-1. **Session cookies** — `POST /login` sets `pullmd_session` (`HttpOnly`, `SameSite=Lax`, `Secure` over HTTPS, 90-day TTL with sliding expiry). The PWA uses this automatically.
+1. **Session cookies** — `POST /login` sets `pullmd_session` (`HttpOnly`, `SameSite=Lax`, 90-day TTL with sliding expiry). The PWA uses this automatically. The cookie is `Secure` when the request arrived over HTTPS (directly, or through a proxy covered by `PULLMD_TRUST_PROXY`) or when `PUBLIC_URL` starts with `https://`. `POST /login` allows 10 attempts per minute and `POST /signup` 5 per hour per client address (`429` with `Retry-After` beyond that). Login, signup, logout and OAuth consent form posts are accepted only when `Origin` (or `Referer`) names this host or the host of `PUBLIC_URL`; posts without either header are accepted.
 2. **API keys** — generate at `/settings`, send via `Authorization: Bearer pmd_<32-char-base62>`. Stored as SHA-256 hashes; only shown once at creation.
 3. **Legacy `PULLMD_AUTH_TOKEN`** — deprecated. `single-admin` mode only. Maps to admin user. Kept for migration compatibility; slated for removal in a future major release.
 
@@ -335,7 +372,7 @@ Revocation (RFC 7009).
 5. The first time the user clicks the connector, they'll be redirected to PullMD's `/login`, then to a consent screen, then back to claude.ai.
 
 **Tokens:**
-- Access tokens are JWTs (HS256), TTL 1 hour, audience-bound to your `/mcp` URL.
+- Access tokens are JWTs (HS256), TTL 1 hour, audience-bound to your `/mcp` URL, and accepted only on `/mcp`. Other routes, `/api/me` included, treat them as unknown bearers; use an API key there.
 - Refresh tokens are opaque (`pmd_rt_…`), TTL 30 days, rotated on every refresh, with reuse-detection that invalidates the entire refresh chain on replay.
 - Revoke a token via `POST /oauth/revoke` (RFC 7009).
 
@@ -418,7 +455,8 @@ unzip pullmd.zip -d ~/.claude/skills/
 
 Remote MCP server at `${PULLMD_URL}/mcp` (Streamable-HTTP transport, stateless).
 Three tools: `read_url`, `get_share`, `list_recent`. Server-side updates reach
-every client automatically — no local install needed.
+every client automatically — no local install needed. With auth enabled,
+`list_recent` lists the caller's own conversions.
 
 **Claude Code (CLI):**
 
@@ -501,10 +539,10 @@ for it.
 | `POST /api/html`       | Convert a local/raw HTML document (body = HTML, max 10 MB). Never cached — no history entry, no share link. |
 | `POST /api/file`       | Convert an uploaded document (raw file bytes in body; set `Content-Type` to the file's MIME type; filename via `X-Filename` header or `?filename=`; max 25 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`) for document types (PDF, Office, EPUB, ...); image and audio uploads instead use the `PULLMD_VISION_*` / `PULLMD_STT_*` tier (no markitdown container needed). |
 | `GET /s/:id`           | Cached Markdown by share id; refreshes from source if > 1 h old.                 |
-| `GET /api/history`     | Recent conversions (JSON).                                                       |
-| `GET /api/archive`     | Paginated full archive.                                                          |
+| `GET /api/history`     | Recent conversions (JSON). `?limit=` 1-100, default 20. Signed-in callers see their own. |
+| `GET /api/archive`     | Paginated full archive. `?limit=` 1-200, default 50; `?offset=`.                 |
 | `GET /api/storage`     | Cache size / hit-rate stats.                                                     |
-| `GET /api/stats`       | Extraction telemetry (sources, quality, latency). `?window=-7 days`.             |
+| `GET /api/stats`       | Extraction telemetry (sources, quality, latency). `?window=-7 days`. Per-domain lists only for global-history viewers (see [Auth boundary](#auth-boundary)). |
 | `GET /api/config`      | Which optional tiers this instance has enabled (auth mode, markitdown, vision, STT, PDF OCR, YouTube). The PWA reads it to show or hide controls. |
 | `GET /api/recipes/status` | Which [site recipes](#site-recipes) loaded, which were rejected, and any frontmatter fields dropped by the allowlist. |
 | `GET /api/status`      | Health of the extraction sidecars (trafilatura, Playwright, markitdown). `200` when every configured sidecar answers, `503` when one is down. See [Monitoring](#monitoring). |
@@ -711,6 +749,8 @@ Per-modality vars override the shared `LLM_*` fallback when set. The fallback de
 
 > **Note:** cloud endpoints send image and audio content to a third-party API. Use a local model server if data-residency matters.
 
+Provider calls are budgeted: image captioning, audio transcription and PDF OCR share `PULLMD_LLM_RATE_LIMIT` requests per hour (default `30`, `0` = off), counted per signed-in user or, without sign-in, per client address. Over budget the request gets what an instance without the provider returns (metadata only, or the markitdown PDF conversion), and that result is not cached. A tier without a configured provider never consumes budget.
+
 ### YouTube transcripts
 
 When `MARKITDOWN_YOUTUBE=true` is set on the **pullmd** service, YouTube video URLs are routed through the markitdown sidecar instead of the regular web-extraction pipeline. The sidecar fetches the video's title, description, and auto-generated or community transcript, and returns them as clean Markdown. No API key is required.
@@ -745,7 +785,7 @@ By default, PullMD converts PDFs through the free markitdown path, which works w
 
 On success, `source` becomes `pdf-ocr` and the frontmatter gains a `pdf_pages` field with the page count. If the OCR call fails or no key is configured, pullmd falls back to the standard markitdown conversion automatically - no error is returned to the caller.
 
-> **Note:** the OCR provider charges per page. Check your provider's pricing before enabling this on high-volume instances.
+> **Note:** the OCR provider charges per page. Check your provider's pricing before enabling this on high-volume instances. OCR requests count against the hourly `PULLMD_LLM_RATE_LIMIT` budget described under [Media tier](#media-tier-image-captions--audio-transcription).
 
 **Self-hosted / heavy local engines (advanced)**
 

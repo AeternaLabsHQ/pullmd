@@ -39,8 +39,28 @@ async function withServer(app, fn) {
   finally { server.close(); }
 }
 
+function mcpInit(token) {
+  return {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0', id: 1, method: 'initialize',
+      params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '0' } },
+    }),
+  };
+}
+
+function parseSse(text) {
+  const m = /^data: (.+)$/m.exec(text);
+  return m ? JSON.parse(m[1]) : JSON.parse(text);
+}
+
 describe('OAuth end-to-end', () => {
-  it('DCR → login → authorize → consent → token → /api/me', async () => {
+  it('DCR → login → authorize → consent → token → /mcp', async () => {
     const { app, auth, cache } = await bootApp();
     const userId = cache.db.prepare("SELECT id FROM users").get().id;
     const { token: sess } = auth.createSession(userId);
@@ -103,13 +123,10 @@ describe('OAuth end-to-end', () => {
       assert.ok(tk.access_token);
       assert.ok(tk.refresh_token);
 
-      // 5. Use access token to call /api/me
-      const meRes = await fetch(`${base}/api/me`, {
-        headers: { Authorization: `Bearer ${tk.access_token}` },
-      });
-      assert.equal(meRes.status, 200);
-      const me = await meRes.json();
-      assert.equal(me.email, 'a@b.c');
+      // 5. Use access token on the MCP endpoint
+      const mcpRes = await fetch(`${base}/mcp`, mcpInit(tk.access_token));
+      assert.equal(mcpRes.status, 200);
+      assert.equal(parseSse(await mcpRes.text()).result.serverInfo.name, 'pullmd');
 
       // 6. Refresh
       const refreshRes = await fetch(`${base}/oauth/token`, {
@@ -124,6 +141,96 @@ describe('OAuth end-to-end', () => {
       assert.equal(refreshRes.status, 200);
       const tk2 = await refreshRes.json();
       assert.notEqual(tk2.refresh_token, tk.refresh_token);
+    });
+  });
+});
+
+describe('OAuth access tokens are scoped to the MCP endpoint', () => {
+  async function bootWithToken() {
+    const booted = await bootApp();
+    const userId = booted.cache.db.prepare("SELECT id FROM users").get().id;
+    const jwt = await booted.oauth.tokens.issueAccessToken({ sub: userId, scope: 'mcp:full' });
+    return { ...booted, userId, jwt };
+  }
+
+  it('accepted on /mcp', async () => {
+    const { app, jwt } = await bootWithToken();
+    await withServer(app, async (base) => {
+      const r = await fetch(`${base}/mcp`, mcpInit(jwt));
+      assert.equal(r.status, 200);
+      assert.equal(parseSse(await r.text()).result.serverInfo.name, 'pullmd');
+    });
+  });
+
+  it('accepted on /mcp/ and /mcp with a query string', async () => {
+    const { app, jwt } = await bootWithToken();
+    await withServer(app, async (base) => {
+      for (const path of ['/mcp/', '/mcp?x=1', '/mcp/?x=1']) {
+        const r = await fetch(`${base}${path}`, mcpInit(jwt));
+        assert.equal(r.status, 200, path);
+        assert.equal(parseSse(await r.text()).result.serverInfo.name, 'pullmd', path);
+      }
+    });
+  });
+
+  it('without a token /mcp still answers 401', async () => {
+    const { app } = await bootWithToken();
+    await withServer(app, async (base) => {
+      const init = mcpInit('x');
+      delete init.headers.Authorization;
+      const r = await fetch(`${base}/mcp`, init);
+      assert.equal(r.status, 401);
+    });
+  });
+
+  it('not accepted for creating API keys', async () => {
+    const { app, auth, userId, jwt } = await bootWithToken();
+    await withServer(app, async (base) => {
+      const r = await fetch(`${base}/api/keys`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          'content-type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json',
+        },
+        body: 'label=k',
+        redirect: 'manual',
+      });
+      assert.equal(r.status, 401);
+      assert.equal(auth.listApiKeys(userId).length, 0);
+    });
+  });
+
+  it('not accepted for clearing the cache', async () => {
+    const { app, cache, userId, jwt } = await bootWithToken();
+    cache.put({ url: 'https://example.com/a', title: 'A', markdown: '# A', source: 'web', client: 'api', user_id: userId });
+    await withServer(app, async (base) => {
+      const r = await fetch(`${base}/api/cache`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      assert.equal(r.status, 401);
+      assert.equal(cache.historyForUser(userId, 10).length, 1);
+    });
+  });
+
+  it('not accepted on /api/history, /api/me and /settings', async () => {
+    const { app, jwt } = await bootWithToken();
+    await withServer(app, async (base) => {
+      const headers = { Authorization: `Bearer ${jwt}`, Accept: 'application/json' };
+      assert.equal((await fetch(`${base}/api/history`, { headers })).status, 401);
+      assert.equal((await fetch(`${base}/api/me`, { headers })).status, 401);
+      assert.equal((await fetch(`${base}/settings`, { headers, redirect: 'manual' })).status, 401);
+    });
+  });
+
+  it('API keys keep working outside /mcp', async () => {
+    const { app, auth, userId } = await bootWithToken();
+    const { fullKey } = auth.createApiKey(userId, 'k');
+    await withServer(app, async (base) => {
+      const r = await fetch(`${base}/api/me`, { headers: { Authorization: `Bearer ${fullKey}` } });
+      assert.equal(r.status, 200);
+      assert.equal((await r.json()).email, 'a@b.c');
     });
   });
 });

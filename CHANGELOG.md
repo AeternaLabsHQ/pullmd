@@ -17,6 +17,49 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
      there at the same time, or this heading renders as literal bracketed
      text. -->
 
+## [3.13.0] - 2026-10-09
+
+### Action required if you run behind a reverse proxy
+
+PullMD now takes the client address, the request scheme and the host from forwarding headers (`X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`) only when the new `PULLMD_TRUST_PROXY` says the connecting peer is a proxy. It is off by default. The bundled `docker-compose.traefik.yml` sets it to `1`, so instances started from that file need no change. If PullMD sits behind any other reverse proxy, tunnel or load balancer, or behind Traefik with a compose file of your own, check these three points when upgrading (details in [`MIGRATION.md`](./MIGRATION.md#action-required-if-you-run-behind-a-reverse-proxy)):
+
+1. **Set `PULLMD_TRUST_PROXY`**, usually to `1` (one proxy in front). If the container port is also reachable directly, not only through the proxy, list the proxy's address or network instead (for example `PULLMD_TRUST_PROXY=172.18.0.0/16`), because a hop count trusts whatever connects. If your compose file lists environment variables one by one, add the line `- PULLMD_TRUST_PROXY=${PULLMD_TRUST_PROXY:-}` as well. Without the setting every request appears to come from the proxy, and all clients share one rate-limit bucket: 10 login attempts per minute, 5 signups per hour, 120 unknown share-id lookups per minute, the OAuth endpoint limits, and the hourly media-provider budget of anonymous callers. PullMD then logs once per process: `Requests arrive through a proxy but PULLMD_TRUST_PROXY is not set: all clients share one rate-limit bucket and the client address is the proxy's. See MIGRATION.md.`
+2. **Set `PUBLIC_URL`** to the public origin, e.g. `https://pullmd.example.com`. The session cookie's `Secure` flag and, when `PUBLIC_URL` is unset, the base URL on the help page, in the skill zip and in MCP share URLs used to follow `X-Forwarded-Proto` / `X-Forwarded-Host` from any request. They now follow them only through a trusted proxy, and an `https://` `PUBLIC_URL` keeps the cookie `Secure` either way.
+3. **Login and other form posts are checked against the host.** `POST /login`, `/signup`, `/logout` and `/oauth/consent` are accepted only when the browser's `Origin` header (or, without one, `Referer`) names the host the request arrived for or the host of `PUBLIC_URL`. A proxy that rewrites `Host` to an internal name needs `PUBLIC_URL` set, otherwise login answers `403`. Do not serve PullMD with `Referrer-Policy: no-referrer`: under that policy browsers send `Origin: null` and no `Referer` on form posts, which is refused. The browser default (`strict-origin-when-cross-origin`) and `same-origin` work. PullMD sets no `Referrer-Policy` of its own.
+
+### Security
+
+- **Forwarding headers count only from a configured proxy.** Rate-limit keys (share links, OAuth, login, signup, media budget) come from Express's `req.ip`, and the session cookie's `Secure` flag and the request-derived base URL from `req.secure`, `req.protocol` and `req.host`. Those honour `X-Forwarded-*` only for peers covered by `PULLMD_TRUST_PROXY`; before, the limiter read the first `X-Forwarded-For` entry and the other two read `X-Forwarded-Proto` / `X-Forwarded-Host` of every request.
+- **Login and signup are rate-limited per client address.** `POST /login` allows 10 attempts per minute, `POST /signup` 5 per hour. Every attempt counts, successful or not. Beyond that the form page comes back with `429`, a translated "too many attempts" message and `Retry-After`.
+- **Form posts must come from this site.** `POST /login`, `/signup`, `/logout` and `/oauth/consent` check `Origin` (or `Referer`) against the request's host and the host of `PUBLIC_URL`, comparing hostnames only, so an instance served as plain HTTP behind a TLS tunnel still matches. A post that carries neither header (curl, scripts) is accepted; `Origin: null` without a usable `Referer` is refused with `403`.
+- **OAuth access tokens are accepted only on the MCP endpoint.** They are issued for the MCP resource (audience `<PUBLIC_URL>/mcp`), and the auth middleware now verifies them only on `/mcp` and `/mcp/`. On every other route, `/api/me` included, such a bearer is treated like any unknown token. API keys, sessions and the legacy admin token are unchanged.
+- **MCP `list_recent` is scoped like `GET /api/history`.** A signed-in caller (session, API key, OAuth token or legacy admin token) gets their own conversions; with auth disabled the shared history is listed unless `DISABLE_PUBLIC_HISTORY` is set, in which case the tool returns an error result.
+- **`/api/stats` lists per-domain figures only for global-history viewers.** The aggregate counts stay public. `lowQualityDomains` and `fallbackByDomain` are included for the admin, or for everyone when auth is off and public history is enabled.
+- **Hourly budget for the paid media tiers.** Image captioning, audio transcription and PDF OCR share a budget of `PULLMD_LLM_RATE_LIMIT` requests per hour (default `30`, `0` = off), counted per signed-in user or, without sign-in, per client address. Over budget a request takes the path an instance without that provider would take (metadata only for images and audio, the regular markitdown conversion for PDFs); that result is served but not cached. A tier without a configured provider never consumes budget.
+- **Size limit and deadline for outbound fetches.** Page and document fetches and the Playwright sidecar's response are read with a limit of `PULLMD_MAX_FETCH_BYTES` (default 50 MB). A declared `Content-Length` above the limit is refused before reading; otherwise the body is counted and the read stops once it passes the limit. A page fetch keeps its 15 s header timeout and now also has to deliver headers plus body within 60 s; the sidecar keeps its 25 s timeout. Both cases surface as an ordinary extraction error.
+- **Stricter email rules for new accounts.** Signup, `createUser` and `scripts/admin.js create-user` require exactly one `@`, a non-empty local part, a dotted domain, and no whitespace, control characters or ``<>"'()`;,\``. Login still looks up the trimmed, lowercased string, so existing accounts keep working.
+- **The help page escapes the origin it embeds**, the in-process skill-zip cache keeps at most 8 entries, and the PWA builds its account slot with DOM methods instead of an HTML string (service worker cache `v33`).
+- **`.dockerignore` excludes `.env*`** and local working directories (`.claude`, `_archive`, `.superpowers`, `SESSION_LOG.md`) from the image build context. Nothing reads `.env.example` at runtime.
+
+### Added
+
+- **`PULLMD_TRUST_PROXY`** maps to Express's `trust proxy`. Unset, empty, `false`, `off`, `no` or `0` keep it off. `true` / `yes` / `on` trusts every hop, an integer is a hop count, anything else is a comma-separated list of addresses, CIDRs or the Express keywords `loopback`, `linklocal` and `uniquelocal`. An invalid list logs a warning and leaves it off. `docker-compose.traefik.yml` defaults it to `1`; `docker-compose.yml` passes it through and leaves it off unless set.
+- **`PULLMD_LLM_RATE_LIMIT`** (default `30` per hour, `0` = off) and **`PULLMD_MAX_FETCH_BYTES`** (default `52428800`, 50 MB), described above. Both compose files pass them through.
+
+### Fixed
+
+- `/api/history` and `/api/archive` clamp `?limit=` to 1-100 and 1-200. A negative value no longer reaches the database as a negative `LIMIT`, which SQLite treats as no limit; the cache layer clamps `limit` and `offset` as well.
+- OAuth authorization codes are pruned with a cutoff in the same ISO format they are stored in, instead of SQLite's `datetime()` format.
+- `POST /oauth/consent` checks the requested scope the same way `GET /oauth/authorize` does.
+- Dynamically registered OAuth clients that never obtained a token are removed after a day, on the next registration.
+- The MCP `get_share` tool description names the 32-hex share id format instead of 8-hex.
+
+### Changed
+
+- **Dependencies** (#62, #63, #64). npm: `@modelcontextprotocol/sdk` 1.32.1, `zod` 4.6.5, `jose` 6.2.12, `linkedom` 0.18.13, `image-size` 2.0.4, `argon2` 0.45.1, `better-sqlite3` 13 (prebuilt binaries ship inside the package), `archiver` 8 (ESM-only; the skill zip is built with `ZipArchive`), plus `npm audit fix` for transitive advisories. All three sidecars: `fastapi` 0.141.1 and `uvicorn[standard]` 0.54.0. The render sidecar moves from Playwright 1.49 to 1.63 (bundled Chromium 131 to 153); its default User-Agent, used only when the caller sends none, follows to Chrome 153.
+- **The image build no longer installs a compiler toolchain.** `better-sqlite3` 13 and `argon2` ship prebuilt musl binaries for x64 and arm64, so the builder stage drops `python3`, `make` and `g++`, and `npm ci --ignore-scripts` keeps dependencies from running install scripts.
+- **Refreshed User-Agent seed pool**, the fallback when the live UA feed is unreachable or disabled.
+
 ## [3.12.1] - 2026-10-08
 
 ### Fixed
@@ -454,6 +497,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.13.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.13.0
 [3.12.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.12.1
 [3.12.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.12.0
 [3.11.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.11.0

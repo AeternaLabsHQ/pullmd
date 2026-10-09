@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pullmd-v32';
+const CACHE_NAME = 'pullmd-v33';
 const SHELL_URLS = [
   '/',
   '/index.html',
