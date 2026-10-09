@@ -3,3 +3,8 @@ data
 .git
 docs
 test
+.env*
+.claude
+_archive
+.superpowers
+SESSION_LOG.md
