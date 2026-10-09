@@ -47,6 +47,10 @@ services:
       - OAUTH_JWT_SECRET=${OAUTH_JWT_SECRET:-}
       # Cache retention in days; 0 = keep forever. Default 90.
       - PULLMD_CACHE_RETENTION_DAYS=${PULLMD_CACHE_RETENTION_DAYS:-}
+      # Set only when a reverse proxy sits in front (e.g. 1 = one proxy hop).
+      - PULLMD_TRUST_PROXY=${PULLMD_TRUST_PROXY:-}
+      # Paid media tiers (caption/transcription/PDF OCR) per user or client and hour; 0 = off. Default 30.
+      - PULLMD_LLM_RATE_LIMIT=${PULLMD_LLM_RATE_LIMIT:-}
       - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data

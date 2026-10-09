@@ -45,6 +45,11 @@ services:
       - OAUTH_JWT_SECRET=${OAUTH_JWT_SECRET:-}
       # Cache retention in days; 0 = keep forever. Default 90.
       - PULLMD_CACHE_RETENTION_DAYS=${PULLMD_CACHE_RETENTION_DAYS:-}
+      # Traefik is the only peer here (no published port), so trust exactly one
+      # hop: client address and https detection come from Traefik's headers.
+      - PULLMD_TRUST_PROXY=${PULLMD_TRUST_PROXY:-1}
+      # Paid media tiers (caption/transcription/PDF OCR) per user or client and hour; 0 = off. Default 30.
+      - PULLMD_LLM_RATE_LIMIT=${PULLMD_LLM_RATE_LIMIT:-}
       - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data
