@@ -17,6 +17,8 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
      there at the same time, or this heading renders as literal bracketed
      text. -->
 
+## [3.13.0] - 2026-10-09
+
 ### Action required if you run behind a reverse proxy
 
 PullMD now takes the client address, the request scheme and the host from forwarding headers (`X-Forwarded-For`, `X-Forwarded-Proto`, `X-Forwarded-Host`) only when the new `PULLMD_TRUST_PROXY` says the connecting peer is a proxy. It is off by default. The bundled `docker-compose.traefik.yml` sets it to `1`, so instances started from that file need no change. If PullMD sits behind any other reverse proxy, tunnel or load balancer, or behind Traefik with a compose file of your own, check these three points when upgrading (details in [`MIGRATION.md`](./MIGRATION.md#action-required-if-you-run-behind-a-reverse-proxy)):
@@ -495,6 +497,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.13.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.13.0
 [3.12.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.12.1
 [3.12.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.12.0
 [3.11.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.11.0
