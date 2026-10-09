@@ -147,6 +147,25 @@ describe('oauth auth-code store', () => {
     cache.db.prepare("UPDATE oauth_auth_codes SET expires_at = datetime('now', '-1 minute') WHERE code_hash = ?").run(codeHash);
     assert.equal(store.consumeAuthCode(codeHash), null);
   });
+
+  it('prunes codes that expired more than an hour ago (ISO timestamps)', async () => {
+    const { store, userId, cache } = await makeStore();
+    const reg = store.registerClient({
+      redirect_uris: ['https://x/cb'], client_name: 'X', token_endpoint_auth_method: 'none',
+    });
+    const args = {
+      client_id: reg.client_id, user_id: userId, redirect_uri: 'https://x/cb',
+      code_challenge: 'C', code_challenge_method: 'S256', scope: 'mcp:full',
+    };
+    const { codeHash: old } = store.createAuthCode(args);
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600e3).toISOString();
+    cache.db.prepare('UPDATE oauth_auth_codes SET expires_at = ? WHERE code_hash = ?').run(twoHoursAgo, old);
+    // Creating another code runs the prune.
+    const { codeHash: fresh } = store.createAuthCode(args);
+    const rows = cache.db.prepare('SELECT code_hash FROM oauth_auth_codes').all().map(r => r.code_hash);
+    assert.ok(!rows.includes(old), 'code expired 2h ago should be pruned');
+    assert.ok(rows.includes(fresh), 'fresh code stays');
+  });
 });
 
 describe('oauth refresh-token chain (rotation + reuse detection)', () => {

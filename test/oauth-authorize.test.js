@@ -182,6 +182,31 @@ describe('POST /oauth/consent', () => {
     });
   });
 
+  it('consent re-checks the requested scope like the authorize step', async () => {
+    const { app, sessionToken, client } = await setup();
+    await withServer(app, async (base) => {
+      const body = new URLSearchParams({
+        decision: 'allow',
+        client_id: client.client_id,
+        redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        code_challenge: 'CHAL',
+        code_challenge_method: 'S256',
+        state: 'STATE-SCOPE',
+        scope: 'mcp:other',
+      }).toString();
+      const r = await fetch(`${base}/oauth/consent`, {
+        method: 'POST',
+        headers: { ...COOKIE(sessionToken), 'content-type': 'application/x-www-form-urlencoded' },
+        body, redirect: 'manual',
+      });
+      assert.equal(r.status, 302);
+      const u = new URL(r.headers.get('location'));
+      assert.equal(u.searchParams.get('error'), 'invalid_scope');
+      assert.equal(u.searchParams.get('state'), 'STATE-SCOPE');
+      assert.equal(u.searchParams.get('code'), null);
+    });
+  });
+
   it('consent without session → 401', async () => {
     const { app, client } = await setup();
     await withServer(app, async (base) => {
