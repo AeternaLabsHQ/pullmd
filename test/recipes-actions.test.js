@@ -128,6 +128,17 @@ describe('applyPreprocessActions — replace-with-text', () => {
   });
 });
 
+describe('applyPreprocessActions — prepend-text', () => {
+  it('inserts escaped text before the existing content', () => {
+    const out = applyPreprocessActions('<ul><li class="pro"><span>Gratis</span></li><li class="con">Teuer</li></ul>', [
+      { action: 'prepend-text', selector: 'li.pro', text: 'Vorteil: ' },
+      { action: 'prepend-text', selector: 'li.con', text: '<Nachteil> ' },
+    ]);
+    assert.ok(out.includes('<li class="pro">Vorteil: <span>Gratis</span></li>'));
+    assert.ok(out.includes('<li class="con">&lt;Nachteil&gt; Teuer</li>'));
+  });
+});
+
 describe('applyPreprocessActions — grid-to-table', () => {
   const grid = (cols, cells, style = `grid-template-columns:repeat(${cols}, 1fr)`) =>
     `<div style="${style}">${cells.map((c) => `<div>${c}</div>`).join('')}</div>`;

@@ -217,7 +217,7 @@ unknown key rejects the whole recipe.
 
 Each action is an object with an `action` discriminator. They run in order, on
 the HTML, **before** the content extractor sees it. Selectors are standard CSS
-(cheerio). The six actions:
+(cheerio). The seven actions:
 
 | Action | Required keys | What it does | Typical use |
 | ------ | ------------- | ------------ | ----------- |
@@ -226,6 +226,7 @@ the HTML, **before** the content extractor sees it. Selectors are standard CSS
 | `remove-element` | `selector` | Deletes the matching element and all its descendants. | Delete an inline advertisement or embed wrapper. |
 | `unwrap` | `selector` | Replaces the element with its children (the element's tags vanish, its contents stay in place). | Flatten a wrapper `<div>` that makes Readability treat the real article as a sibling and drop the lead image. |
 | `replace-with-text` | `selector`, and exactly one of `text` or `attr` | Replaces the element with plain text: the fixed `text`, or the value of the element's attribute `attr` (nothing if the attribute is missing). | Turn icon-only cells into words: a check-mark `<span>` into `ja`, a `<span role="img" aria-label="Chat">` into `Chat`, a logo `<img>` into its `alt`. |
+| `prepend-text` | `selector`, `text` | Inserts `text` at the start of every matching element, before its existing content. | Label what the page only shows with CSS: `Vorteil: ` in front of each list item whose check mark is a `::before` icon. |
 | `grid-to-table` | `selector`; optional `columns` (1-100) | Rebuilds a CSS-grid "table" made of `<div>`s as a real `<table>`. See [below](#rebuilding-a-css-grid-as-a-table-with-grid-to-table). | Comparison tables on page builders and Nuxt/React sites, which every extractor otherwise renders as loose words. |
 
 #### Rebuilding a CSS grid as a table with `grid-to-table`
@@ -656,7 +657,7 @@ recipes. Each demonstrates a different feature:
 | `claude-blog-split-body` | `select.content` — the article body is split across two containers with a call-to-action between them, and Readability keeps only one of them. The recipe names both outright instead of nudging the scoring. |
 | `booking-hotel-noise` | `preprocess` with a run of `remove-element` actions on `data-capla-component-boundary` attributes — strips breadcrumbs, gallery, share and similar widgets from Booking.com hotel pages. |
 | `booking-hotel-frontmatter` | `frontmatter` from JSON-LD (`Hotel` node) — description, address, rating and price range of a hotel page. |
-| `finanzfluss-vergleich` | `replace-with-text` + `grid-to-table` + `select.content` — rebuilds the CSS-grid comparison table on finanzfluss.de comparison pages as a real table (icons become `ja`/`nein`, card logos and support channels become words) and pulls it into the output between intro and article. |
+| `finanzfluss-vergleich` | `replace-with-text` + `grid-to-table` + `prepend-text` + `select.content` — rebuilds the CSS-grid comparison table on finanzfluss.de comparison pages as a real table (icons become `ja`/`nein`, card logos and support channels become words) and pulls it into the output between intro and article. The provider cards keep only their desktop copy, and their pro and con bullets get `Vorteil:` / `Nachteil:` in front. |
 
 ---
 

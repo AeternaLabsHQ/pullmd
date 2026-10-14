@@ -41,7 +41,7 @@ const PAGE = `<html><head><title>Geschäftskonto-Vergleich</title></head><body><
       <div class="invisible"><div class="grid" style="${GRID}">${label('url', 'Angebot')}<div>Zum Angebot</div><div>Zum Angebot</div></div></div>
     </div></div>
   </div></div>
-  <div class="content-container"><nav>Home Vergleich</nav><div class="wp-content"><h2>Die besten Geschäftskonten aus unserem Test</h2><p>${PROSE}</p><div class="card"><div class="cta-mobile"><p>MOBILE-CTA Fyrst Base</p></div><div class="cta-desktop"><p>DESKTOP-CTA Fyrst Base</p></div></div></div></div>
+  <div class="content-container"><nav>Home Vergleich</nav><div class="wp-content"><h2>Die besten Geschäftskonten aus unserem Test</h2><p>${PROSE}</p><div class="card"><div class="cta-mobile"><p>MOBILE-CTA Fyrst Base</p></div><div class="cta-desktop"><p>DESKTOP-CTA Fyrst Base</p><div class="pros-cons-box"><ul><li class="special-bullet pro-bullet"><span>Kostenlose Debitkarte</span></li></ul><ul><li class="special-bullet con-bullet"><span>Kein Buchhaltungstool</span></li></ul></div></div></div></div></div>
 </div>
 </main></body></html>`;
 
@@ -67,6 +67,12 @@ describe('finanzfluss-vergleich recipe', () => {
     const { markdown } = await extractHtml(PAGE, { url: PAGE_URL, recipes, extractor: 'readability' });
     assert.match(markdown, /DESKTOP-CTA/);
     assert.doesNotMatch(markdown, /MOBILE-CTA/);
+  });
+
+  it('labels pro and con bullets', async () => {
+    const { markdown } = await extractHtml(PAGE, { url: PAGE_URL, recipes, extractor: 'readability' });
+    assert.match(markdown, /^- Vorteil: Kostenlose Debitkarte$/m);
+    assert.match(markdown, /^- Nachteil: Kein Buchhaltungstool$/m);
   });
 
   it('emits the table without column padding', async () => {
