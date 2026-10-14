@@ -118,6 +118,7 @@
       { "action": "grid-to-table", "selector": "[data-cy=comparison-table-desktop]" }
     ],
     "select": {
+      "remove": ["[data-cy^=vergleich-] .wp-content .card .cta-mobile"],
       "content": [
         "[data-cy^=vergleich-] .title-container h1",
         "[data-cy^=vergleich-] > div:first-child .content",

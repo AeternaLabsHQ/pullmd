@@ -17,11 +17,17 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
      there at the same time, or this heading renders as literal bracketed
      text. -->
 
+## [3.14.0] - 2026-10-14
+
 ### Added
 
 - **Recipe action `grid-to-table`.** Rebuilds a comparison "table" drawn with CSS grid (a flat list of `<div>` cells plus an inline `grid-template-columns`) as a real `<table>`. Extractors see no rows or columns in such markup and used to output a run of loose words, or drop the block entirely. Several grids in one container (a sticky header grid above the body grid, for example) are merged into one table; the column count comes from `repeat(N, …)`, the track list, or an explicit `columns`. See [`SITE-RECIPES.md`](./SITE-RECIPES.md#rebuilding-a-css-grid-as-a-table-with-grid-to-table).
 - **Recipe action `replace-with-text`.** Replaces matched elements with a fixed `text` or with the value of one of their attributes (`attr`), so icon-only cells (check marks, icons with an `aria-label`, logo images) survive as words.
-- **Built-in recipe `finanzfluss-vergleich`.** On finanzfluss.de comparison pages (`/vergleich/**`) the provider comparison table now comes out as a Markdown table between the intro and the article, with check-mark icons as `ja`/`nein`.
+- **Built-in recipe `finanzfluss-vergleich`.** On finanzfluss.de comparison pages (`/vergleich/**`) the provider comparison table now comes out as a Markdown table between the intro and the article, with check-mark icons as `ja`/`nein`. The provider cards in the article, which the page renders twice (mobile and desktop layout), now appear once.
+
+### Changed
+
+- **Markdown tables come out without column padding.** The HTML-to-Markdown converter padded every cell with spaces to the width of the longest cell in its column. Renderers ignore that padding, but it was paid for in tokens whenever the output went to an LLM: a German Wikipedia list of cities shrinks from 123,508 to 83,804 characters, a wide comparison table to about a quarter of its size. Cell contents are unchanged, and the padding is removed only after the extractor choice, so which extractor wins on a page does not change. Cached results keep their old formatting until they are fetched again.
 
 ### Fixed
 
@@ -513,6 +519,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.14.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.14.0
 [3.13.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.13.1
 [3.13.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.13.0
 [3.12.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.12.1
