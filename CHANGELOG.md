@@ -17,6 +17,12 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
      there at the same time, or this heading renders as literal bracketed
      text. -->
 
+## [3.13.1] - 2026-10-14
+
+### Fixed
+
+- **Tables inside Webflow "HTML Embed" blocks are no longer dropped.** Webflow wraps its custom-HTML component in `div.w-embed`, and sites use it for hand-built comparison tables. Trafilatura discards every element whose class contains `embed`, so whenever Trafilatura won the extractor comparison those tables disappeared without a trace. Preprocessing now removes the `w-embed` class from such a div when it contains a `<table>`; icon and widget embeds are left alone.
+
 ## [3.13.0] - 2026-10-09
 
 ### Action required if you run behind a reverse proxy
@@ -497,6 +503,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.13.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.13.1
 [3.13.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.13.0
 [3.12.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.12.1
 [3.12.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.12.0
