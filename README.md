@@ -821,7 +821,7 @@ A few things worth noting:
 
 ## Site recipes
 
-Site recipes are small declarative JSON entries that adjust extraction for specific hosts — force a browser render, strip site-specific noise, unwrap wrappers that confuse the reader, or promote structured data (JSON-LD / CSS selectors) into the frontmatter. The built-ins ship in [`site-recipes.default.json`](./site-recipes.default.json); self-hosters can add their own via `data/site-recipes.json` or the `PULLMD_SITE_RECIPES` env var (see [`.env.example`](./.env.example)). `GET /api/recipes/status` reports what loaded.
+Site recipes are small declarative JSON entries that adjust extraction for specific hosts — force a browser render, strip site-specific noise, unwrap wrappers that confuse the reader, rebuild CSS-grid comparison tables as real tables, or promote structured data (JSON-LD / CSS selectors) into the frontmatter. The built-ins ship in [`site-recipes.default.json`](./site-recipes.default.json); self-hosters can add their own via `data/site-recipes.json` or the `PULLMD_SITE_RECIPES` env var (see [`.env.example`](./.env.example)). `GET /api/recipes/status` reports what loaded.
 
 To write or contribute a recipe, see the **[site-recipe contributor guide](./SITE-RECIPES.md)**.
 

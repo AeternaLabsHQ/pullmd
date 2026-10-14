@@ -17,6 +17,16 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
      there at the same time, or this heading renders as literal bracketed
      text. -->
 
+### Added
+
+- **Recipe action `grid-to-table`.** Rebuilds a comparison "table" drawn with CSS grid (a flat list of `<div>` cells plus an inline `grid-template-columns`) as a real `<table>`. Extractors see no rows or columns in such markup and used to output a run of loose words, or drop the block entirely. Several grids in one container (a sticky header grid above the body grid, for example) are merged into one table; the column count comes from `repeat(N, …)`, the track list, or an explicit `columns`. See [`SITE-RECIPES.md`](./SITE-RECIPES.md#rebuilding-a-css-grid-as-a-table-with-grid-to-table).
+- **Recipe action `replace-with-text`.** Replaces matched elements with a fixed `text` or with the value of one of their attributes (`attr`), so icon-only cells (check marks, icons with an `aria-label`, logo images) survive as words.
+- **Built-in recipe `finanzfluss-vergleich`.** On finanzfluss.de comparison pages (`/vergleich/**`) the provider comparison table now comes out as a Markdown table between the intro and the article, with check-mark icons as `ja`/`nein`.
+
+### Fixed
+
+- **`select.content` kept the wrong order for nested matches.** When an earlier match sat deeper inside a preceding wrapper than a later one, the blocks came out in reverse. linkedom's `compareDocumentPosition` reports that case backwards; the order now comes from a tree walk.
+
 ## [3.13.1] - 2026-10-14
 
 ### Fixed

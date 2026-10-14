@@ -42,6 +42,35 @@ describe('RecipeSchema', () => {
     assert.equal(RecipeSchema.safeParse(recipe).success, true);
   });
 
+  it('accepts replace-with-text and grid-to-table', () => {
+    const recipe = {
+      name: 'r1', host: 'a.com',
+      preprocess: [
+        { action: 'replace-with-text', selector: '.yes', text: 'ja' },
+        { action: 'replace-with-text', selector: '[role=img]', attr: 'aria-label' },
+        { action: 'grid-to-table', selector: '#cmp' },
+        { action: 'grid-to-table', selector: '#cmp .g', columns: 4 },
+      ],
+    };
+    assert.equal(RecipeSchema.safeParse(recipe).success, true);
+  });
+
+  it('rejects replace-with-text without exactly one of text/attr', () => {
+    for (const bad of [
+      { action: 'replace-with-text', selector: '.x' },
+      { action: 'replace-with-text', selector: '.x', text: 'a', attr: 'b' },
+    ]) {
+      assert.equal(RecipeSchema.safeParse({ name: 'r1', host: 'a.com', preprocess: [bad] }).success, false);
+    }
+  });
+
+  it('rejects grid-to-table with a bad columns value', () => {
+    for (const columns of [0, 2.5, 101]) {
+      const recipe = { name: 'r1', host: 'a.com', preprocess: [{ action: 'grid-to-table', selector: '#c', columns }] };
+      assert.equal(RecipeSchema.safeParse(recipe).success, false);
+    }
+  });
+
   it('rejects unknown preprocess action', () => {
     const recipe = {
       name: 'r1', host: 'a.com',

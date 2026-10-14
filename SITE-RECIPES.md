@@ -22,7 +22,7 @@ document and the repository.
 6. [Structured data (JSON-LD) into frontmatter](#6-structured-data-json-ld-into-frontmatter)
 7. [Cleaning noisy output](#7-cleaning-noisy-output)
 8. [A complete annotated example](#8-a-complete-annotated-example)
-9. [The five built-in recipes](#9-the-five-built-in-recipes)
+9. [The built-in recipes](#9-the-built-in-recipes)
 10. [Testing your recipe](#10-testing-your-recipe)
 11. [Contributing checklist](#11-contributing-checklist)
 
@@ -217,7 +217,7 @@ unknown key rejects the whole recipe.
 
 Each action is an object with an `action` discriminator. They run in order, on
 the HTML, **before** the content extractor sees it. Selectors are standard CSS
-(cheerio). The four actions:
+(cheerio). The six actions:
 
 | Action | Required keys | What it does | Typical use |
 | ------ | ------------- | ------------ | ----------- |
@@ -225,6 +225,42 @@ the HTML, **before** the content extractor sees it. Selectors are standard CSS
 | `remove-class` | `selector`, `class` | Removes one class token from `class`, preserving the others; drops the `class` attribute entirely if it was the only token. | Remove a `paywall` class that triggers CSS-hiding of the article body. |
 | `remove-element` | `selector` | Deletes the matching element and all its descendants. | Delete an inline advertisement or embed wrapper. |
 | `unwrap` | `selector` | Replaces the element with its children (the element's tags vanish, its contents stay in place). | Flatten a wrapper `<div>` that makes Readability treat the real article as a sibling and drop the lead image. |
+| `replace-with-text` | `selector`, and exactly one of `text` or `attr` | Replaces the element with plain text: the fixed `text`, or the value of the element's attribute `attr` (nothing if the attribute is missing). | Turn icon-only cells into words: a check-mark `<span>` into `ja`, a `<span role="img" aria-label="Chat">` into `Chat`, a logo `<img>` into its `alt`. |
+| `grid-to-table` | `selector`; optional `columns` (1-100) | Rebuilds a CSS-grid "table" made of `<div>`s as a real `<table>`. See [below](#rebuilding-a-css-grid-as-a-table-with-grid-to-table). | Comparison tables on page builders and Nuxt/React sites, which every extractor otherwise renders as loose words. |
+
+#### Rebuilding a CSS grid as a table with `grid-to-table`
+
+Some sites draw comparison tables with CSS grid: one flat list of `<div>` cells
+and an inline `style="grid-template-columns: repeat(16, …)"` that wraps them
+into rows on screen. The markup itself has no rows or columns, so extractors
+see only a run of loose words. `grid-to-table` restores the structure:
+
+- `selector` names the container. The grids are the container itself if it has
+  an inline `grid-template-columns`, otherwise its outermost descendants that
+  have one. All grids of one container are merged, in document order, into a
+  single `<table>`, which replaces the container. Sites often render the sticky
+  header row as a separate grid above the body; merging puts both back together.
+- The column count comes from `repeat(N, …)`, or from the number of tracks
+  (`200px 1fr minmax(0, 2fr)` is 3). With `columns` set, the matched elements
+  are taken as the grids and the inline style is ignored.
+- Each direct child of a grid is one cell; cells fill rows left to right. A short
+  last row is padded with empty cells.
+- The **first row becomes the table header**. Remove rows you do not want before
+  the action runs (a rank row, a row of "buy now" buttons): `remove-element` on
+  the label cell and every value cell of that row. Grid cells carry no row
+  wrapper, so a row only goes away if all of its cells do.
+- Cells are flattened to **plain text**, with a space at every block boundary
+  (`<p>GmbH</p><p>UG</p>` becomes `GmbH UG`). Links and images inside cells are
+  dropped, so convert meaningful icons and logos to text first with
+  `replace-with-text`.
+- A container with no usable column count is left untouched.
+
+Actions run in order, so the usual shape is: `remove-element` for tooltips,
+buttons and unwanted rows, `replace-with-text` for icons, then `grid-to-table`
+last. If the container sits outside what the extractor treats as the article,
+add the table to `select.content` (selecting `#wrapper table`, since the
+container itself is gone after the rebuild). The built-in `finanzfluss-vergleich`
+recipe is a complete example.
 
 ### `fetch`
 
@@ -606,7 +642,7 @@ the output begins with a YAML block including `author:`, `published:`, and
 
 ---
 
-## 9. The five built-in recipes
+## 9. The built-in recipes
 
 The shipped `site-recipes.default.json` is the best reference for real, working
 recipes. Each demonstrates a different feature:
@@ -618,6 +654,9 @@ recipes. Each demonstrates a different feature:
 | `github-issues` | `fetch.render: "force"` + `wait_for` + `wait_timeout_ms` and a multi-segment `path` glob (`/*/*/issues/*`) — renders JS-loaded issue comments. |
 | `sciencedaily-lead-image` | `preprocess` with `unwrap` and a `path` glob (`/releases/**`) — unwraps a `#text` container so Readability keeps the lead image instead of dropping it. |
 | `claude-blog-split-body` | `select.content` — the article body is split across two containers with a call-to-action between them, and Readability keeps only one of them. The recipe names both outright instead of nudging the scoring. |
+| `booking-hotel-noise` | `preprocess` with a run of `remove-element` actions on `data-capla-component-boundary` attributes — strips breadcrumbs, gallery, share and similar widgets from Booking.com hotel pages. |
+| `booking-hotel-frontmatter` | `frontmatter` from JSON-LD (`Hotel` node) — description, address, rating and price range of a hotel page. |
+| `finanzfluss-vergleich` | `replace-with-text` + `grid-to-table` + `select.content` — rebuilds the CSS-grid comparison table on finanzfluss.de comparison pages as a real table (icons become `ja`/`nein`, card logos and support channels become words) and pulls it into the output between intro and article. |
 
 ---
 

@@ -951,12 +951,14 @@ share_id: a3f9c2b7
         <li><strong>Störendes entfernen</strong> (<code>select.remove</code>) - seitenspezifische Banner, Teaser, Skelette.</li>
         <li><strong>Body benennen</strong> (<code>select.content</code>) - statt die Automatik raten zu lassen, sagt das Recipe direkt, welche Container den Artikel bilden. Ergebnis trägt <code>source: recipe-content</code>.</li>
         <li><strong>Frontmatter füllen</strong> - Felder aus dem JSON-LD der Seite oder per CSS-Selektor, z. B. Bewertung, Adresse oder Preisrahmen.</li>
+        <li><strong>Tabellen wiederherstellen</strong> (<code>grid-to-table</code>) - Vergleichstabellen, die nur aus CSS-Grid-<code>div</code>s bestehen, werden als echte Tabelle ausgegeben; Icons lassen sich vorher in Text wie "ja"/"nein" umwandeln.</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li><strong>Force rendering</strong> - pages that are empty without JavaScript go straight to the headless browser.</li>
         <li><strong>Remove noise</strong> (<code>select.remove</code>) - site-specific banners, teasers, skeletons.</li>
         <li><strong>Name the body</strong> (<code>select.content</code>) - instead of letting the automatic pick guess, the recipe says which containers make up the article. Output carries <code>source: recipe-content</code>.</li>
         <li><strong>Fill frontmatter</strong> - fields from the page's JSON-LD or via CSS selectors, e.g. rating, address, or price range.</li>
+        <li><strong>Rebuild tables</strong> (<code>grid-to-table</code>) - comparison tables built only from CSS-grid <code>div</code>s come out as a real table; icons can be turned into text such as "yes"/"no" first.</li>
       </ul>
       <p lang="de">Ein paar Recipes werden mitgeliefert. Selbst-Hoster legen eigene unter <code>data/site-recipes.json</code> ab oder setzen <code>PULLMD_SITE_RECIPES</code> auf einen Pfad; nach Änderungen muss die Instanz neu starten. Was geladen wurde und was abgelehnt, zeigt <code>GET /api/recipes/status</code>. Wie man ein Recipe schreibt (und beisteuert), steht in <a href="https://github.com/AeternaLabsHQ/pullmd/blob/main/SITE-RECIPES.md" target="_blank" rel="noopener">SITE-RECIPES.md</a>.</p>
       <p lang="en">A few recipes ship with PullMD. Self-hosters add their own in <code>data/site-recipes.json</code> or point <code>PULLMD_SITE_RECIPES</code> at a path; the instance needs a restart after changes. <code>GET /api/recipes/status</code> reports what loaded and what was rejected. How to write (and contribute) one is documented in <a href="https://github.com/AeternaLabsHQ/pullmd/blob/main/SITE-RECIPES.md" target="_blank" rel="noopener">SITE-RECIPES.md</a>.</p>

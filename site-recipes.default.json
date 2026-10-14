@@ -105,6 +105,28 @@
     }
   },
   {
+    "name": "finanzfluss-vergleich",
+    "host": ["finanzfluss.de", "www.finanzfluss.de"],
+    "path": "/vergleich/**",
+    "preprocess": [
+      { "action": "remove-element", "selector": "[data-cy=comparison-table-desktop] .tooltip-info, [data-cy=comparison-table-desktop] .tooltip-info + .sr-only, [data-cy=comparison-table-desktop] > div > .invisible" },
+      { "action": "remove-element", "selector": "[data-cy=comparison-table-desktop] [data-column-key=url], [data-cy=comparison-table-desktop] [data-cy=cell_url], [data-cy=comparison-table-desktop] [data-column-key=provider], [data-cy=comparison-table-desktop] [data-cy=cell_provider]" },
+      { "action": "replace-with-text", "selector": "[data-cy=comparison-table-desktop] [class~=\"i-ff:yes\"], [data-cy=comparison-table-desktop] [class~=\"i-ff:check\"]", "text": "ja " },
+      { "action": "replace-with-text", "selector": "[data-cy=comparison-table-desktop] [class~=\"i-ff:no\"], [data-cy=comparison-table-desktop] [class~=\"i-ff:close\"]", "text": "nein " },
+      { "action": "replace-with-text", "selector": "[data-cy=comparison-table-desktop] [role=img][aria-label]", "attr": "aria-label" },
+      { "action": "replace-with-text", "selector": "[data-cy=comparison-table-desktop] img[alt]", "attr": "alt" },
+      { "action": "grid-to-table", "selector": "[data-cy=comparison-table-desktop]" }
+    ],
+    "select": {
+      "content": [
+        "[data-cy^=vergleich-] .title-container h1",
+        "[data-cy^=vergleich-] > div:first-child .content",
+        "#comparison-content table",
+        "[data-cy^=vergleich-] .content-container .wp-content"
+      ]
+    }
+  },
+  {
     "name": "booking-hotel-frontmatter",
     "host": ["www.booking.com", "booking.com"],
     "path": "/hotel/**",
