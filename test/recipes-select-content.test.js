@@ -61,6 +61,24 @@ describe('recipe select.content', () => {
     );
   });
 
+  it('keeps document order when the earlier match is nested deeper', async () => {
+    // linkedom's compareDocumentPosition inverts the order for this shape
+    // (first match inside a preceding wrapper, second match shallower).
+    const page = `<html><head><title>Doc</title></head><body><main>
+      <div class="wrap"><div><div class="lead"><p>LEAD ${PROSE}</p></div></div></div>
+      <div class="rest"><h2>Heading</h2><p>REST ${PROSE}</p></div>
+    </main></body></html>`;
+    const result = await extractHtml(page, {
+      url: URL,
+      recipes: [recipe({ content: ['.lead', '.rest'] })],
+      extractor: 'readability',
+    });
+    assert.ok(
+      result.markdown.indexOf('LEAD ') < result.markdown.indexOf('REST '),
+      'lead block must precede rest block',
+    );
+  });
+
   it('does not emit nested matches twice', async () => {
     const nested = await extractHtml(PAGE, {
       url: URL,
