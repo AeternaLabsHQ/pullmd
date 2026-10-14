@@ -92,6 +92,29 @@ describe('preprocess — Pattern 2 (widget tokens on article-body container)', (
   });
 });
 
+describe('preprocess — Pattern 3 (Webflow w-embed wrapping a table)', () => {
+  it('strips the w-embed token from a div that wraps a table, keeps the table', () => {
+    const html = `<html><body><h2>Schnellvergleich</h2><div class="w-embed"><div class="c-table-wrap">
+      <table><tr><th>Anbieter</th></tr><tr><td>Kontist</td></tr></table>
+    </div></div></body></html>`;
+    const out = preprocess(html);
+    assert.ok(!/w-embed/.test(out), 'w-embed token must be stripped');
+    assert.ok(out.includes('<td>Kontist</td>'), 'table must survive');
+  });
+
+  it('keeps sibling classes on the embed div', () => {
+    const html = `<html><body><div class="foo w-embed bar"><table><tr><td>x</td></tr></table></div></body></html>`;
+    const out = preprocess(html);
+    assert.ok(/class="foo bar"/.test(out), 'other classes must remain');
+  });
+
+  it('does not touch a w-embed without a table (icon / widget embeds)', () => {
+    const html = `<html><body><div class="c-svg is-accordion w-embed"><svg width="12" height="8"></svg></div></body></html>`;
+    const out = preprocess(html);
+    assert.ok(/class="c-svg is-accordion w-embed"/.test(out), 'non-table embeds must keep w-embed');
+  });
+});
+
 describe('preprocess — robustness', () => {
   it('returns input unchanged for empty / non-string', () => {
     assert.equal(preprocess(''), '');
