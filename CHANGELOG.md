@@ -17,6 +17,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
      there at the same time, or this heading renders as literal bracketed
      text. -->
 
+### Documentation
+
+- **README opens with what PullMD does, not with its history.** The head is now tagline, a "Why PullMD" section with a measured before/after token table (plain `curl` vs PullMD vs `?query=`, `cl100k_base` tokenizer, 2026-10-16), a highlights list, and the quick start. The "What's new in v3" section, which had stopped at 3.13, is gone from the README; this changelog is the single record. The MCP badge pointed at `#mcp-server`, a heading that does not exist (it is `3. MCP server`); the version-pinning note linked to the removed section and now points at `MIGRATION.md`. The screenshot URL is absolute because the Docker Hub copy of the README has no repository to resolve a relative path against.
+
 ## [3.15.0] - 2026-10-14
 
 ### Added
