@@ -4,77 +4,78 @@
 [![Docker Pulls](https://img.shields.io/docker/pulls/aeternalabshq/pullmd?color=2496ed&logo=docker&logoColor=white)](https://hub.docker.com/r/aeternalabshq/pullmd)
 [![CI](https://img.shields.io/github/actions/workflow/status/AeternaLabsHQ/pullmd/docker.yml?branch=main&label=build)](https://github.com/AeternaLabsHQ/pullmd/actions/workflows/docker.yml)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blueviolet)](https://github.com/AeternaLabsHQ/pullmd/blob/main/LICENSE)
-[![MCP](https://img.shields.io/badge/MCP-compatible-7c4dff?logo=anthropic&logoColor=white)](https://github.com/AeternaLabsHQ/pullmd#mcp-server)
+[![MCP](https://img.shields.io/badge/MCP-compatible-7c4dff?logo=anthropic&logoColor=white)](https://github.com/AeternaLabsHQ/pullmd#3-mcp-server)
 
-Self-hosted URL-to-Markdown service for humans and AI agents.
+**Anything in, clean Markdown out.** Self-hosted conversion of web pages,
+documents, images, audio and YouTube videos into token-lean Markdown, for
+you and for your AI agents.
 
 <p align="center">
-  <img src="assets/screenshot-light-dark.png" alt="PullMD web interface (light and dark theme)" width="800">
+  <img src="https://raw.githubusercontent.com/AeternaLabsHQ/pullmd/main/assets/screenshot-light-dark.png" alt="PullMD web interface (light and dark theme)" width="800">
 </p>
 
-PullMD takes any web URL and returns clean, readable Markdown — no
-navigation, no ads, no boilerplate. It auto-detects Reddit and
-Hacker News threads (with full comment trees), uses Cloudflare's native Markdown when
-available, runs Mozilla Readability + Trafilatura on static HTML,
-and as a last resort renders JavaScript-heavy pages via headless
-Chromium (Playwright sidecar) before extracting.
-
-As of **v3**, PullMD goes beyond web pages: it also converts documents
-(PDF, Office, EPUB), images, audio, and YouTube videos to Markdown, and
-emits a leaner, token-efficient body by default. See
-[What's new in v3](#whats-new-in-v3) below.
-
-It ships as:
-
-- a **PWA frontend** with raw/rendered and live-frontmatter view toggles, one-tap sharing of the output to other apps (Web Share API), a download button that saves the result as a `.md` file under the server-suggested name, dark/paper themes, history, archive, share links, and conversion of local HTML files (drag-and-drop on desktop, file picker on desktop and mobile)
-- a **REST API** at `GET /api?url=…`
-- an **MCP server** at `POST /mcp` (Streamable-HTTP transport, stateless)
-- a **Claude Code skill** as a downloadable zip
-
-Every conversion gets a 32-hex **share id** that works as a stable
-live-endpoint: `GET /s/:id` returns the cached markdown and
-re-fetches from the source if older than one hour. Use the share id
-as a fixed URL that always returns fresh content — useful for
-subreddit feeds and similar.
+[Quick start](#quick-start) ·
+[Use with AI agents](#ai-agent-integration) ·
+[API](#api) ·
+[Configuration](#configuration) ·
+[Changelog](https://github.com/AeternaLabsHQ/pullmd/blob/main/CHANGELOG.md)
 
 ---
 
-## What's new in v3
+## Why PullMD
 
-PullMD v3 grows from a web-page reader into a general **anything-to-Markdown**
-service for agents, with a leaner default output. Everything beyond plain web
-extraction is **opt-in and degrades gracefully** - left unconfigured, v3 handles
-web pages exactly like v2, just with a cleaner body by default.
+Agents are bad at reading the web. Raw HTML burns context on navigation,
+cookie banners and scripts, and built-in fetch tools often stumble on
+JavaScript-heavy pages, PDFs and comment threads. PullMD sits in between:
+one URL or file in, clean Markdown out, with source and metadata in YAML
+frontmatter instead of the body.
 
-- **Clean body by default** - the Markdown body is now just `# Title` + content. The source URL, fetch date, and all metadata moved into the YAML frontmatter, so nothing is duplicated and you spend fewer tokens. Reddit posts follow the same rule: subreddit, author, upvotes, and publish date live in the frontmatter (`subreddit`, `author`, `upvotes`, `published`), not the body. This is the one breaking change: set `PULLMD_SOURCE_HEADER=true` to restore the old inline header, and use [`PULLMD_FRONTMATTER_FIELDS`](#configuration) to trim which fields are emitted. See [`MIGRATION.md`](./MIGRATION.md).
-- **Documents → Markdown** - PDF, Word, PowerPoint, Excel, EPUB and more, [by URL or upload](#document-conversion) (`POST /api/file`, drag-and-drop in the PWA).
-- **High-quality PDF tables (OCR)** - an opt-in, vendor-neutral [OCR tier](#high-quality-pdf-ocr) (`?pdf=ocr`) for table-grade PDF conversion, with automatic fallback to the free path.
-- **Images & audio → Markdown** - opt-in [captioning and transcription](#media-tier-image-captions--audio-transcription) via any OpenAI-compatible or local model; runs inside pullmd, no extra container required.
-- **YouTube transcripts** - [title, description and transcript](#youtube-transcripts) with clickable timecodes, no API key required.
-- **Richer frontmatter** - extraction source, quality, and (for media/OCR) [model + token/page usage](#source-specific-frontmatter-fields) for cost tracking, plus a configurable field allowlist.
+```bash
+curl "https://pullmd.example.com/api?url=https://example.com/article"
+```
 
-> Self-hosters upgrading from v2.x: the clean-body change is the only breaking one - [`MIGRATION.md`](./MIGRATION.md) has the one-line opt-out. Everything else is additive.
+What that saves, measured on three public pages (tokens counted with the
+`cl100k_base` tokenizer, 2026-10-16):
 
-**Added in the 3.x line since then:**
+| Page | Plain `curl` | PullMD | PullMD with `?query=` |
+| --- | ---: | ---: | ---: |
+| Encyclopedia article (long-form) | 99,458 | 12,549 | 662 |
+| Developer documentation page | 48,611 | 6,591 | 454 |
+| Reddit thread with comments | blocked (bot check), no thread content | 6,381 | 644 |
 
-- **Hacker News pipeline** (3.1) - items, comment permalinks and listings through a purpose-built converter, plus Web Share and an instant frontmatter toggle in the PWA.
-- **`X-Transcript-Status`** (3.2) - tells a transient YouTube rate-limit apart from a genuinely missing transcript.
-- **[SSRF protection](#ssrf-protection)** (3.3) - private, loopback, link-local, CGNAT and cloud-metadata targets are rejected by default, on every fetch path and every redirect hop.
-- **[Query-scoped extraction](#query-scoped-extraction)** (3.4) - `?query=` returns only the sections relevant to a question, with a `max_tokens` budget.
-- **[Site recipes opened up](#site-recipes)** (3.5/3.6) - JSON-LD-to-frontmatter, a contributor guide, and `select.content` so a recipe can name the article body outright.
-- **Coverage guard** (3.7) - recovers pages where extraction kept only a sliver of the body; see [`PULLMD_COVERAGE_GUARD`](#configuration).
-- **Account controls** (3.8) - a non-admin can clear entries from their own history, self-registration can be closed with [`PULLMD_ALLOW_SIGNUP`](#configuration), and `scripts/admin.js create-user` creates accounts from the shell.
-- **Download button** (3.9) - the PWA saves a result as a `.md` file, named by the server via [`X-Suggested-Filename`](#response-headers) and optionally date-prefixed.
-- **[Sidecar health endpoint](#monitoring)** (3.10) - `GET /api/status` answers `503` when a configured sidecar stops responding, so a dead renderer shows up as an alert instead of quietly degrading extraction.
-- **Configurable cache retention** (3.11) - [`PULLMD_CACHE_RETENTION_DAYS`](#configuration) sets how long cache rows and share links live; default 90 days, `0` keeps them forever.
-- **Reverse-proxy setting and request limits** (3.13) - [`PULLMD_TRUST_PROXY`](#behind-another-reverse-proxy) decides when forwarding headers count, login and signup are rate-limited, the paid media tiers share an hourly budget, and outbound fetches have a size limit. Proxy users: see [`MIGRATION.md`](./MIGRATION.md#action-required-if-you-run-behind-a-reverse-proxy).
+The `curl` column is what a naive fetch tool hands an agent. The last
+column is [query-scoped extraction](#query-scoped-extraction): only the
+sections relevant to a question.
+
+## Highlights
+
+**Reads almost anything**
+
+- **Web pages** through a fallback chain: Cloudflare's native Markdown, then Readability + Trafilatura (best result wins), then headless Chromium for JavaScript-heavy sites
+- **Reddit and Hacker News** threads with their comment trees (depth and count configurable)
+- **Documents**: PDF, Word, PowerPoint, Excel, EPUB, by URL or upload, plus an optional OCR tier for table-grade PDFs
+- **YouTube** title, description and transcript with clickable timecodes, no API key needed
+- **Images and audio** via any OpenAI-compatible or local model (captions, transcripts)
+
+**Built for agents**
+
+- **MCP server** for Claude Code and other MCP clients, with OAuth 2.1 for claude.ai and Claude Desktop
+- **Query-scoped extraction**: `?query=` returns only the sections relevant to a question, typically 70-95% fewer tokens on long pages
+- **Lean output**: clean body, metadata in frontmatter, unpadded tables, configurable field allowlist
+- **Live share links**: `/s/:id` re-fetches when the cached copy is older than an hour and serves the last good snapshot if the source dies
+
+**Comfortable to self-host**
+
+- One `docker compose up`, zero config, multi-arch images (amd64/arm64) on Docker Hub and GHCR
+- Every sidecar is optional, and PullMD degrades gracefully without it
+- Auth modes from open homelab to multi-user, SSRF protection, rate limits, a health endpoint for Uptime Kuma
+- Per-site extraction recipes as declarative JSON
+
+**Four ways in:** PWA · REST API · MCP server · Claude Code skill
 
 ---
 
 ## Quick start
-
-Pre-built multi-arch images (`linux/amd64`, `linux/arm64`) live on Docker
-Hub. Drop the compose file somewhere and run:
 
 ```bash
 mkdir pullmd && cd pullmd
@@ -83,9 +84,14 @@ docker compose up -d
 # → http://localhost:3000
 ```
 
-That's it. No `.env` needed: every variable has a sensible default
-and PullMD listens on port `3000`. Add a `.env` next to the compose
-file to override anything (see [Configuration](#configuration)).
+No `.env` needed: every variable has a sensible default. Add a `.env` next
+to the compose file to override anything (see [Configuration](#configuration)).
+Then connect your agent: see [AI-agent integration](#ai-agent-integration).
+
+> **Upgrading?** v3's only breaking change is the clean-body output format
+> (one-line opt-out in [`MIGRATION.md`](./MIGRATION.md)). Running behind a
+> reverse proxy? Since v3.13 you need [`PULLMD_TRUST_PROXY`](#behind-another-reverse-proxy).
+> Full history in the [changelog](CHANGELOG.md).
 
 ### `docker-compose.yml` (zero-config, abridged)
 
@@ -282,7 +288,7 @@ sign-in.
 ## Authentication (v2.0+)
 
 > **Version pinning:** `:latest` tracks the newest release (v3). v3's only
-> breaking change is the [clean-body output format](#whats-new-in-v3) — to
+> breaking change is the [clean-body output format](./MIGRATION.md) — to
 > stay on the v2.x output format instead, pin the explicit major tag:
 >
 > ```yaml
