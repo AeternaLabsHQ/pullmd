@@ -589,6 +589,23 @@ Both `query` and `max_tokens` are also available on the MCP `read_url` tool.
 - `X-Extract-Sections` — number of sections/regions included in the returned markdown.
 - `X-Extract-Original-Tokens` / `X-Extract-Returned-Tokens` — estimated token counts (`chars / 4`) of the full page and of the returned markdown.
 
+### Bot-protection challenges
+
+PullMD does not solve bot-protection interstitials, and the Playwright sidecar
+is rejected by them as well. When the upstream answers with a Cloudflare
+managed challenge (`cf-mitigated: challenge`) or a Bunny Shield proof-of-work
+page (`cdn-challenge: true`, or the same page served with HTTP 200), `/api`
+answers `502` with a machine-readable body instead of a bare 403 or the
+interstitial rendered as Markdown:
+
+```json
+{"error":"Site is behind a bot-protection challenge (Cloudflare); PullMD does not solve these. Workaround: save the page from your browser and upload the HTML via POST /api/html.","code":"bot_challenge","vendor":"Cloudflare"}
+```
+
+Nothing is cached for such a response. The workaround is the one in the body:
+save the page from a real browser and convert it via `POST /api/html` or
+drag-and-drop in the PWA.
+
 ### Query-scoped extraction
 
 When you have a specific question about a long page, you rarely need the whole

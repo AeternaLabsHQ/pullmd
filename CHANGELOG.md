@@ -17,6 +17,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
      there at the same time, or this heading renders as literal bracketed
      text. -->
 
+### Fixed
+
+- **Bot-protection challenge pages are reported, not extracted** (#67, #68). A Cloudflare managed challenge (`cf-mitigated: challenge`) or a Bunny Shield proof-of-work page (`cdn-challenge: true`, or the same interstitial delivered with HTTP 200, which gocomics.com does for some user agents) used to surface either as an opaque `Page fetch failed with status 403` or, worse, as the interstitial itself rendered to Markdown ("Establishing a secure connection ... Request ID: ..."). `/api` now answers `502` with `{"code":"bot_challenge","vendor":"..."}` and the workaround in the error text, the Playwright sidecar is not consulted (it is rejected by these walls too), and nothing lands in the cache or history. Detection is header-first with a narrow body sniff (`lib/challenge.js`); ordinary pages that merely mention a vendor are untouched.
+
 ### Documentation
 
 - **README opens with what PullMD does, not with its history.** The head is now tagline, a "Why PullMD" section with a measured before/after token table (plain `curl` vs PullMD vs `?query=`, `cl100k_base` tokenizer, 2026-10-16), a highlights list, and the quick start. The "What's new in v3" section, which had stopped at 3.13, is gone from the README; this changelog is the single record. The MCP badge pointed at `#mcp-server`, a heading that does not exist (it is `3. MCP server`); the version-pinning note linked to the removed section and now points at `MIGRATION.md`. The screenshot URL is absolute because the Docker Hub copy of the README has no repository to resolve a relative path against.
