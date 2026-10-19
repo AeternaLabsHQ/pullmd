@@ -129,6 +129,18 @@ describe('extractWeb + /api on challenge pages', () => {
     }
   });
 
+  it('keeps the static result when only the Playwright render hits a challenge', async () => {
+    const r = await extractWeb(`${base}/article`, {
+      ...opts,
+      render: 'force',
+      renderClient: async () => BUNNY_BODY,
+    });
+    assert.match(r.markdown, /ordinary prose/);
+    assert.notEqual(r.source, 'playwright');
+    assert.match(r.metadata.extractorReason, /bot-protection challenge \(Bunny Shield\)/);
+    assert.doesNotMatch(r.markdown, /Request ID/);
+  });
+
   it('/api answers 502 with code bot_challenge and the vendor', async () => {
     const srv = app.listen(0, '127.0.0.1');
     await new Promise((r) => srv.once('listening', r));
