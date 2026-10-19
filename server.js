@@ -14,6 +14,7 @@ import { recentHistory, PUBLIC_HISTORY_DISABLED } from './lib/history.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor, PULLMD_VERSION } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
 import { assertUrlAllowed, SsrfError } from './lib/ssrf.js';
+import { BotChallengeError } from './lib/challenge.js';
 import { createRateLimiter } from './lib/oauth/rate-limit.js';
 import { ignoredModelEnvWarning } from './lib/llm/providers.js';
 import { createLlmBudget } from './lib/llm/budget.js';
@@ -728,6 +729,13 @@ export function createApp(overrides = {}) {
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       return res.send(outMd);
     } catch (err) {
+      if (err instanceof BotChallengeError) {
+        // Not a PullMD failure: the upstream refuses non-browser clients.
+        // Still 502 (upstream), but machine-readable so clients can tell it
+        // apart from a transient fetch error and skip retries.
+        console.warn('Bot challenge:', err.vendor, url);
+        return res.status(502).json({ error: err.message, code: 'bot_challenge', vendor: err.vendor });
+      }
       console.error('Web extraction error:', err);
       return res.status(502).json({ error: `Failed to extract page: ${err.message}` });
     }

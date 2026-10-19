@@ -9,13 +9,11 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
-## [Unreleased]
+## [3.15.1] - 2026-10-19
 
-<!-- Renamed to the dated version heading when the release is cut. Every other
-     version heading resolves through the reference-link list at the end of
-     this file - add the matching `[X.Y.Z]: .../releases/tag/vX.Y.Z` line
-     there at the same time, or this heading renders as literal bracketed
-     text. -->
+### Fixed
+
+- **Bot-protection challenge pages are reported, not extracted** (#67, #68). A Cloudflare managed challenge (`cf-mitigated: challenge`) or a Bunny Shield proof-of-work page (`cdn-challenge: true`, or the same interstitial delivered with HTTP 200, which gocomics.com does for some user agents) used to surface either as an opaque `Page fetch failed with status 403` or, worse, as the interstitial itself rendered to Markdown ("Establishing a secure connection ... Request ID: ..."). `/api` now answers `502` with `{"code":"bot_challenge","vendor":"..."}` and the workaround in the error text, the Playwright sidecar is not consulted (it is rejected by these walls too), and nothing lands in the cache or history. Detection is header-first with a narrow body sniff (`lib/challenge.js`); ordinary pages that merely mention a vendor are untouched.
 
 ### Documentation
 
@@ -533,6 +531,7 @@ First public release. Self-hosted URL → Markdown service for humans and AI age
 
 ---
 
+[3.15.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.15.1
 [3.15.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.15.0
 [3.14.0]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.14.0
 [3.13.1]: https://github.com/AeternaLabsHQ/pullmd/releases/tag/v3.13.1
