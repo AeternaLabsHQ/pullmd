@@ -52,6 +52,26 @@ non-Chromium User-Agent — the iPhone profile from `mobileUa` — it strips the
 fabricated one would be a fresh contradiction. Both are best-effort: a failure
 here is logged and the render proceeds.
 
+## Outbound address policy
+
+The sidecar refuses to fetch private, loopback, link-local, CGNAT and
+cloud-metadata addresses, the same ranges as pullmd's own SSRF guard
+(`ssrf.py` is a port of `lib/ssrf.js`). The policy is applied to the
+submitted URL and to every request Chromium makes afterwards: HTTP redirects,
+`<meta http-equiv="refresh">`, `location` assignments, iframes, subresources
+and WebSockets. A main-frame navigation into a blocked range fails the render
+with `403` and a JSON body `{"detail":{"code":"ssrf_blocked","url":...,"reason":...}}`;
+a blocked subresource is dropped and the render continues. Service workers are
+disabled.
+
+Exceptions come from pullmd: it forwards its `PULLMD_ALLOWED_HOSTS` in the
+render request as `allowedHosts` (same grammar: CIDRs, bare IPs, exact
+hostnames). Setting `PULLMD_ALLOWED_HOSTS` on the sidecar container works as a
+fallback when the request carries none.
+
+For a boundary that does not depend on the application, give the sidecar its
+own bridge network with no other service on it.
+
 ## Resource footprint
 
 - Image size: **~3.7 GB** (Microsoft Playwright base image bundles Chromium, Firefox, WebKit binaries)

@@ -9,6 +9,12 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [3.15.2] - 2026-10-19
+
+### Security
+
+- **SSRF through the Playwright sidecar** ([GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77), reported by [@yassertioursi](https://github.com/yassertioursi)). The SSRF guard checked the submitted URL in Node and then handed it to the sidecar, where Chromium navigated on its own: a public page answering with a `302`, a `<meta http-equiv="refresh">`, a `location` assignment, an `<iframe>` or a `fetch()` could reach an internal host on the sidecar's network, and for the top-level navigations the response body came back as the rendered Markdown. Reachable unauthenticated on the default compose file via `render=force`, `extractor=playwright`, the automatic render fallback and the MCP `read_url` tool. The sidecar now enforces the same address policy as `lib/ssrf.js` on every request Chromium makes (`playwright-sidecar/ssrf.py`): a `page.route()` handler for first hops, a CDP `Fetch` session for redirect hops (Playwright continues those itself without consulting routes), a WebSocket route, and service workers are blocked. `PULLMD_ALLOWED_HOSTS` travels with each render request, so the exceptions stay in one place. A blocked main-frame navigation fails the render with `403` `{"code":"ssrf_blocked"}`; `/api` and `read_url` answer `403 URL not allowed` for `render=force` / `extractor=playwright` and cache nothing, the automatic fallback keeps the static result of the first hop and records the refusal in `extractorReason`. **Both images change: update `pullmd-playwright` together with `pullmd`**, a new `pullmd` alone does not close this.
+
 ## [3.15.1] - 2026-10-19
 
 ### Fixed

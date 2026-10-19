@@ -41,3 +41,27 @@ test('GET /api with a public URL is not rejected as SSRF', async () => {
   const res = await get(app, '/api?url=' + encodeURIComponent('https://example.com/'));
   assert.notEqual(res.status, 403);
 });
+
+// GHSA-26wr-prg5-vr77: a block that only shows up below the up-front check
+// (redirect hop, render-time navigation) must still be a 403 and never 502.
+test('GET /api answers 403 when the extraction hits the guard on a later hop', async () => {
+  const { SsrfError } = await import('../lib/ssrf.js');
+  const app = createApp({
+    cache: null,
+    extractWeb: async () => { throw new SsrfError('blocked address 172.20.0.4 for host internal-secret (via http://internal-secret:9000/)'); },
+  });
+  const res = await get(app, '/api?url=' + encodeURIComponent('https://example.com/refresh-inward') + '&render=force');
+  assert.equal(res.status, 403);
+  assert.match(res.body, /URL not allowed: blocked address 172\.20\.0\.4/);
+});
+
+test('GET /api/stream reports a later-hop block as an error event with the URL-not-allowed wording', async () => {
+  const { SsrfError } = await import('../lib/ssrf.js');
+  const app = createApp({
+    cache: null,
+    extractWeb: async () => { throw new SsrfError('blocked address 172.20.0.4 for host internal-secret'); },
+  });
+  const res = await get(app, '/api/stream?url=' + encodeURIComponent('https://example.com/refresh-inward') + '&render=force');
+  assert.match(res.body, /event: error/);
+  assert.match(res.body, /URL not allowed: blocked address 172\.20\.0\.4/);
+});

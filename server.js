@@ -729,6 +729,11 @@ export function createApp(overrides = {}) {
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       return res.send(outMd);
     } catch (err) {
+      if (err instanceof SsrfError) {
+        // Blocked below the up-front check: a hop the page took after the
+        // first (a redirect or a render-time navigation). Same answer.
+        return res.status(403).json({ error: `URL not allowed: ${err.message}` });
+      }
       if (err instanceof BotChallengeError) {
         // Not a PullMD failure: the upstream refuses non-browser clients.
         // Still 502 (upstream), but machine-readable so clients can tell it
@@ -1102,7 +1107,8 @@ export function createApp(overrides = {}) {
       res.end();
     } catch (err) {
       console.error('SSE stream error:', err);
-      send('error', { message: String(err?.message ?? err) || 'Internal error' });
+      const message = err instanceof SsrfError ? `URL not allowed: ${err.message}` : String(err?.message ?? err) || 'Internal error';
+      send('error', { message });
       res.end();
     }
   });

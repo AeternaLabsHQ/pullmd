@@ -668,6 +668,12 @@ including `169.254.169.254` (AWS/GCP/Azure) and `100.100.100.200` (Alibaba).
   addressing (IPv4-mapped, NAT64, 6to4, IPv4-compatible).
 - The rejection happens before the cache is touched — a blocked URL never
   produces a cache row or a share id.
+- **The Playwright sidecar enforces the same policy inside the browser**
+  (since 3.15.2). Chromium's own navigations never pass through Node, so the
+  sidecar checks every request it makes: redirects, `<meta refresh>`,
+  `location` changes, iframes, subresources, WebSockets. A page that sends the
+  browser to an internal host fails the render with `403`; the allowlist
+  below travels with each render request.
 
 To reach an internal host on purpose (an intranet wiki, a document server on
 the same network), allowlist it:
