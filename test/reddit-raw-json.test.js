@@ -28,6 +28,13 @@ describe('cleanRedditText', () => {
     assert.equal(cleanRedditText('one\n\n &#8203; \n\ntwo'), 'one\n\ntwo');
   });
 
+  it('leaves all other whitespace alone', () => {
+    assert.equal(cleanRedditText('keep\n\n\n\nthis\n\n'), 'keep\n\n\n\nthis\n\n');
+    assert.equal(cleanRedditText('one\n\n&#x200B;\n\n&#x200B;\n\ntwo'), 'one\n\ntwo');
+    assert.equal(cleanRedditText('&#x200B;\n\ntwo'), 'two');
+    assert.equal(cleanRedditText('a\n&#x200B;\nb'), 'a\nb');
+  });
+
   it('keeps text that merely contains the entity and other content', () => {
     assert.equal(cleanRedditText('a&#x200B;b\n> quote & more'), 'a&#x200B;b\n> quote & more');
   });
