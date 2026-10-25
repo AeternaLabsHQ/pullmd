@@ -420,3 +420,38 @@ describe('cache retention option', () => {
     assert.ok(c.getByShareId(shareId), 'the SQLite date modifier must stay inside its valid range');
   });
 });
+
+describe('cache.getMetadataAnyAge', () => {
+  it('returns metadata of a row older than the 1-hour window', () => {
+    const c = createCache(':memory:');
+    const url = 'https://www.reddit.com/r/x/comments/abc/t/';
+    c.put({ url, title: 'T', markdown: '# T', source: 'reddit', metadata: { imageTranscripts: { k: { description: 'd' } } } });
+    c.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE url = ?").run(url);
+    assert.equal(c.get(url), null, 'get() must miss on a 2-hour-old row');
+    assert.deepEqual(c.getMetadataAnyAge(url), { imageTranscripts: { k: { description: 'd' } } });
+  });
+
+  it('ignores recipesInvalidatedAt', () => {
+    const c = createCache(':memory:');
+    const url = 'https://example.com/r';
+    c.put({ url, title: 'T', markdown: '# T', source: 'reddit', metadata: { a: 1 } });
+    c.setRecipesInvalidatedAt('2999-01-01 00:00:00');
+    assert.equal(c.get(url), null);
+    assert.deepEqual(c.getMetadataAnyAge(url), { a: 1 });
+  });
+
+  it('returns null for an unknown url or a row without metadata', () => {
+    const c = createCache(':memory:');
+    assert.equal(c.getMetadataAnyAge('https://nope.example/'), null);
+    c.put({ url: 'https://example.com/n', title: 'T', markdown: '# T', source: 'reddit' });
+    assert.equal(c.getMetadataAnyAge('https://example.com/n'), null);
+  });
+
+  it('honours the retention cutoff', () => {
+    const c = createCache(':memory:', { retentionDays: 1 });
+    const url = 'https://example.com/old';
+    c.put({ url, title: 'T', markdown: '# T', source: 'reddit', metadata: { a: 1 } });
+    c.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 days') WHERE url = ?").run(url);
+    assert.equal(c.getMetadataAnyAge(url), null);
+  });
+});

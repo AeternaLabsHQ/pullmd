@@ -18,6 +18,7 @@ import { BotChallengeError } from './lib/challenge.js';
 import { createRateLimiter } from './lib/oauth/rate-limit.js';
 import { ignoredModelEnvWarning } from './lib/llm/providers.js';
 import { createLlmBudget } from './lib/llm/budget.js';
+import { parseImagesParam, resolveEmbeddedImages, cachedImagesIncomplete, embeddedImagesModeWarning } from './lib/embedded-images.js';
 import { createStatusChecker } from './lib/status.js';
 import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
@@ -163,6 +164,32 @@ export function createApp(overrides = {}) {
   // to the non-provider path instead of failing (PULLMD_LLM_RATE_LIMIT).
   const llmBudget = overrides.llmBudget ?? createLlmBudget();
 
+  // Embedded image transcripts (Reddit only for now). The `images` param is
+  // validated for Reddit URLs only; other URLs ignore it, even when invalid.
+  // @returns {{ imagesMode: 'on'|'off' } | { error: string }}
+  function imagesModeFor(url, raw) {
+    if (!isRedditUrl(url)) return { imagesMode: 'off' };
+    const parsed = parseImagesParam(raw);
+    if (parsed === null) return { error: 'invalid images parameter (expected on or off)' };
+    return { imagesMode: resolveEmbeddedImages(parsed) };
+  }
+
+  // A cached Reddit row is a miss when this request wants images and the row
+  // has fewer resolved images than the instance would produce now.
+  function cachedRowLacksImages(url, cached, imagesMode) {
+    return isRedditUrl(url) && imagesMode === 'on' && cachedImagesIncomplete(cached.metadata);
+  }
+
+  // Image options for an extractPost call. Earlier transcripts are passed in
+  // whatever the mode: they cost nothing and are rendered even with mode off.
+  function redditImageOptions(url, imagesMode, llmAllowed, previousMetadata) {
+    return {
+      images: imagesMode,
+      llmAllowed,
+      previousTranscripts: previousMetadata?.imageTranscripts ?? null,
+    };
+  }
+
   // Suggest a download filename to the client. Cosmetic by nature: a failure
   // here must never cost the caller their markdown, hence the swallowed catch.
   function filenameFor(opts) {
@@ -275,7 +302,14 @@ export function createApp(overrides = {}) {
         commentDepth: 3,
         lang: inferredLang,
         withMeta: true,
+        ...redditImageOptions(entry.url, resolveEmbeddedImages(undefined), llmAllowed, entry.metadata),
       });
+      // An image missed for a transient reason: keep the existing snapshot,
+      // like the web path below (and restart the clock on a budget deferral).
+      if (typeof r !== 'string' && r.noStore) {
+        if (r.budgetDeferred) cache.touch(entry.url);
+        return entry.markdown;
+      }
       // Test doubles may return a bare string; production returns { markdown, meta }.
       const baseMd = typeof r === 'string' ? r : r.markdown;
       const redditMeta = typeof r === 'string' ? null : r.meta;
@@ -381,7 +415,7 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api', gate, async (req, res) => {
-    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor, yt_timecodes, yt_chunk, pdf, query, max_tokens } = req.query;
+    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor, yt_timecodes, yt_chunk, pdf, query, max_tokens, images } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const reqLang = lang === 'en' ? 'en' : 'de';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura' || extractor === 'playwright')
@@ -410,6 +444,12 @@ export function createApp(overrides = {}) {
       maxTokens = Number(max_tokens);
     }
 
+    const imagesCheck = imagesModeFor(url, images);
+    if (imagesCheck.error) {
+      return res.status(400).json({ error: imagesCheck.error });
+    }
+    const { imagesMode } = imagesCheck;
+
     try {
       await assertUrlAllowed(url);
     } catch (err) {
@@ -435,7 +475,7 @@ export function createApp(overrides = {}) {
       if (cached) {
         const structuredCached = isRedditUrl(url) || isHnUrl(url);
         const hasComments = cached.markdown.includes('\n## Kommentare') || cached.markdown.includes('\n## Comments');
-        if (!structuredCached || !wantComments || hasComments) {
+        if ((!structuredCached || !wantComments || hasComments) && !cachedRowLacksImages(url, cached, imagesMode)) {
           const baseMd = cached.markdown;
           const cachedQuality = qualityScore(baseMd);
           const titleMatchCached = baseMd.match(/^#\s+(.+)$/m);
@@ -508,14 +548,17 @@ export function createApp(overrides = {}) {
           commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
           lang: reqLang,
           withMeta: true,
+          ...redditImageOptions(url, imagesMode, llmBudget.forRequest(req), cache?.getMetadataAnyAge(url)),
         });
         // Test doubles may return a bare string; production returns { markdown, meta }.
         const baseMd = typeof r === 'string' ? r : r.markdown;
         const redditMeta = typeof r === 'string' ? null : r.meta;
+        // noStore: an image missed for a transient reason; serve, don't cache.
+        const noStore = typeof r !== 'string' && !!r.noStore;
 
         let shareId = null;
         const titleMatch = baseMd.match(/^#\s+(.+)$/m);
-        if (cache) {
+        if (cache && !noStore) {
           shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null, metadata: redditMeta });
         }
 
@@ -901,7 +944,7 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api/stream', gate, async (req, res) => {
-    const { url, comments, comment_depth, comment_limit, frontmatter, lang, nocache, render, extractor, yt_timecodes, yt_chunk, pdf } = req.query;
+    const { url, comments, comment_depth, comment_limit, frontmatter, lang, nocache, render, extractor, yt_timecodes, yt_chunk, pdf, images } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const reqLang = lang === 'en' ? 'en' : 'de';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura' || extractor === 'playwright')
@@ -913,6 +956,12 @@ export function createApp(overrides = {}) {
     if (!url) {
       return res.status(400).json({ error: 'Missing required parameter: url' });
     }
+    // Checked before the SSE headers go out, like the missing url above.
+    const imagesCheck = imagesModeFor(url, images);
+    if (imagesCheck.error) {
+      return res.status(400).json({ error: imagesCheck.error });
+    }
+    const { imagesMode } = imagesCheck;
 
     res.set('Content-Type', 'text/event-stream; charset=utf-8');
     res.set('Cache-Control', 'no-cache');
@@ -953,7 +1002,7 @@ export function createApp(overrides = {}) {
         if (cached) {
           const structuredCached = isRedditUrl(url) || isHnUrl(url);
           const hasComments = cached.markdown.includes('\n## Kommentare') || cached.markdown.includes('\n## Comments');
-          if (!structuredCached || !wantComments || hasComments) {
+          if ((!structuredCached || !wantComments || hasComments) && !cachedRowLacksImages(url, cached, imagesMode)) {
             emit('fetching', { url, cached: true });
             const baseMd = cached.markdown;
             const cachedQuality = qualityScore(baseMd);
@@ -996,14 +1045,16 @@ export function createApp(overrides = {}) {
           commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
           lang: reqLang,
           withMeta: true,
+          ...redditImageOptions(url, imagesMode, llmBudget.forRequest(req), cache?.getMetadataAnyAge(url)),
         });
         // Test doubles may return a bare string; production returns { markdown, meta }.
         const baseMd = typeof r === 'string' ? r : r.markdown;
         const redditMeta = typeof r === 'string' ? null : r.meta;
+        const noStore = typeof r !== 'string' && !!r.noStore;
         emit('extracting', { source: 'reddit' });
         const titleMatch = baseMd.match(/^#\s+(.+)$/m);
         let shareId = null;
-        if (cache) {
+        if (cache && !noStore) {
           shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null, metadata: redditMeta });
         }
         const quality = qualityScore(baseMd);
@@ -1274,6 +1325,8 @@ if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
 
   const modelEnvWarning = ignoredModelEnvWarning(process.env);
   if (modelEnvWarning) console.warn(`[config] ${modelEnvWarning}`);
+  const imagesModeWarning = embeddedImagesModeWarning(process.env);
+  if (imagesModeWarning) console.warn(`[config] ${imagesModeWarning}`);
 
   // Hash recipe content; if changed since last boot, invalidate cache.
   const recipesHash = computeRecipesHash([defaultRecipesPath, userRecipesPath].filter(Boolean));
