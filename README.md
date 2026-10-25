@@ -307,6 +307,8 @@ PullMD ships with three auth modes. Pick one with `PULLMD_AUTH_MODE`:
 | `single-admin` | One user, credentials from env vars. No self-signup. For homelab.           |
 | `multi-user`   | Self-signup at `/signup` (unless `PULLMD_ALLOW_SIGNUP` is off), login at `/login`, per-user data isolation. |
 
+`disabled` is meant for a private host or LAN. If a provider key is set (`PULLMD_VISION_API_KEY`, `PULLMD_STT_API_KEY`, `PULLMD_LLM_API_KEY` or `PULLMD_PDF_OCR_API_KEY`), every client that can reach the port can spend it, bounded only by `PULLMD_LLM_RATE_LIMIT`; the server prints an `[auth]` warning at startup in that case. Turn on an auth mode, or bind the port to loopback (`"127.0.0.1:${PORT:-3000}:3000"`, shown as a comment in `docker-compose.yml`), when others can reach the instance.
+
 In `single-admin` and `multi-user` modes, `PULLMD_ADMIN_EMAIL` + `PULLMD_ADMIN_PASSWORD` bootstrap the first admin user on first startup. After that, changing these env vars does **not** change the password — use the admin CLI:
 
 ```bash

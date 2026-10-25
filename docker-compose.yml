@@ -3,6 +3,9 @@ services:
     image: aeternalabshq/pullmd:latest
     container_name: pullmd
     restart: unless-stopped
+    # Reachable from the LAN. To keep the port on this host only (e.g. when
+    # auth is disabled and provider keys are set), use the loopback variant:
+    #   - "127.0.0.1:${PORT:-3000}:3000"
     ports:
       - "${PORT:-3000}:3000"
     environment:
