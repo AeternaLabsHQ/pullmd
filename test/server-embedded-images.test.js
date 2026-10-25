@@ -80,7 +80,7 @@ describe('/api images param (Reddit)', () => {
         assert.equal(stub.calls.length, 1);
         assert.equal(stub.calls[0].images, c.want);
         assert.equal(typeof stub.calls[0].llmAllowed, 'function');
-        assert.equal(stub.calls[0].previousTranscripts, null);
+        assert.equal(typeof stub.calls[0].imageStore?.get, 'function');
       });
     });
   }
@@ -117,21 +117,21 @@ describe('/api images param (Reddit)', () => {
       assert.match(res.body, /# Test Post/);
       assert.equal(res.headers.get('x-share-id'), null);
       assert.equal(cache.get(REDDIT), null);
-      assert.equal(cache.getMetadataAnyAge(REDDIT), null);
+      assert.equal(cache.db.prepare('SELECT COUNT(*) AS n FROM conversions').get().n, 0);
     });
   });
 
-  it('passes imageTranscripts of a row older than 1 hour as previousTranscripts', async () => {
+  it('passes a cache-backed image store', async () => {
     await withEnv({}, async () => {
       const stub = recordingStub();
       const { app, cache } = makeApp(stub);
-      const imageTranscripts = { 'https://i.redd.it/a.png': { description: 'A cat', transcript: null } };
-      cache.put({ url: REDDIT, title: 'Old', markdown: '# Old', source: 'reddit', metadata: { imageTranscripts } });
-      cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE url = ?").run(REDDIT);
+      cache.putImageTranscript('a', { description: 'A cat', transcript: null });
       const res = await request(app, api(REDDIT, '&images=on'));
       assert.equal(res.status, 200);
       assert.equal(stub.calls.length, 1);
-      assert.deepEqual(stub.calls[0].previousTranscripts, imageTranscripts);
+      assert.deepEqual(stub.calls[0].imageStore.get('a'), { description: 'A cat', transcript: null });
+      stub.calls[0].imageStore.set('b', { failed: true });
+      assert.deepEqual(cache.getImageTranscript('b'), { failed: true });
     });
   });
 });
@@ -223,10 +223,9 @@ describe('/api/stream images param', () => {
 describe('/s/:id refresh with embedded images', () => {
   it('noStore + budgetDeferred: serves the old markdown and restarts the refresh clock', async () => {
     await withEnv({}, async () => {
-      const imageTranscripts = { 'https://i.redd.it/a.png': { description: 'A cat', transcript: null } };
       const stub = recordingStub({ noStore: true, budgetDeferred: true, markdown: '# New\n\nNew body.' });
       const { app, cache } = makeApp(stub);
-      const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: '# Old\n\nOld body.', source: 'reddit', metadata: { imageTranscripts } });
+      const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: '# Old\n\nOld body.', source: 'reddit' });
       cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE url = ?").run(REDDIT);
 
       const res = await request(app, `/s/${shareId}`);
@@ -235,7 +234,7 @@ describe('/s/:id refresh with embedded images', () => {
       assert.equal(stub.calls.length, 1);
       assert.equal(stub.calls[0].images, 'off');
       assert.equal(typeof stub.calls[0].llmAllowed, 'function');
-      assert.deepEqual(stub.calls[0].previousTranscripts, imageTranscripts);
+      assert.equal(typeof stub.calls[0].imageStore?.get, 'function');
 
       const row = cache.db.prepare("SELECT markdown, created_at > datetime('now', '-5 minutes') AS fresh FROM conversions WHERE url = ?").get(REDDIT);
       assert.equal(row.markdown, '# Old\n\nOld body.');

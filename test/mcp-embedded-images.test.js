@@ -119,20 +119,19 @@ describe('MCP read_url - images: extract options', () => {
         assert.equal(stub.calls.length, 1);
         assert.equal(stub.calls[0].images, c.want);
         assert.equal(typeof stub.calls[0].llmAllowed, 'function');
-        assert.equal(stub.calls[0].previousTranscripts, null);
+        assert.equal(typeof stub.calls[0].imageStore?.get, 'function');
       });
     });
   }
 
-  it('passes earlier transcripts from an expired cache row (nocache re-extract)', async () => {
+  it('passes a cache-backed image store (also with nocache)', async () => {
     await withEnv({}, async () => {
-      const imageTranscripts = { 'https://i.redd.it/a.png': { description: 'A cat', transcript: null } };
       const stub = recordingStub();
       const { app, cache } = makeApp(stub);
-      cache.put({ url: REDDIT, title: 'Old', markdown: '# Old', source: 'reddit', metadata: { imageTranscripts } });
+      cache.putImageTranscript('a', { description: 'A cat', transcript: null });
       await callTool(app, 'read_url', { url: REDDIT, comments: false, images: 'on', nocache: true });
       assert.equal(stub.calls.length, 1);
-      assert.deepEqual(stub.calls[0].previousTranscripts, imageTranscripts);
+      assert.deepEqual(stub.calls[0].imageStore.get('a'), { description: 'A cat', transcript: null });
     });
   });
 
@@ -161,7 +160,7 @@ describe('MCP read_url - images: noStore', () => {
       assert.doesNotMatch(text, /^share_id: \S/m);
       assert.doesNotMatch(text, /^share_url: \S/m);
       assert.equal(cache.get(REDDIT), null);
-      assert.equal(cache.getMetadataAnyAge(REDDIT), null);
+      assert.equal(cache.db.prepare('SELECT COUNT(*) AS n FROM conversions').get().n, 0);
     });
   });
 
@@ -230,10 +229,9 @@ describe('MCP get_share - refresh with embedded images', () => {
 
   it('noStore + budgetDeferred: keeps the old markdown and restarts the refresh clock', async () => {
     await withEnv({}, async () => {
-      const imageTranscripts = { 'https://i.redd.it/a.png': { description: 'A cat', transcript: null } };
       const stub = recordingStub({ noStore: true, budgetDeferred: true, markdown: '# New\n\nNew body.' });
       const { app, cache } = makeApp(stub);
-      const shareId = stale(cache, undefined, { imageTranscripts });
+      const shareId = stale(cache);
 
       const j = await callTool(app, 'get_share', { id: shareId });
       const text = textOf(j);
@@ -243,7 +241,7 @@ describe('MCP get_share - refresh with embedded images', () => {
       assert.equal(stub.calls.length, 1);
       assert.equal(stub.calls[0].images, 'off');
       assert.equal(typeof stub.calls[0].llmAllowed, 'function');
-      assert.deepEqual(stub.calls[0].previousTranscripts, imageTranscripts);
+      assert.equal(typeof stub.calls[0].imageStore?.get, 'function');
 
       const row = cache.db.prepare("SELECT markdown, created_at > datetime('now', '-5 minutes') AS fresh FROM conversions WHERE url = ?").get(REDDIT);
       assert.equal(row.markdown, '# Old\n\nOld body.');

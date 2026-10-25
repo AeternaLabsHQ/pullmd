@@ -18,7 +18,7 @@ import { BotChallengeError } from './lib/challenge.js';
 import { createRateLimiter } from './lib/oauth/rate-limit.js';
 import { ignoredModelEnvWarning } from './lib/llm/providers.js';
 import { createLlmBudget } from './lib/llm/budget.js';
-import { parseImagesParam, resolveEmbeddedImages, cachedImagesIncomplete, embeddedImagesModeWarning, redditImageOptions } from './lib/embedded-images.js';
+import { parseImagesParam, resolveEmbeddedImages, cachedImagesIncomplete, embeddedImagesModeWarning, redditImageOptions, imageStoreFrom } from './lib/embedded-images.js';
 import { createStatusChecker } from './lib/status.js';
 import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
@@ -292,7 +292,7 @@ export function createApp(overrides = {}) {
         commentDepth: 3,
         lang: inferredLang,
         withMeta: true,
-        ...redditImageOptions(resolveEmbeddedImages(undefined), llmAllowed, entry.metadata),
+        ...redditImageOptions(resolveEmbeddedImages(undefined), llmAllowed, imageStoreFrom(cache)),
       });
       // An image missed for a transient reason: keep the existing snapshot,
       // like the web path below (and restart the clock on a budget deferral).
@@ -538,7 +538,7 @@ export function createApp(overrides = {}) {
           commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
           lang: reqLang,
           withMeta: true,
-          ...redditImageOptions(imagesMode, llmBudget.forRequest(req), cache?.getMetadataAnyAge(url)),
+          ...redditImageOptions(imagesMode, llmBudget.forRequest(req), imageStoreFrom(cache)),
         });
         // Test doubles may return a bare string; production returns { markdown, meta }.
         const baseMd = typeof r === 'string' ? r : r.markdown;
@@ -1035,7 +1035,7 @@ export function createApp(overrides = {}) {
           commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
           lang: reqLang,
           withMeta: true,
-          ...redditImageOptions(imagesMode, llmBudget.forRequest(req), cache?.getMetadataAnyAge(url)),
+          ...redditImageOptions(imagesMode, llmBudget.forRequest(req), imageStoreFrom(cache)),
         });
         // Test doubles may return a bare string; production returns { markdown, meta }.
         const baseMd = typeof r === 'string' ? r : r.markdown;

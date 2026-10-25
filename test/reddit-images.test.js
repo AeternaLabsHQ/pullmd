@@ -2,6 +2,8 @@ import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { collectPostImages, formatPost, extractPost } from '../lib/reddit.js';
+import { createCache } from '../lib/cache.js';
+import { imageStoreFrom } from '../lib/embedded-images.js';
 
 // Embedded image transcripts for Reddit posts: which images are eligible,
 // where blocks/markers go, and the extractPost options and meta.
@@ -79,6 +81,12 @@ function makeCaption(text = 'Screenshot of a chat.\n---\nHello there') {
   };
   fn.calls = calls;
   return fn;
+}
+
+/** Map-backed image store. */
+function makeStore(initial = {}) {
+  const map = new Map(Object.entries(initial));
+  return { map, get: (k) => map.get(k) ?? null, set: (k, v) => { map.set(k, v); } };
 }
 
 const BLOCK_DE = '> **[Bildbeschreibung]**';
@@ -238,10 +246,8 @@ describe('extractPost embedded images', () => {
   beforeEach(() => { warn = mock.method(console, 'warn', () => {}); });
   afterEach(() => { warn.mock.restore(); });
 
-  const run = (json, opts) => withRedditJson(json, () => extractPost(
-    `https://www.reddit.com${json[0].data.children[0].data.permalink}`,
-    { comments: false, withMeta: true, ssrfOpts, ...opts },
-  ));
+  const run = (json, opts, url = `https://www.reddit.com${json[0].data.children[0].data.permalink}`) =>
+    withRedditJson(json, () => extractPost(url, { comments: false, withMeta: true, ssrfOpts, llmAllowed: () => true, ...opts }));
 
   it('images on with a vision key: block, meta and usage, no noStore', async () => {
     await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
@@ -251,7 +257,7 @@ describe('extractPost embedded images', () => {
       assert.ok(r.markdown.includes(`![](https://i.redd.it/wfzrft0vlm7h1.jpeg)\n\n${BLOCK_DE} Screenshot of a chat.`), r.markdown);
       assert.equal(r.meta.imagesTranscribed, '1/1');
       assert.equal(r.meta.imagesResolved, 1);
-      assert.equal(r.meta.imageTranscripts.wfzrft0vlm7h1.description, 'Screenshot of a chat.');
+      assert.equal(r.meta.imageTranscripts, undefined, 'transcripts live in the image store, not in the row');
       assert.equal(r.meta.llmTokens, 15);
       assert.equal(r.meta.llmModel, 'm');
       assert.equal(r.noStore, undefined);
@@ -270,7 +276,6 @@ describe('extractPost embedded images', () => {
       assert.equal(r.markdown, IMAGE_POST_V3152);
       assert.equal(r.meta.imagesTranscribed, '0/1');
       assert.equal(r.meta.imagesResolved, 0);
-      assert.equal(r.meta.imageTranscripts, undefined);
       assert.equal(r.meta.llmTokens, undefined);
       assert.equal(captionFn.calls.length, 0);
       assert.equal(fetchFn.calls.length, 0);
@@ -290,54 +295,123 @@ describe('extractPost embedded images', () => {
     });
   });
 
-  it('images off reuses previous transcripts for free', async () => {
+  it('images off renders stored transcripts for free (read-only)', async () => {
     await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
       const captionFn = makeCaption();
       const fetchFn = makeFetch();
-      const previousTranscripts = {
+      const imageStore = makeStore({
         wfzrft0vlm7h1: { description: 'Earlier.', transcript: 'Old text' },
         notinpost: { description: 'Other.', transcript: null },
-      };
-      const r = await run(IMAGE_JSON, { images: 'off', captionFn, fetchFn, previousTranscripts });
+      });
+      const sizeBefore = imageStore.map.size;
+      const r = await run(IMAGE_JSON, { images: 'off', captionFn, fetchFn, imageStore, llmAllowed: () => false });
       assert.ok(r.markdown.includes(`${BLOCK_DE} Earlier.`), r.markdown);
       assert.ok(!r.markdown.includes(MARKER_DE));
       assert.equal(r.meta.imagesTranscribed, '1/1');
-      assert.deepEqual(Object.keys(r.meta.imageTranscripts), ['wfzrft0vlm7h1']);
+      assert.equal(r.meta.imagesResolved, 1);
       assert.equal(r.meta.llmTokens, undefined);
       assert.equal(captionFn.calls.length, 0);
       assert.equal(fetchFn.calls.length, 0);
+      assert.equal(imageStore.map.size, sizeBefore);
     });
   });
 
-  it('previous failed entry: marker, resolved 1, transcribed 0/1', async () => {
+  it('stored failed entry: marker, resolved 1, transcribed 0/1', async () => {
     await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
       const captionFn = makeCaption();
       const r = await run(IMAGE_JSON, {
-        images: 'on', captionFn, fetchFn: makeFetch(), previousTranscripts: { wfzrft0vlm7h1: { failed: true } },
+        images: 'on', captionFn, fetchFn: makeFetch(), imageStore: makeStore({ wfzrft0vlm7h1: { failed: true } }),
       });
       assert.ok(r.markdown.includes(MARKER_DE));
       assert.ok(!r.markdown.includes(BLOCK_DE));
       assert.equal(r.meta.imagesResolved, 1);
       assert.equal(r.meta.imagesTranscribed, '0/1');
-      assert.deepEqual(r.meta.imageTranscripts, { wfzrft0vlm7h1: { failed: true } });
       assert.equal(captionFn.calls.length, 0);
       assert.equal(r.noStore, undefined);
     });
   });
 
-  it('instance off: previous ignored, no block, no marker, v3.15.2 body', async () => {
+  it('instance off: store ignored (not read, not written), v3.15.2 body', async () => {
     await withEnv({ PULLMD_VISION_API_KEY: 'k', PULLMD_EMBEDDED_IMAGES: 'off' }, async () => {
       const captionFn = makeCaption();
       const fetchFn = makeFetch();
-      const r = await run(IMAGE_JSON, {
-        images: 'on', captionFn, fetchFn,
-        previousTranscripts: { wfzrft0vlm7h1: { description: 'Earlier.', transcript: 'Old text' } },
-      });
+      let touched = 0;
+      const imageStore = {
+        get: () => { touched++; return { description: 'Earlier.', transcript: 'Old text' }; },
+        set: () => { touched++; },
+      };
+      const r = await run(IMAGE_JSON, { images: 'on', captionFn, fetchFn, imageStore });
       assert.equal(r.markdown, IMAGE_POST_V3152);
       assert.equal(r.meta.imagesTranscribed, '0/1');
-      assert.equal(r.meta.imageTranscripts, undefined);
+      assert.equal(touched, 0);
       assert.equal(captionFn.calls.length, 0);
       assert.equal(fetchFn.calls.length, 0);
+    });
+  });
+
+  it('the same image via another URL form of the post is not captioned again', async () => {
+    await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
+      const cache = createCache(':memory:');
+      const imageStore = imageStoreFrom(cache);
+      const captionFn = makeCaption();
+      const first = await run(IMAGE_JSON, { images: 'on', captionFn, fetchFn: makeFetch(), imageStore });
+      assert.equal(captionFn.calls.length, 1);
+      const fetchFn = makeFetch();
+      const oldUrl = `https://old.reddit.com${IMAGE_POST.permalink.replace(/\/$/, '')}?utm_source=share`;
+      const second = await run(IMAGE_JSON, { images: 'on', captionFn, fetchFn, imageStore, llmAllowed: () => false }, oldUrl);
+      assert.equal(captionFn.calls.length, 1, 'no second caption call');
+      assert.equal(fetchFn.calls.length, 0, 'no second download');
+      assert.equal(second.markdown, first.markdown);
+      assert.equal(second.noStore, undefined);
+      assert.equal(second.meta.imagesTranscribed, '1/1');
+    });
+  });
+
+  it('gallery: a transient miss on image 2 keeps image 1 in the store', async () => {
+    await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
+      const post = {
+        title: 'Gallery', permalink: '/r/test/comments/gal123/gallery/', subreddit: 'test', author: 'a',
+        score: 1, created_utc: 1700000000, num_comments: 0, is_self: false, selftext: '',
+        url: 'https://www.reddit.com/gallery/gal123',
+        gallery_data: { items: [{ media_id: 'g1' }, { media_id: 'g2' }] },
+        media_metadata: {
+          g1: { e: 'Image', s: { u: 'https://preview.redd.it/g1.jpg?width=1&amp;s=x' } },
+          g2: { e: 'Image', s: { u: 'https://preview.redd.it/g2.jpg?width=1&amp;s=y' } },
+        },
+      };
+      const json = [{ data: { children: [{ data: post }] } }, { data: { children: [] } }];
+      const imageStore = makeStore();
+
+      const calls1 = [];
+      const failing = async (buf) => {
+        calls1.push(1);
+        if (calls1.length === 2) throw Object.assign(new Error('captioning failed (500)'), { status: 500 });
+        return { markdown: 'One.\n---\nfirst', usage: USAGE };
+      };
+      const r1 = await run(json, { images: 'on', captionFn: failing, fetchFn: makeFetch(), imageStore });
+      assert.equal(r1.noStore, true);
+      assert.equal(r1.meta.imagesTranscribed, '1/2');
+      assert.deepEqual([...imageStore.map.keys()], ['g1']);
+
+      const fetchFn = makeFetch();
+      const captionFn = makeCaption('Two.\n---\nsecond');
+      const r2 = await run(json, { images: 'on', captionFn, fetchFn, imageStore });
+      assert.equal(captionFn.calls.length, 1, 'only image 2 is captioned');
+      assert.equal(fetchFn.calls.length, 1);
+      assert.ok(fetchFn.calls[0].includes('g2'), fetchFn.calls[0]);
+      assert.equal(r2.noStore, undefined);
+      assert.equal(r2.meta.imagesTranscribed, '2/2');
+      assert.ok(r2.markdown.includes('> first') && r2.markdown.includes('> second'), r2.markdown);
+    });
+  });
+
+  it('without llmAllowed nothing is captioned (fail closed)', async () => {
+    await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
+      const captionFn = makeCaption();
+      const r = await run(IMAGE_JSON, { images: 'on', captionFn, fetchFn: makeFetch(), llmAllowed: undefined });
+      assert.equal(captionFn.calls.length, 0);
+      assert.equal(r.noStore, true);
+      assert.equal(r.budgetDeferred, true);
     });
   });
 
