@@ -20,6 +20,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 ### Fixed
 
 - **Image captions were cut off mid-sentence with verbose models.** The plain caption path (image uploads and URLs that point straight at an image) capped the answer at 500 output tokens. Claude Haiku 5.5 writes long, structured captions and hit that cap, so the caption ended mid-sentence. The cap is now 1500 (the `max_completion_tokens` retry for reasoning models moves from 4000 to 5000, keeping the same reasoning headroom). Models that finish earlier stop on their own, so nothing changes for them.
+- **Reddit text arrived HTML-escaped.** Reddit's JSON API escapes `&`, `<` and `>` in every text field unless the request sets `raw_json=1`, so comment quotes came out as `&gt;quote` instead of a Markdown quote, links carried `&amp;` between their parameters, and the editor's empty-paragraph marker showed up as `&amp;#x200B;`. All Reddit JSON requests (posts, subreddit about and listing) now pass `raw_json=1`, and lines holding only a zero-width space (`&#x200B;`) are dropped from post and comment text.
 
 ## [3.15.2] - 2026-10-19
 
