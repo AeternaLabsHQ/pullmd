@@ -73,9 +73,9 @@ describe('captionImage', () => {
     const r = await captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn });
 
     assert.equal(sent.length, 2, 'exactly one retry');
-    assert.equal(sent[0].max_tokens, 500, 'the first attempt asks the way every endpoint understands');
+    assert.equal(sent[0].max_tokens, 1500, 'the first attempt asks the way every endpoint understands');
     assert.equal(sent[0].max_completion_tokens, undefined);
-    assert.equal(sent[1].max_completion_tokens, 4000, 'the retry uses the parameter the endpoint asked for, with a budget that leaves room for reasoning tokens');
+    assert.equal(sent[1].max_completion_tokens, 5000, 'the retry uses the parameter the endpoint asked for, with a budget that leaves room for reasoning tokens');
     assert.equal(sent[1].max_tokens, undefined, 'and must not send both');
     assert.equal(sent[1].model, 'newer-model');
     assert.equal(r.markdown, '## Description\n\nA gradient.');
@@ -155,7 +155,7 @@ describe('captionImage', () => {
         { type: 'text', text: 'Write a detailed caption describing this image.' },
         { type: 'image_url', image_url: { url: dataUri } },
       ] }],
-      max_tokens: 500,
+      max_tokens: 1500,
     });
     restore(s);
   });
@@ -171,7 +171,7 @@ describe('captionImage', () => {
     await captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn, maxTokens: 2000 });
     assert.equal(sent.length, 2);
     assert.equal(sent[0].max_tokens, 2000);
-    assert.equal(sent[1].max_completion_tokens, 5500, '4000 + (2000 - 500) keeps the reasoning headroom');
+    assert.equal(sent[1].max_completion_tokens, 5500, '5000 + (2000 - 1500) keeps the reasoning headroom');
     assert.equal(sent[1].max_tokens, undefined);
     restore(s);
   });
