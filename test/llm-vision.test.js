@@ -41,6 +41,16 @@ describe('captionImage', () => {
     restore(s);
   });
 
+  it('the non-ok error carries the HTTP status, message unchanged', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    try {
+      await assert.rejects(
+        () => captionImage(PNG, { mimetype: 'image/png', fetch: async () => ({ ok: false, status: 413, text: async () => 'too big' }) }),
+        (err) => err.status === 413 && err.message === 'captioning failed (413): too big',
+      );
+    } finally { restore(s); }
+  });
+
   // Newer OpenAI models reject max_tokens outright. Most other
   // OpenAI-compatible endpoints only know max_tokens, so the request keeps
   // asking that way and switches only when the endpoint says to.
@@ -63,9 +73,9 @@ describe('captionImage', () => {
     const r = await captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn });
 
     assert.equal(sent.length, 2, 'exactly one retry');
-    assert.equal(sent[0].max_tokens, 500, 'the first attempt asks the way every endpoint understands');
+    assert.equal(sent[0].max_tokens, 1500, 'the first attempt asks the way every endpoint understands');
     assert.equal(sent[0].max_completion_tokens, undefined);
-    assert.equal(sent[1].max_completion_tokens, 4000, 'the retry uses the parameter the endpoint asked for, with a budget that leaves room for reasoning tokens');
+    assert.equal(sent[1].max_completion_tokens, 5000, 'the retry uses the parameter the endpoint asked for, with a budget that leaves room for reasoning tokens');
     assert.equal(sent[1].max_tokens, undefined, 'and must not send both');
     assert.equal(sent[1].model, 'newer-model');
     assert.equal(r.markdown, '## Description\n\nA gradient.');
@@ -118,6 +128,51 @@ describe('captionImage', () => {
     assert.equal(captured.url, 'https://api.openai.com/v1/chat/completions'); // default base
     const sent = JSON.parse(captured.opts.body);
     assert.ok(sent.messages[0].content[1].image_url.url.startsWith('data:image/jpeg;base64,'));
+    restore(s);
+  });
+
+  it('uses a custom prompt, raw output and maxTokens', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_VISION_BASE_URL; delete process.env.PULLMD_VISION_MODEL; delete process.env.PULLMD_LLM_API_KEY;
+    let captured;
+    const fetchFn = async (url, opts) => { captured = { url, opts }; return { ok: true, json: async () => ({ choices: [{ message: { content: 'A red square.' } }] }) }; };
+    const r = await captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn, prompt: 'P', raw: true, maxTokens: 2000 });
+    const sent = JSON.parse(captured.opts.body);
+    assert.equal(sent.messages[0].content[0].text, 'P');
+    assert.equal(sent.max_tokens, 2000);
+    assert.equal(r.markdown, 'A red square.');
+    restore(s);
+  });
+
+  it('request body without new options is unchanged', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_VISION_BASE_URL; delete process.env.PULLMD_VISION_MODEL; delete process.env.PULLMD_LLM_API_KEY;
+    let captured;
+    const fetchFn = async (url, opts) => { captured = { url, opts }; return { ok: true, json: async () => ({ choices: [{ message: { content: 'x' } }] }) }; };
+    await captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn });
+    const dataUri = `data:image/png;base64,${PNG.toString('base64')}`;
+    assert.deepEqual(JSON.parse(captured.opts.body), {
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: 'Write a detailed caption describing this image.' },
+        { type: 'image_url', image_url: { url: dataUri } },
+      ] }],
+      max_tokens: 1500,
+    });
+    restore(s);
+  });
+
+  it('max_completion_tokens retry scales with maxTokens', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_VISION_BASE_URL; delete process.env.PULLMD_VISION_MODEL; delete process.env.PULLMD_LLM_API_KEY;
+    const sent = [];
+    const fetchFn = async (url, opts) => {
+      sent.push(JSON.parse(opts.body));
+      if (sent.length === 1) return { ok: false, status: 400, text: async () => "Unsupported parameter: 'max_tokens'. Use 'max_completion_tokens' instead." };
+      return { ok: true, json: async () => ({ choices: [{ message: { content: 'x' } }] }) };
+    };
+    await captionImage(PNG, { mimetype: 'image/png', fetch: fetchFn, maxTokens: 2000 });
+    assert.equal(sent.length, 2);
+    assert.equal(sent[0].max_tokens, 2000);
+    assert.equal(sent[1].max_completion_tokens, 5500, '5000 + (2000 - 1500) keeps the reasoning headroom');
+    assert.equal(sent[1].max_tokens, undefined);
     restore(s);
   });
 });

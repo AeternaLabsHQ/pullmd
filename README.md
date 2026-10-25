@@ -229,6 +229,8 @@ All variables go in `.env` (copy from `.env.example`):
 | `PLAYWRIGHT_URL`       | no       | URL of the Playwright sidecar's `/render` endpoint. Unset → skip Playwright fallback for JS pages.   |
 | `MARKITDOWN_URL`       | no       | URL of the MarkItDown sidecar's `/convert` endpoint. Unset → document-conversion path disabled; `POST /api/file` returns `502`. |
 | `PULLMD_VISION_API_KEY` / `…_BASE_URL` / `…_MODEL` | no | Image captioning via an OpenAI-compatible vision endpoint. Enabled when the key is set. `_MODEL` defaults to `gpt-4o-mini`. |
+| `PULLMD_EMBEDDED_IMAGES` | no | Describe and transcribe the images of Reddit posts with the vision model above. `off` = never, a request cannot switch it on; `on-request` (default) = only when a request passes `images=on`; `always` = on unless a request passes `images=off`. Needs a vision provider. Invalid value: startup warning, falls back to `on-request`. See [Embedded images](#embedded-images-reddit-posts). |
+| `PULLMD_EMBEDDED_IMAGES_MAX` | no | Maximum images transcribed per post (integer 1-20, default `4`; anything else falls back to the default). |
 | `PULLMD_STT_API_KEY` / `…_BASE_URL` / `…_MODEL` | no | Audio transcription via an OpenAI-compatible `/audio/transcriptions` endpoint. Enabled when the key is set. `_MODEL` defaults to `whisper-1`. |
 | `PULLMD_LLM_API_KEY` / `…_BASE_URL` | no | Shared fallback credentials for vision + STT when the per-modality vars are unset. Key and base URL only - there is no `PULLMD_LLM_MODEL`, and setting one is ignored (the server warns at startup). |
 | `PULLMD_PDF_OCR_API_KEY` / `…_BASE_URL` / `…_MODEL` | no | Opt-in high-quality PDF→Markdown via an OCR provider that preserves tables (reference: Mistral OCR `mistral-ocr-latest`). Triggered per request with `?pdf=ocr` or a recipe `fetch.pdf: ocr`. Default PDF handling stays the free markitdown path. `_MODEL` defaults to `mistral-ocr-latest`. |
@@ -572,10 +574,11 @@ for it.
 | `pdf`           | —       | `ocr` → route PDFs through the [OCR tier](#high-quality-pdf-ocr). Bypasses cache.  |
 | `yt_timecodes` / `yt_chunk` | see [YouTube](#youtube-transcripts) | Transcript format overrides. Bypass cache when set. |
 | `lang`          | `de`    | Comments-section header language (`de` or `en`).                                   |
+| `images`        | instance default | Reddit posts only: `on` / `off` (also `true`/`1`, `false`/`0`) to describe and transcribe the post images with the server's vision model. Other values return `400` for Reddit URLs; non-Reddit URLs ignore the parameter. Needs a vision provider and `PULLMD_EMBEDDED_IMAGES` not `off`; see [Embedded images](#embedded-images-reddit-posts). Does not bypass the cache. |
 | `query`         | —       | Set this when you need specific information from a page rather than the whole document: pass the question, get back only the matching sections (see [Query-scoped extraction](#query-scoped-extraction)). Empty/whitespace-only is treated as absent — output is unchanged. |
 | `max_tokens`    | `600`   | Token budget for `query` extraction (`64`–`20000`). No effect without `query`; raise it when the answer likely spans several sections. Only validated when `query` is non-empty; an invalid value returns `400`. |
 
-Both `query` and `max_tokens` are also available on the MCP `read_url` tool.
+Both `query` and `max_tokens`, and `images` (`"on"` / `"off"`), are also available on the MCP `read_url` tool.
 
 ### Response headers
 
@@ -763,7 +766,7 @@ The default `docker-compose.yml` includes the `markitdown` sidecar with `MARKITD
 
 Image captioning and audio transcription run inside pullmd itself - the markitdown sidecar is **not** required for media features (it is only needed for document conversion). By default pullmd processes images with EXIF metadata only and audio files with track metadata only - no model calls, no external traffic. Set the relevant `PULLMD_VISION_*` or `PULLMD_STT_*` credentials to unlock richer extraction:
 
-- **Images** - a vision-capable model generates a text caption for each image, embedded in the Markdown output. Enabled when `PULLMD_VISION_API_KEY` (or the shared fallback `PULLMD_LLM_API_KEY`) is set.
+- **Images** - a vision-capable model generates a text caption for each image, embedded in the Markdown output. This applies to image uploads and URLs that point straight at an image; images embedded in a page are not sent to the model, with one exception: the images of Reddit posts, see [Embedded images](#embedded-images-reddit-posts). Enabled when `PULLMD_VISION_API_KEY` (or the shared fallback `PULLMD_LLM_API_KEY`) is set.
 - **Audio** - a speech-to-text model transcribes the audio; the transcript replaces the bare metadata block. Enabled when `PULLMD_STT_API_KEY` (or the shared fallback `PULLMD_LLM_API_KEY`) is set.
 
 Both modalities are independently configurable via `PULLMD_*` env vars on the pullmd service:
@@ -777,6 +780,52 @@ Both modalities are independently configurable via `PULLMD_*` env vars on the pu
 Per-modality vars override the shared `LLM_*` fallback when set. The fallback deliberately stops at the key and the base URL: a single model name cannot serve captioning, transcription and OCR, so `PULLMD_LLM_MODEL` does not exist. Set `PULLMD_VISION_MODEL` / `PULLMD_STT_MODEL` / `PULLMD_PDF_OCR_MODEL` instead - if a `PULLMD_LLM_MODEL` is set anyway, the server says so at startup and the modalities stay on their defaults. Any OpenAI-compatible endpoint works - point `*_BASE_URL` at a local server (e.g. Ollama, LM Studio) to keep everything on-host and avoid per-call cloud costs.
 
 > **Note:** cloud endpoints send image and audio content to a third-party API. Use a local model server if data-residency matters.
+
+#### Embedded images (Reddit posts)
+
+On a Reddit image post the image is often the actual content, and the comments make little sense without it. With a vision provider configured, PullMD can describe each image of a Reddit **post** (a single image, a gallery, or an image referenced inline in a text post; images in comments are not handled) and transcribe its legible text. The result is placed directly under the image as a blockquote, a short description (one or two sentences) first, then the transcript:
+
+```markdown
+![](https://i.redd.it/example.jpeg)
+
+> **[Image description]** Screenshot of a chat with an AI assistant answering a question.
+>
+> **[Image transcript]**
+> ...
+```
+
+The labels are `Bildbeschreibung` / `Bildtranskript` for `lang=de` (the default) and `Image description` / `Image transcript` for `lang=en`. This is opt-in because it is the first time PullMD sends images found inside a page to a provider:
+
+| `PULLMD_EMBEDDED_IMAGES` | Behaviour |
+| ------------------------ | --------- |
+| `off` | Hard off. `images=on` has no effect, no image is fetched, no marker is added. |
+| `on-request` (default) | No provider calls unless a request passes `images=on` (MCP `read_url`: `images: "on"`). |
+| `always` | Every Reddit post request transcribes its images, unless it passes `images=off`. |
+
+- **Marker:** on an instance with a vision provider and a mode other than `off`, an eligible image without a transcript gets a one-line `> **[Image not transcribed]**` marker (`Bild nicht transkribiert` for `lang=de`), so a reader of the output can tell context is missing. Without a vision provider, or with `off`, the body is byte-identical to the output before this feature (the one exception: transcripts stored earlier, while a provider was configured, are still shown unless the instance is set to `off`). The `images_transcribed: "<done>/<total>"` frontmatter field is set whenever a post has eligible images, whatever the configuration.
+- **Limits:** Reddit only. Images are fetched only from `i.redd.it` and `preview.redd.it` (on every redirect hop, in addition to the SSRF guard), at most 20 MB each, and only if the download is served as `image/*`. A single-image post must be a jpg/jpeg/png/webp file; gallery and inline images count when Reddit's metadata marks them as non-animated images. GIFs and videos are skipped. At most `PULLMD_EMBEDDED_IMAGES_MAX` images per post (default 4) are transcribed, and all images of one post share a 90-second deadline.
+- **Cost:** each image that is transcribed for the first time uses one unit of the hourly `PULLMD_LLM_RATE_LIMIT` budget and one vision call. Transcripts are stored per image: the same image is transcribed once, whichever URL form of the post is requested (`old.reddit.com`, a `redd.it` short link, a `/s/` share link, tracking parameters), for as long as cache retention keeps it. Any extraction (a cache miss, `nocache`, a share refresh) reuses stored transcripts without a download, a model call or budget, also for a request that does not ask for images (an instance set to `off` ignores stored transcripts). Token usage appears as the `llm_*` frontmatter fields, summed over the images.
+- **Failures:** the post is always returned. An image that can never work (HTTP 4xx other than 408/429, not an image, over 20 MB, host or SSRF rejection) is remembered as failed and not retried; clearing the whole cache forgets these markers and the stored transcripts. A provider answer of 400, 413, 415 or 422 for an image counts as failed for that cached result only: it is not retried while that row is fresh, but it is retried after the row expires or with another URL form of the post. When an image misses for a transient reason (budget used up, the 90-second deadline, an HTTP 5xx, a DNS failure, any other provider error), the result is served but not cached, and a share refresh keeps the old snapshot and restarts its one-hour refresh clock. Images that did succeed in that request are stored anyway, so a gallery with one failing image keeps the others. A cached row with fewer resolved images than the instance would now produce counts as a miss for an `images=on` request, so `nocache` is not needed.
+- **Security:** transcribed text is untrusted third-party content from an image and can contain prompt injection. The labels mark it as machine-derived from the image; treat it like any other fetched page text.
+
+**Choosing a vision model.** A small comparison from October 2026: nine images from current Reddit posts (chat screenshots, a social media post, two charts, a meme, a photographed menu, a German phone ad, a plain photo), each sent once per model with the prompt PullMD uses (`lang=de`). Cost is computed from the providers' list prices at the time; nine images are a spot check, not a benchmark.
+
+| Model | Prompt tokens per image | Avg. time | Cost per 1,000 images | Observations |
+| ----- | ----------------------: | --------: | --------------------: | ------------ |
+| `claude-haiku-5-5` | ~3,100 | 2.1 s | ~$0.48 | Complete transcripts; descriptions name what the image is (e.g. "chat with an AI assistant, question on top, answer below"). |
+| `gpt-4.1-mini` | ~3,200 | 2.3 s | ~$1.52 | Complete transcripts; shorter, vaguer descriptions. |
+| `gpt-4o-mini` (the default) | ~29,400 | 3.4 s | ~$4.50 | Left out the key figures of a chart, altered source text (fixed a typo, completed a cut-off price), misdescribed one screenshot. |
+| `claude-sonnet-5-5` | ~3,100 | 5.7 s | ~$9.12 | Reference; descriptions slightly more detailed than Haiku's, transcripts the same. |
+
+None of the models said what made the plain photo notable; they do well on screenshots, charts and text, less so on the point of a photo. Claude models work through Anthropic's OpenAI-compatible endpoint without further setup:
+
+```bash
+PULLMD_VISION_BASE_URL=https://api.anthropic.com/v1
+PULLMD_VISION_API_KEY=sk-ant-...
+PULLMD_VISION_MODEL=claude-haiku-5-5
+```
+
+The default stays `gpt-4o-mini` so that existing instances do not change behaviour; set `PULLMD_VISION_MODEL` to pick another model. The choice applies to all vision captioning, including image uploads.
 
 Provider calls are budgeted: image captioning, audio transcription and PDF OCR share `PULLMD_LLM_RATE_LIMIT` requests per hour (default `30`, `0` = off), counted per signed-in user or, without sign-in, per client address. Over budget the request gets what an instance without the provider returns (metadata only, or the markitdown PDF conversion), and that result is not cached. A tier without a configured provider never consumes budget.
 
@@ -830,6 +879,7 @@ When you request `?frontmatter=true`, Reddit, media, and YouTube results include
 | `author` | Reddit post (also web pages with author metadata) | Post author, e.g. `u/someone`. |
 | `published` | Reddit post (also web pages with publish date) | Post creation date (ISO 8601). |
 | `upvotes` | Reddit post | Score at time of extraction. |
+| `images_transcribed` | Reddit post with eligible images | `"<done>/<total>"`: images with a transcript out of the eligible post images, e.g. `1/2`. Also present, with `0/N`, when no transcript was produced. |
 | `duration` | YouTube | Video duration (humanized, e.g. `12:34` or `H:MM:SS`). |
 | `views` | YouTube | View count at time of extraction. |
 | `image_size` | Image with caption | Dimensions of the source image: `WxH` pixels. |

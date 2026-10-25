@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFrontmatter, mergeFrontmatter, mergeMediaFrontmatter, KNOWN_FRONTMATTER_FIELDS, validateFrontmatterFields } from '../lib/frontmatter.js';
+import { buildFrontmatter, mergeFrontmatter, mergeMediaFrontmatter, KNOWN_FRONTMATTER_FIELDS, RESERVED_FRONTMATTER_FIELDS, OVERRIDABLE_FRONTMATTER_FIELDS, validateFrontmatterFields } from '../lib/frontmatter.js';
 
 describe('buildFrontmatter', () => {
   it('emits a YAML block with delimiters and trailing blank line', () => {
@@ -106,6 +106,18 @@ describe('mergeMediaFrontmatter', () => {
     const md = '---\ntitle: D\nsource: pdf-ocr\n---\n\nbody';
     const out = mergeMediaFrontmatter(md, { pdfPages: 7 }, 'pdf-ocr');
     assert.match(out, /pdf_pages: 7/);
+  });
+
+  it('adds images_transcribed for a reddit source', () => {
+    const md = '---\ntitle: x\n---\n\nbody';
+    const out = mergeMediaFrontmatter(md, { imagesTranscribed: '1/1' }, 'reddit');
+    assert.match(out, /images_transcribed: "?1\/1"?/);
+  });
+
+  it('images_transcribed is a known, reserved, non-overridable field', () => {
+    assert.ok(KNOWN_FRONTMATTER_FIELDS.has('images_transcribed'));
+    assert.ok(RESERVED_FRONTMATTER_FIELDS.has('images_transcribed'));
+    assert.ok(!OVERRIDABLE_FRONTMATTER_FIELDS.has('images_transcribed'));
   });
 
   it('is a no-op for non-media sources', () => {

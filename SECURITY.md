@@ -44,6 +44,12 @@ application can put the sidecar on its own bridge network with no other
 service on it; nothing in pullmd needs the sidecar to see the other
 containers.
 
+Text transcribed from Reddit post images (`PULLMD_EMBEDDED_IMAGES`, since 3.16.0)
+is untrusted third-party content and can carry prompt injection. The output
+labels it as machine-derived from the image; consumers should treat it like any
+other fetched page text. This is inherent to describing arbitrary images and
+not a vulnerability in pullmd.
+
 ## Supported versions
 
 Only the latest minor release receives fixes. Upgrade before reporting.

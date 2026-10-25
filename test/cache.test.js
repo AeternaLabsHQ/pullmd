@@ -420,3 +420,60 @@ describe('cache retention option', () => {
     assert.ok(c.getByShareId(shareId), 'the SQLite date modifier must stay inside its valid range');
   });
 });
+
+describe('cache image transcripts', () => {
+  it('round-trips a transcript and a failed marker', () => {
+    const c = createCache(':memory:');
+    c.putImageTranscript('k1', { description: 'd', transcript: 't' });
+    c.putImageTranscript('k2', { failed: true });
+    assert.deepEqual(c.getImageTranscript('k1'), { description: 'd', transcript: 't' });
+    assert.deepEqual(c.getImageTranscript('k2'), { failed: true });
+    assert.equal(c.getImageTranscript('nope'), null);
+  });
+
+  it('put replaces the data and restarts the retention clock', () => {
+    const c = createCache(':memory:', { retentionDays: 1 });
+    c.putImageTranscript('k', { failed: true });
+    c.db.prepare("UPDATE image_transcripts SET created_at = datetime('now', '-2 days') WHERE key = 'k'").run();
+    assert.equal(c.getImageTranscript('k'), null, 'older than retention');
+    c.putImageTranscript('k', { description: 'new', transcript: null });
+    assert.deepEqual(c.getImageTranscript('k'), { description: 'new', transcript: null });
+  });
+
+  it('honours the retention cutoff and has no 1-hour window', () => {
+    const c = createCache(':memory:', { retentionDays: 1 });
+    c.putImageTranscript('fresh', { failed: true });
+    c.putImageTranscript('old', { failed: true });
+    c.db.prepare("UPDATE image_transcripts SET created_at = datetime('now', '-2 hours') WHERE key = 'fresh'").run();
+    c.db.prepare("UPDATE image_transcripts SET created_at = datetime('now', '-2 days') WHERE key = 'old'").run();
+    assert.deepEqual(c.getImageTranscript('fresh'), { failed: true });
+    assert.equal(c.getImageTranscript('old'), null);
+  });
+
+  it('retention 0 keeps entries of any age', () => {
+    const c = createCache(':memory:', { retentionDays: 0 });
+    c.putImageTranscript('k', { failed: true });
+    c.db.prepare("UPDATE image_transcripts SET created_at = datetime('now', '-4000 days') WHERE key = 'k'").run();
+    assert.deepEqual(c.getImageTranscript('k'), { failed: true });
+  });
+
+  it('deleteAll also empties the image transcripts and still reports conversion rows', () => {
+    const c = createCache(':memory:');
+    c.put({ url: 'https://example.com/a', title: 'T', markdown: '# T', source: 'readability' });
+    c.putImageTranscript('k', { failed: true });
+    const result = c.deleteAll();
+    assert.equal(result.changes, 1);
+    assert.equal(c.getImageTranscript('k'), null);
+    assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM image_transcripts').get().n, 0);
+  });
+
+  it('the retention prune in put() also removes expired transcripts', () => {
+    const c = createCache(':memory:', { retentionDays: 1 });
+    c.putImageTranscript('old', { failed: true });
+    c.putImageTranscript('fresh', { failed: true });
+    c.db.prepare("UPDATE image_transcripts SET created_at = datetime('now', '-2 days') WHERE key = 'old'").run();
+    c.put({ url: 'https://example.com/trigger', title: 'T', markdown: '# T', source: 'readability' });
+    const keys = c.db.prepare('SELECT key FROM image_transcripts ORDER BY key').all().map((r) => r.key);
+    assert.deepEqual(keys, ['fresh']);
+  });
+});
