@@ -202,6 +202,26 @@ describe('transcribeImages', () => {
     assert.equal(r.transientMiss, false);
   });
 
+  test('a DNS lookup failure is transient, not a permanent miss', async () => {
+    const fetchFn = makeFetch();
+    const r = await transcribeImages([A, B], {
+      captionFn: makeCaption(), fetchFn,
+      ssrfOpts: { lookup: async () => { throw Object.assign(new Error('try again'), { code: 'EAI_AGAIN' }); }, env: {} },
+    });
+    assert.deepEqual(r.transcripts, {});
+    assert.equal(r.transientMiss, true);
+    assert.deepEqual(fetchFn.calls, []);
+  });
+
+  test('a host that resolves to no addresses is transient', async () => {
+    const r = await transcribeImages([A], {
+      captionFn: makeCaption(), fetchFn: makeFetch(),
+      ssrfOpts: { lookup: async () => [], env: {} },
+    });
+    assert.deepEqual(r.transcripts, {});
+    assert.equal(r.transientMiss, true);
+  });
+
   test('a first URL outside the allowlist is permanent without any fetch', async () => {
     const fetchFn = makeFetch();
     const r = await transcribeImages([{ url: 'https://evil.example/a.png', key: 'e' }], {
