@@ -41,6 +41,16 @@ describe('captionImage', () => {
     restore(s);
   });
 
+  it('the non-ok error carries the HTTP status, message unchanged', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    try {
+      await assert.rejects(
+        () => captionImage(PNG, { mimetype: 'image/png', fetch: async () => ({ ok: false, status: 413, text: async () => 'too big' }) }),
+        (err) => err.status === 413 && err.message === 'captioning failed (413): too big',
+      );
+    } finally { restore(s); }
+  });
+
   // Newer OpenAI models reject max_tokens outright. Most other
   // OpenAI-compatible endpoints only know max_tokens, so the request keeps
   // asking that way and switches only when the endpoint says to.

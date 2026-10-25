@@ -295,9 +295,11 @@ export function createApp(overrides = {}) {
         ...redditImageOptions(resolveEmbeddedImages(undefined), llmAllowed, imageStoreFrom(cache)),
       });
       // An image missed for a transient reason: keep the existing snapshot,
-      // like the web path below (and restart the clock on a budget deferral).
+      // like the web path below. Always restart the refresh clock: the paid
+      // transcripts are already in the image store, and without the touch
+      // every later view would fetch Reddit and spend budget again.
       if (typeof r !== 'string' && r.noStore) {
-        if (r.budgetDeferred) cache.touch(entry.url);
+        cache.touch(entry.url);
         return entry.markdown;
       }
       // Test doubles may return a bare string; production returns { markdown, meta }.

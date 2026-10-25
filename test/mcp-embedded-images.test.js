@@ -249,15 +249,16 @@ describe('MCP get_share - refresh with embedded images', () => {
     });
   });
 
-  it('noStore without budgetDeferred: old markdown, clock untouched', async () => {
+  it('noStore without budgetDeferred: old markdown, refresh clock restarted', async () => {
     await withEnv({}, async () => {
       const stub = recordingStub({ noStore: true });
       const { app, cache } = makeApp(stub);
       const shareId = stale(cache);
       const j = await callTool(app, 'get_share', { id: shareId });
       assert.match(textOf(j), /Old body/);
-      const row = cache.db.prepare("SELECT created_at > datetime('now', '-5 minutes') AS fresh FROM conversions WHERE url = ?").get(REDDIT);
-      assert.equal(row.fresh, 0);
+      const row = cache.db.prepare("SELECT markdown, created_at > datetime('now', '-5 minutes') AS fresh FROM conversions WHERE url = ?").get(REDDIT);
+      assert.equal(row.fresh, 1, 'without the touch every later view would refetch and spend budget again');
+      assert.match(row.markdown, /Old/);
     });
   });
 

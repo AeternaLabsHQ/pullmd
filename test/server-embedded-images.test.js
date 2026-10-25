@@ -242,7 +242,7 @@ describe('/s/:id refresh with embedded images', () => {
     });
   });
 
-  it('noStore without budgetDeferred: old markdown, clock untouched', async () => {
+  it('noStore without budgetDeferred: old markdown, refresh clock restarted', async () => {
     await withEnv({}, async () => {
       const stub = recordingStub({ noStore: true });
       const { app, cache } = makeApp(stub);
@@ -250,8 +250,9 @@ describe('/s/:id refresh with embedded images', () => {
       cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE url = ?").run(REDDIT);
       const res = await request(app, `/s/${shareId}`);
       assert.equal(res.body, '# Old');
-      const row = cache.db.prepare("SELECT created_at > datetime('now', '-5 minutes') AS fresh FROM conversions WHERE url = ?").get(REDDIT);
-      assert.equal(row.fresh, 0);
+      const row = cache.db.prepare("SELECT markdown, created_at > datetime('now', '-5 minutes') AS fresh FROM conversions WHERE url = ?").get(REDDIT);
+      assert.equal(row.fresh, 1, 'without the touch every later view would refetch and spend budget again');
+      assert.match(row.markdown, /Old/);
     });
   });
 
