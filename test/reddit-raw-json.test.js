@@ -55,3 +55,12 @@ describe('formatting with raw_json text', () => {
     assert.doesNotMatch(out, /x200B/);
   });
 });
+
+describe('cleanRedditText cost', () => {
+  it('stays linear on a crafted body (markers followed by as many blank lines)', () => {
+    const body = 'x' + '\n&#x200B;'.repeat(5000) + '\n'.repeat(5001) + 'y';
+    const t = Date.now();
+    assert.equal(cleanRedditText(body), 'x\ny');
+    assert.ok(Date.now() - t < 100, `took ${Date.now() - t} ms`);
+  });
+});
