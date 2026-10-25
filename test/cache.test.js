@@ -457,6 +457,16 @@ describe('cache image transcripts', () => {
     assert.deepEqual(c.getImageTranscript('k'), { failed: true });
   });
 
+  it('deleteAll also empties the image transcripts and still reports conversion rows', () => {
+    const c = createCache(':memory:');
+    c.put({ url: 'https://example.com/a', title: 'T', markdown: '# T', source: 'readability' });
+    c.putImageTranscript('k', { failed: true });
+    const result = c.deleteAll();
+    assert.equal(result.changes, 1);
+    assert.equal(c.getImageTranscript('k'), null);
+    assert.equal(c.db.prepare('SELECT COUNT(*) AS n FROM image_transcripts').get().n, 0);
+  });
+
   it('the retention prune in put() also removes expired transcripts', () => {
     const c = createCache(':memory:', { retentionDays: 1 });
     c.putImageTranscript('old', { failed: true });

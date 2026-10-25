@@ -405,6 +405,19 @@ describe('extractPost embedded images', () => {
     });
   });
 
+  it('provider rejection (400): resolved and cacheable, but not in the store', async () => {
+    await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
+      const imageStore = makeStore();
+      const captionFn = async () => { throw Object.assign(new Error('captioning failed (400)'), { status: 400 }); };
+      const r = await run(IMAGE_JSON, { images: 'on', captionFn, fetchFn: makeFetch(), imageStore });
+      assert.ok(r.markdown.includes(MARKER_DE));
+      assert.equal(r.noStore, undefined, 'the row is cached, so it is not retried within that row');
+      assert.equal(r.meta.imagesResolved, 1);
+      assert.equal(r.meta.imagesTranscribed, '0/1');
+      assert.equal(imageStore.map.size, 0);
+    });
+  });
+
   it('without llmAllowed nothing is captioned (fail closed)', async () => {
     await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
       const captionFn = makeCaption();

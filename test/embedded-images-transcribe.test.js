@@ -179,18 +179,40 @@ describe('transcribeImages', () => {
   });
 
   for (const status of [400, 413, 415, 422]) {
-    test(`caption error with status ${status} is a permanent miss and stored`, async () => {
+    test(`caption error with status ${status} is permanent for this extraction but not stored`, async () => {
       const store = makeStore();
       const r = await transcribeImages([A, B], {
         fetchFn: makeFetch(), ssrfOpts, store,
         captionFn: async () => { throw Object.assign(new Error(`captioning failed (${status})`), { status }); },
       });
       assert.deepEqual(r.transcripts.a, { failed: true });
-      assert.deepEqual(store.map.get('a'), { failed: true });
-      assert.deepEqual(store.map.get('b'), { failed: true });
+      assert.deepEqual(r.transcripts.b, { failed: true });
       assert.equal(r.transientMiss, false);
+      assert.deepEqual(store.sets, [], 'a misconfigured model must not poison the store');
     });
   }
+
+  test('download-side permanent failure is stored', async () => {
+    const store = makeStore();
+    await transcribeImages([A], {
+      captionFn: makeCaption(), ssrfOpts, store,
+      fetchFn: makeFetch({ [A.url]: imgRes('', { status: 404, type: 'text/html' }) }),
+    });
+    assert.deepEqual(store.map.get('a'), { failed: true });
+  });
+
+  test('after a provider rejection a later extraction retries the image', async () => {
+    const store = makeStore();
+    await transcribeImages([A], {
+      fetchFn: makeFetch(), ssrfOpts, store,
+      captionFn: async () => { throw Object.assign(new Error('captioning failed (400)'), { status: 400 }); },
+    });
+    const captionFn = makeCaption();
+    const r = await transcribeImages([A], { fetchFn: makeFetch(), ssrfOpts, store, captionFn });
+    assert.equal(captionFn.calls.length, 1);
+    assert.ok(r.transcripts.a.description);
+    assert.ok(store.map.get('a').description);
+  });
 
   for (const status of [401, 403, 404, 408, 429, 500, 503]) {
     test(`caption error with status ${status} is transient and not stored`, async () => {
