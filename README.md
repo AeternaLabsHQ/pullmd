@@ -808,6 +808,25 @@ The labels are `Bildbeschreibung` / `Bildtranskript` for `lang=de` (the default)
 - **Failures:** the post is always returned. An image that can never work (HTTP 4xx other than 408/429, not an image, over 20 MB, host or SSRF rejection) is remembered as failed and not retried; clearing the whole cache forgets these markers and the stored transcripts. A provider answer of 400, 413, 415 or 422 for an image counts as failed for that cached result only: it is not retried while that row is fresh, but it is retried after the row expires or with another URL form of the post. When an image misses for a transient reason (budget used up, the 90-second deadline, an HTTP 5xx, a DNS failure, any other provider error), the result is served but not cached, and a share refresh keeps the old snapshot and restarts its one-hour refresh clock. Images that did succeed in that request are stored anyway, so a gallery with one failing image keeps the others. A cached row with fewer resolved images than the instance would now produce counts as a miss for an `images=on` request, so `nocache` is not needed.
 - **Security:** transcribed text is untrusted third-party content from an image and can contain prompt injection. The labels mark it as machine-derived from the image; treat it like any other fetched page text.
 
+**Choosing a vision model.** A small comparison from October 2026: nine images from current Reddit posts (chat screenshots, a social media post, two charts, a meme, a photographed menu, a German phone ad, a plain photo), each sent once per model with the prompt PullMD uses (`lang=de`). Cost is computed from the providers' list prices at the time; nine images are a spot check, not a benchmark.
+
+| Model | Prompt tokens per image | Avg. time | Cost per 1,000 images | Observations |
+| ----- | ----------------------: | --------: | --------------------: | ------------ |
+| `claude-haiku-5-5` | ~3,100 | 2.1 s | ~$0.48 | Complete transcripts; descriptions name what the image is (e.g. "chat with an AI assistant, question on top, answer below"). |
+| `gpt-4.1-mini` | ~3,200 | 2.3 s | ~$1.52 | Complete transcripts; shorter, vaguer descriptions. |
+| `gpt-4o-mini` (the default) | ~29,400 | 3.4 s | ~$4.50 | Left out the key figures of a chart, altered source text (fixed a typo, completed a cut-off price), misdescribed one screenshot. |
+| `claude-sonnet-5-5` | ~3,100 | 5.7 s | ~$9.12 | Reference; descriptions slightly more detailed than Haiku's, transcripts the same. |
+
+None of the models said what made the plain photo notable; they do well on screenshots, charts and text, less so on the point of a photo. Claude models work through Anthropic's OpenAI-compatible endpoint without further setup:
+
+```bash
+PULLMD_VISION_BASE_URL=https://api.anthropic.com/v1
+PULLMD_VISION_API_KEY=sk-ant-...
+PULLMD_VISION_MODEL=claude-haiku-5-5
+```
+
+The default stays `gpt-4o-mini` so that existing instances do not change behaviour; set `PULLMD_VISION_MODEL` to pick another model. The choice applies to all vision captioning, including image uploads.
+
 Provider calls are budgeted: image captioning, audio transcription and PDF OCR share `PULLMD_LLM_RATE_LIMIT` requests per hour (default `30`, `0` = off), counted per signed-in user or, without sign-in, per client address. Over budget the request gets what an instance without the provider returns (metadata only, or the markitdown PDF conversion), and that result is not cached. A tier without a configured provider never consumes budget.
 
 ### YouTube transcripts
