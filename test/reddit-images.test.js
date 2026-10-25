@@ -316,18 +316,27 @@ describe('extractPost embedded images', () => {
     });
   });
 
-  it('stored failed entry: marker, resolved 1, transcribed 0/1', async () => {
+  it('legacy stored failed entry is ignored: images=on transcribes again', async () => {
     await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
       const captionFn = makeCaption();
       const r = await run(IMAGE_JSON, {
         images: 'on', captionFn, fetchFn: makeFetch(), imageStore: makeStore({ wfzrft0vlm7h1: { failed: true } }),
       });
-      assert.ok(r.markdown.includes(MARKER_DE));
+      assert.ok(r.markdown.includes(BLOCK_DE));
+      assert.equal(r.meta.imagesTranscribed, '1/1');
+      assert.equal(captionFn.calls.length, 1);
+    });
+  });
+
+  it('legacy stored failed entry without images=on: not counted as resolved', async () => {
+    await withEnv({ PULLMD_VISION_API_KEY: 'k' }, async () => {
+      const captionFn = makeCaption();
+      const r = await run(IMAGE_JSON, {
+        captionFn, fetchFn: makeFetch(), imageStore: makeStore({ wfzrft0vlm7h1: { failed: true } }),
+      });
       assert.ok(!r.markdown.includes(BLOCK_DE));
-      assert.equal(r.meta.imagesResolved, 1);
-      assert.equal(r.meta.imagesTranscribed, '0/1');
+      assert.equal(r.meta.imagesResolved, 0);
       assert.equal(captionFn.calls.length, 0);
-      assert.equal(r.noStore, undefined);
     });
   });
 

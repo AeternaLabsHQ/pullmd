@@ -113,17 +113,17 @@ describe('transcribeImages', () => {
     assert.deepEqual(fetchFn.calls, []);
   });
 
-  test('stored failed marker is carried without fetch', async () => {
+  test('legacy stored failed marker is ignored: the image is tried again', async () => {
     const fetchFn = makeFetch();
     const r = await transcribeImages([A], {
       captionFn: makeCaption(), fetchFn, ssrfOpts, store: makeStore({ a: { failed: true } }),
     });
-    assert.deepEqual(fetchFn.calls, []);
-    assert.deepEqual(r.transcripts.a, { failed: true });
+    assert.equal(fetchFn.calls.length, 1);
+    assert.ok(r.transcripts.a.description);
     assert.equal(r.transientMiss, false);
   });
 
-  test('success and permanent failure are written before the next image starts', async () => {
+  test('success is written before the next image starts, permanent failure never', async () => {
     const store = makeStore();
     const C = { url: 'https://i.redd.it/c.png', key: 'c' };
     const seenAtFetch = {};
@@ -136,9 +136,10 @@ describe('transcribeImages', () => {
       return { markdown: 'B.\n---\ntext', usage: USAGE };
     };
     const r = await transcribeImages([A, B, C], { captionFn, fetchFn, ssrfOpts, store });
-    assert.deepEqual(seenAtFetch.b, ['a'], 'permanent failure of a stored before b is captioned');
-    assert.deepEqual(seenAtFetch.c, ['a', 'b'], 'success of b stored before c is fetched');
-    assert.deepEqual(store.map.get('a'), { failed: true });
+    assert.deepEqual(seenAtFetch.b, [], 'permanent failure of a is not stored');
+    assert.deepEqual(seenAtFetch.c, ['b'], 'success of b stored before c is fetched');
+    assert.equal(store.map.has('a'), false);
+    assert.deepEqual(r.transcripts.a, { failed: true });
     assert.deepEqual(store.map.get('b'), { description: 'B.', transcript: 'text' });
     assert.equal(r.transientMiss, false);
   });
@@ -192,13 +193,17 @@ describe('transcribeImages', () => {
     });
   }
 
-  test('download-side permanent failure is stored', async () => {
+  test('download-side permanent failure is final for this extraction but not stored', async () => {
+    // Keys are shared across posts: a post that links another post's image id
+    // under a failing URL must not block that image for everyone.
     const store = makeStore();
-    await transcribeImages([A], {
+    const r = await transcribeImages([A], {
       captionFn: makeCaption(), ssrfOpts, store,
       fetchFn: makeFetch({ [A.url]: imgRes('', { status: 404, type: 'text/html' }) }),
     });
-    assert.deepEqual(store.map.get('a'), { failed: true });
+    assert.deepEqual(r.transcripts.a, { failed: true });
+    assert.equal(r.transientMiss, false);
+    assert.deepEqual(store.sets, []);
   });
 
   test('after a provider rejection a later extraction retries the image', async () => {
