@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCache } from '../lib/cache.js';
-import { createAuth, detectAuthMisconfig, formatBootstrapError } from '../lib/auth.js';
+import { createAuth, detectAuthMisconfig, formatBootstrapError, openPaidTiersWarning } from '../lib/auth.js';
 
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
 
@@ -104,5 +104,39 @@ describe('formatBootstrapError', () => {
     assert.match(out, /PULLMD_AUTH_MODE=multi-user requires bootstrap credentials/);
     assert.match(out, /PULLMD_ADMIN_EMAIL/);
     assert.match(out, /PULLMD_ADMIN_PASSWORD/);
+  });
+});
+
+describe('openPaidTiersWarning', () => {
+  it('warns when a provider key is set and auth is disabled', () => {
+    const w = openPaidTiersWarning({ PULLMD_LLM_API_KEY: 'k' }, 'disabled');
+    assert.match(w, /PULLMD_LLM_API_KEY is set while PULLMD_AUTH_MODE is disabled/);
+    assert.match(w, /PULLMD_LLM_RATE_LIMIT \(30 provider calls per hour/);
+    assert.match(w, /127\.0\.0\.1/);
+  });
+
+  it('lists every key that is set', () => {
+    const w = openPaidTiersWarning({ PULLMD_VISION_API_KEY: 'a', PULLMD_PDF_OCR_API_KEY: 'b' }, 'disabled');
+    assert.match(w, /PULLMD_VISION_API_KEY, PULLMD_PDF_OCR_API_KEY are set/);
+  });
+
+  it('says so when the budget is off', () => {
+    const w = openPaidTiersWarning({ PULLMD_STT_API_KEY: 'k', PULLMD_LLM_RATE_LIMIT: '0' }, 'disabled');
+    assert.match(w, /with no limit \(PULLMD_LLM_RATE_LIMIT=0\)/);
+  });
+
+  it('stays quiet without keys or with sign-in', () => {
+    assert.equal(openPaidTiersWarning({}, 'disabled'), null);
+    assert.equal(openPaidTiersWarning({ PULLMD_LLM_API_KEY: 'k' }, 'single-admin'), null);
+    assert.equal(openPaidTiersWarning({ PULLMD_LLM_API_KEY: 'k' }, 'multi-user'), null);
+  });
+
+  it('is logged by createAuth', () => {
+    const cache = createCache(':memory:');
+    const { lines } = captureWarn((logger) =>
+      createAuth({ db: cache.db, mode: 'disabled', env: { PULLMD_VISION_API_KEY: 'k' }, argon2Opts: fastOpts, warnLogger: logger })
+    );
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /^\[auth\] PULLMD_VISION_API_KEY is set/);
   });
 });
