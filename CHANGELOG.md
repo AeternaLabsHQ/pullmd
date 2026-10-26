@@ -9,6 +9,12 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **Reddit pages that are not posts no longer crash the extractor.** Any `reddit.com` URL went down the post path, so a rules page, wiki page, user profile or sorted listing (`/r/x/top/`) failed with `Cannot read properties of undefined (reading 'data')`. Only posts (including comment permalinks), galleries and subreddit front pages are read now; anything else answers `400` with `{"code":"reddit_unsupported_page"}` and a readable message, without a request to Reddit. The MCP `read_url` tool returns the same message.
+
 ## [3.16.0] - 2026-10-25
 
 ### Added
