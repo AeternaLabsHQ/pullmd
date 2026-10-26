@@ -88,3 +88,18 @@ describe('GET /api on a Reddit page that is not a post', () => {
     assert.match(body.error, /posts and subreddits/);
   });
 });
+
+describe('old.reddit fallback behind the login wall', () => {
+  it('reports a block instead of returning an empty post', async () => {
+    const loginPage = '<html><head><title>Welcome to Reddit</title></head><body><form id="login"></form></body></html>';
+    await withFetch(async (url) => {
+      if (String(url).includes('www.reddit.com')) return { ok: false, status: 403, json: async () => ({}), text: async () => '' };
+      return { ok: true, status: 200, redirected: true, url: 'https://old.reddit.com/login/?reason=lor2', text: async () => loginPage };
+    }, async () => {
+      await assert.rejects(
+        extractPost('https://www.reddit.com/r/x/comments/abc123/t/'),
+        /Blocked by Reddit/,
+      );
+    });
+  });
+});
