@@ -1163,7 +1163,9 @@ export function createApp(overrides = {}) {
   // 503 on degraded is deliberate: a plain HTTP monitor has to catch a dead
   // sidecar too. The Playwright sidecar once crash-looped for eight weeks
   // while extraction quietly fell back to empty results - nothing was watching
-  // because there was nothing to watch.
+  // because there was nothing to watch. A Playwright sidecar too old to
+  // enforce the address policy counts as degraded and gets the same 503: it
+  // still renders, so a status code is the only signal a plain monitor sees.
   app.get('/api/status', async (req, res) => {
     let status;
     try {
