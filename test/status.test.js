@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { healthUrl, createStatusChecker } from '../lib/status.js';
+import { healthUrl, createStatusChecker, MIN_PLAYWRIGHT_POLICY } from '../lib/status.js';
 
 const ENV = {
   TRAFILATURA_URL: 'http://trafilatura:8001/extract',
@@ -8,8 +8,12 @@ const ENV = {
   MARKITDOWN_URL: 'http://markitdown:8003/convert',
 };
 
+// What a current sidecar reports. Only Playwright is checked for `policy`,
+// the others ignore the extra field.
+const HEALTHY_BODY = { ok: true, policy: { ssrf: MIN_PLAYWRIGHT_POLICY } };
+
 // Minimal Response stand-in: the checker only reads ok/status/json().
-const reply = (body = { ok: true }, status = 200) => ({
+const reply = (body = HEALTHY_BODY, status = 200) => ({
   ok: status >= 200 && status < 300,
   status,
   json: async () => body,
@@ -122,7 +126,82 @@ describe('createStatusChecker', () => {
       status: 200,
       json: async () => { throw new SyntaxError('Unexpected token'); },
     }));
+    const status = await createStatusChecker({
+      fetch,
+      env: { TRAFILATURA_URL: ENV.TRAFILATURA_URL, MARKITDOWN_URL: ENV.MARKITDOWN_URL },
+    })();
+
+    assert.equal(status.ok, true);
+    assert.equal(status.services.trafilatura.status, 'ok');
+  });
+
+  it('accepts a Playwright sidecar that reports the address policy', async () => {
+    const fetch = fakeFetch(() => reply());
     const status = await createStatusChecker({ fetch, env: ENV })();
+
+    assert.equal(status.ok, true);
+    assert.equal(status.services.playwright.status, 'ok');
+  });
+
+  it('flags a Playwright sidecar without the policy as degraded', async () => {
+    // A pullmd-playwright image from before v3.15.2: healthy, renders fine,
+    // but follows redirects into internal hosts (GHSA-26wr-prg5-vr77).
+    const fetch = fakeFetch((url) => (url.includes('playwright')
+      ? reply({ ok: true, playwright: '1.49.0', browser: 'chromium' })
+      : reply()));
+    const status = await createStatusChecker({ fetch, env: ENV })();
+
+    assert.equal(status.ok, false);
+    assert.equal(status.services.playwright.status, 'degraded');
+    assert.equal(status.services.playwright.error, 'policy-missing');
+    assert.equal(typeof status.services.playwright.latencyMs, 'number');
+    assert.equal(status.services.trafilatura.status, 'ok');
+  });
+
+  it('rejects malformed or too-old policy markers', async () => {
+    for (const policy of [{ ssrf: 0 }, { ssrf: '1' }, { ssrf: true }, { ssrf: 0.5 }, {}, 'enforced', null]) {
+      const fetch = fakeFetch(() => reply({ ok: true, policy }));
+      const status = await createStatusChecker({ fetch, env: { PLAYWRIGHT_URL: ENV.PLAYWRIGHT_URL } })();
+      assert.equal(status.services.playwright.status, 'degraded', JSON.stringify(policy));
+    }
+  });
+
+  it('accepts a newer policy revision', async () => {
+    const fetch = fakeFetch(() => reply({ ok: true, policy: { ssrf: MIN_PLAYWRIGHT_POLICY + 1 } }));
+    const status = await createStatusChecker({ fetch, env: { PLAYWRIGHT_URL: ENV.PLAYWRIGHT_URL } })();
+
+    assert.equal(status.services.playwright.status, 'ok');
+  });
+
+  it('treats a non-JSON Playwright health body as policy-missing', async () => {
+    const fetch = fakeFetch(() => ({
+      ok: true,
+      status: 200,
+      json: async () => { throw new SyntaxError('Unexpected token'); },
+    }));
+    const status = await createStatusChecker({ fetch, env: { PLAYWRIGHT_URL: ENV.PLAYWRIGHT_URL } })();
+
+    assert.equal(status.ok, false);
+    assert.equal(status.services.playwright.error, 'policy-missing');
+  });
+
+  it('reports unhealthy before policy-missing', async () => {
+    // A browser that failed to launch is the more urgent problem.
+    const fetch = fakeFetch(() => reply({ ok: false, browser: null }));
+    const status = await createStatusChecker({ fetch, env: { PLAYWRIGHT_URL: ENV.PLAYWRIGHT_URL } })();
+
+    assert.deepEqual(
+      { status: status.services.playwright.status, error: status.services.playwright.error },
+      { status: 'down', error: 'unhealthy' },
+    );
+  });
+
+  it('does not expect a policy from trafilatura or markitdown', async () => {
+    const fetch = fakeFetch(() => reply({ ok: true }));
+    const status = await createStatusChecker({
+      fetch,
+      env: { TRAFILATURA_URL: ENV.TRAFILATURA_URL, MARKITDOWN_URL: ENV.MARKITDOWN_URL },
+    })();
 
     assert.equal(status.ok, true);
   });

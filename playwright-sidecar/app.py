@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from playwright.async_api import async_playwright, TimeoutError as PWTimeout
 import importlib.metadata
 
-from ssrf import AllowList, PolicyError, assert_url_allowed, url_target
+from ssrf import POLICY, AllowList, PolicyError, assert_url_allowed, url_target
 from ua_metadata import build_ua_metadata
 
 logging.basicConfig(level=logging.INFO)
@@ -235,6 +235,7 @@ def health():
         "ok": browser is not None,
         "playwright": importlib.metadata.version("playwright"),
         "browser": "chromium" if browser else None,
+        "policy": POLICY,
     }
 
 

@@ -726,9 +726,10 @@ Reported as [#41](https://github.com/AeternaLabsHQ/pullmd/issues/41), shipped in
 }
 ```
 
-- `status` is `ok`, `down`, or `not-configured`. A sidecar you never configured is not a failure — self-hosting without Playwright or markitdown is a supported setup.
-- `error` is one of `unreachable`, `timeout`, `unhealthy` (answered `200` but reports itself broken), `http <code>`, or `misconfigured`. Deliberately a closed vocabulary: the endpoint is public and must not echo internal hostnames.
-- HTTP **`200`** when every configured sidecar answers, **`503`** when at least one is down, so a plain HTTP check catches it without keyword matching.
+- `status` is `ok`, `down`, `degraded`, or `not-configured`. A sidecar you never configured is not a failure — self-hosting without Playwright or markitdown is a supported setup.
+- `error` is one of `unreachable`, `timeout`, `unhealthy` (answered `200` but reports itself broken), `http <code>`, `misconfigured`, or `policy-missing`. Deliberately a closed vocabulary: the endpoint is public and must not echo internal hostnames.
+- `degraded` / `policy-missing` means the Playwright sidecar answers but does not report that it enforces the outbound address policy (`"policy": {"ssrf": 1}` in its `/health`). That is a `pullmd-playwright` image older than v3.15.2 running next to a newer `pullmd`: rendering works, but Chromium follows redirects, meta refreshes and iframes into internal hosts ([GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77)). Update `pullmd-playwright` to the same release as `pullmd`. The check only reports; it does not stop renders.
+- HTTP **`200`** when every configured sidecar is `ok`, **`503`** when at least one is `down` or `degraded`, so a plain HTTP check catches it without keyword matching.
 - Results are cached for 5 seconds and concurrent callers share one round of probes, so polling it cannot amplify into internal traffic.
 
 Why it exists: a broken sidecar does not take PullMD down, it silently degrades extraction quality — pages that need a browser render come back near-empty while everything still answers `200`. Without an explicit check that can go unnoticed for a long time.
