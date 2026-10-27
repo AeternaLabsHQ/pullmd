@@ -869,7 +869,7 @@ On success, `source` becomes `pdf-ocr` and the frontmatter gains a `pdf_pages` f
 
 **Self-hosted / heavy local engines (advanced)**
 
-`PULLMD_PDF_OCR_BASE_URL` can point at any compatible endpoint. Operators who want fully local OCR can run an engine such as [Docling](https://github.com/DS4SD/docling) themselves and set `_BASE_URL` to its address. Be aware that such engines are heavy - a multi-GB container image, and model cold-start times of tens of seconds on first request are typical. This is deliberate: pullmd does not bundle any heavy OCR engine. The reference Mistral OCR path uses a lightweight cloud API call; self-hosting a heavy local engine is an advanced operator choice.
+`PULLMD_PDF_OCR_BASE_URL` can point at any endpoint that speaks the Mistral OCR API: pullmd sends `POST {BASE_URL}/ocr` with `{"model": ..., "document": {"type": "document_url", "document_url": ...}}` and reads the Markdown from `pages[].markdown` in the response. Local engines such as [Docling](https://github.com/docling-project/docling) have their own API and do not work here directly; wiring one in needs a small adapter in between that translates the request and response. Be aware that such engines are also heavy - a multi-GB container image, and model cold-start times of tens of seconds on first request are typical. This is deliberate: pullmd does not bundle any heavy OCR engine. The reference Mistral OCR path uses a lightweight cloud API call; running a local engine behind an adapter is an advanced operator choice. The OCR tier only handles PDFs; other document types always go through markitdown.
 
 ### Source-specific frontmatter fields
 
