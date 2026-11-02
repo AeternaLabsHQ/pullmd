@@ -50,6 +50,13 @@ labels it as machine-derived from the image; consumers should treat it like any
 other fetched page text. This is inherent to describing arbitrary images and
 not a vulnerability in pullmd.
 
+Without sign-in (`PULLMD_AUTH_MODE` unset or `disabled`) and with public
+history on (the default), every client that can reach the port can list
+recent conversions including their share ids, and can delete cache entries.
+This is the documented open mode, not a vulnerability. Operators who share an
+instance should enable sign-in or set `DISABLE_PUBLIC_HISTORY=true`, which
+also refuses anonymous deletes, or keep the port off public networks.
+
 ## Supported versions
 
 Only the latest minor release receives fixes. Upgrade before reporting.

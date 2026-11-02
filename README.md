@@ -243,7 +243,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `REDDIT_CLIENT_ID`     | no       | OAuth credentials for Reddit. Without them, PullMD uses the public JSON API (lower rate limit).     |
 | `REDDIT_CLIENT_SECRET` | no       |                                                                                                      |
 | `REDDIT_USER_AGENT`    | no       | Reddit requires a unique UA. Default: `PullMD/1.0 (URL-to-Markdown service)`.                       |
-| `DISABLE_PUBLIC_HISTORY` | no     | When `true`, hides the global recent-conversions list and archive (`/api/history` + `/api/archive` return 403, the MCP `list_recent` tool returns an error, `/api/stats` omits its per-domain lists, frontend hides the section). `/s/:id` share links keep working. Default: `false`. |
+| `DISABLE_PUBLIC_HISTORY` | no     | When `true`, hides the global recent-conversions list and archive (`/api/history` + `/api/archive` return 403, so do anonymous deletes via `DELETE /api/cache` and `/api/cache/:id`, the MCP `list_recent` tool returns an error, `/api/stats` omits its per-domain lists, frontend hides the section). `/s/:id` share links keep working. Default: `false`. |
 | `PULLMD_USER_AGENT`    | no       | Pin a single outbound User-Agent for every web fetch. Disables rotation. Useful for CI or when one specific UA is known to work. |
 | `PULLMD_UA_FEED_URL`   | no       | URL of a JSON feed of current real-world UAs. Default: [WinFuture23/real-world-user-agents](https://github.com/WinFuture23/real-world-user-agents). Set to an empty string to disable live refresh and rely on the built-in seed pool. |
 | `PULLMD_AUTH_MODE`     | no       | `disabled` (default) / `single-admin` / `multi-user`. See "Authentication" below.                   |
@@ -277,9 +277,10 @@ because Reddit's API expects a stable, identifying UA.
 instances (multi-tenant VPS, office deployments). Conversions still
 get cached and assigned share IDs; users just can't see what *other*
 users have fetched (the MCP `list_recent` tool follows the same rule,
-and `/api/stats` leaves out its per-domain lists). Anyone with a known
+and `/api/stats` leaves out its per-domain lists), and they can't
+delete cache entries either. Anyone with a known
 `/s/:id` link still gets their markdown back. Share ids are 128 random bits, so a link cannot
-be guessed, and `/s/:id` throttles unknown-id lookups to 120 per
+be guessed (with public history on, the history lists them anyway), and `/s/:id` throttles unknown-id lookups to 120 per
 minute and IP (valid links are never throttled). With sign-in
 enabled (`PULLMD_AUTH_MODE=single-admin` or `multi-user`) history is
 scoped per user anyway; the switch matters for instances without
