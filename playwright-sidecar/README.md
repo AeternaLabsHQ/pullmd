@@ -6,7 +6,7 @@ This image is **not** useful on its own. Use it together with `aeternalabshq/pul
 
 ## Endpoints
 
-- `GET /health` → `{"ok": true, "playwright": "<version>", "browser": "chromium"}`
+- `GET /health` → `{"ok": true, "playwright": "<version>", "browser": "chromium", "policy": {"ssrf": 1}}`. `policy.ssrf` is the revision of the outbound address policy (see below); pullmd's `/api/status` reports a sidecar without it as `degraded`.
 - `POST /render` body `{"url": "https://…"}` → `text/html` (rendered DOM after JavaScript execution)
 - Returns `503 Retry-After: 5` when the concurrency limit (default 4) is saturated, `504` on render timeout (20s hard cap).
 

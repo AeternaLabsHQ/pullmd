@@ -49,7 +49,24 @@ describe('GET /api/status', () => {
     assert.equal(res.body.services.playwright.error, 'unreachable');
   });
 
-  it('reports 503 rather than 500 when the check itself throws', async () => {
+  it('returns 503 when the Playwright sidecar does not enforce the address policy', async () => {
+    const degraded = {
+      ...HEALTHY,
+      ok: false,
+      services: {
+        ...HEALTHY.services,
+        playwright: { status: 'degraded', error: 'policy-missing', latencyMs: 3 },
+      },
+    };
+    const app = createApp({ cache: null, statusChecker: async () => degraded });
+    const res = await get(app, '/api/status');
+
+    assert.equal(res.status, 503);
+    assert.equal(res.body.services.playwright.status, 'degraded');
+    assert.equal(res.body.services.playwright.error, 'policy-missing');
+  });
+
+    it('reports 503 rather than 500 when the check itself throws', async () => {
     const app = createApp({
       cache: null,
       statusChecker: async () => { throw new Error('boom'); },

@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Added
+
+- **`/api/status` flags a Playwright sidecar that predates the SSRF fix.** The fix for [GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77) (v3.15.2) lives in the sidecar, and an older `pullmd-playwright` image silently ignores the `allowedHosts` field pullmd sends, so a new `pullmd` next to an old sidecar stayed vulnerable with nothing to show for it. The sidecar's `/health` now reports `"policy": {"ssrf": 1}`, and `/api/status` reports a Playwright sidecar without it (or with an older revision) as `{"status": "degraded", "error": "policy-missing"}` and answers `503`, so the documented plain-HTTP Uptime Kuma monitor catches it. Renders are not blocked; the check only reports. **Behaviour change on upgrade:** an instance that updates `pullmd` but keeps a `pullmd-playwright` image older than 3.15.2 now gets `503` from `/api/status` until the sidecar is updated too.
+
 ### Fixed
 
 - **Reddit pages that are not posts no longer crash the extractor.** Any `reddit.com` URL went down the post path, so a rules page, wiki page, user profile or sorted listing (`/r/x/top/`) failed with `Cannot read properties of undefined (reading 'data')`. Only posts (including comment permalinks), galleries and subreddit front pages are read now; anything else answers `400` with `{"code":"reddit_unsupported_page"}` and a readable message, without a request to Reddit. The MCP `read_url` tool returns the same message.

@@ -5,7 +5,7 @@ Exits non-zero on the first failed assertion.
 """
 import asyncio
 
-from ssrf import AllowList, PolicyError, assert_url_allowed, is_blocked_ip, url_target
+from ssrf import POLICY, AllowList, PolicyError, assert_url_allowed, is_blocked_ip, url_target
 
 
 def run(coro):
@@ -133,6 +133,26 @@ def test_cache_memoises_lookups():
     run(assert_url_allowed("https://example.com/b", allow, resolve, cache))
     run(assert_url_allowed("https://example.com:8443/c", allow, resolve, cache))
     assert calls == ["example.com"], calls
+
+
+def test_policy_marker_is_a_positive_revision():
+    # lib/status.js reads policy.ssrf and requires an integer >= 1.
+    assert isinstance(POLICY["ssrf"], int) and not isinstance(POLICY["ssrf"], bool)
+    assert POLICY["ssrf"] >= 1
+
+
+def test_health_reports_the_policy_marker():
+    # app.py needs Playwright to import, so check the handler's source instead:
+    # /health must return the marker whether or not the browser is up.
+    import ast
+    from pathlib import Path
+
+    tree = ast.parse((Path(__file__).parent / "app.py").read_text())
+    health = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "health")
+    returned = next(n.value for n in ast.walk(health) if isinstance(n, ast.Return))
+    assert isinstance(returned, ast.Dict)
+    keys = {k.value: v for k, v in zip(returned.keys, returned.values)}
+    assert isinstance(keys.get("policy"), ast.Name) and keys["policy"].id == "POLICY", keys
 
 
 if __name__ == "__main__":
