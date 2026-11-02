@@ -1250,7 +1250,17 @@ export function createApp(overrides = {}) {
     res.json(cache.historyPage(limit, offset));
   });
 
-  app.delete('/api/cache/:id', gate, (req, res) => {
+  // With public history off, an anonymous caller may not see other people's
+  // conversions, so they may not delete them either. Without this, the
+  // privacy switch hid the list while DELETE /api/cache still wiped it.
+  const denyAnonymousPrivate = (req, res, next) => {
+    if (disablePublicHistory && !req.user) {
+      return res.status(403).json({ error: PUBLIC_HISTORY_DISABLED });
+    }
+    next();
+  };
+
+  app.delete('/api/cache/:id', gate, denyAnonymousPrivate, (req, res) => {
     if (!cache) {
       return res.status(404).json({ error: 'Cache not available' });
     }
@@ -1266,7 +1276,7 @@ export function createApp(overrides = {}) {
     res.json({ ok: true, id, scope: isGlobal ? 'global' : 'user' });
   });
 
-  app.delete('/api/cache', gate, (req, res) => {
+  app.delete('/api/cache', gate, denyAnonymousPrivate, (req, res) => {
     if (!cache) {
       return res.status(404).json({ error: 'Cache not available' });
     }

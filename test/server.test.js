@@ -1224,6 +1224,37 @@ describe('DISABLE_PUBLIC_HISTORY', () => {
     assert.match(json.error, /disabled/i);
   });
 
+  it('refuses anonymous DELETE /api/cache when flag is on', async () => {
+    const cache = createCache(':memory:');
+    cache.put({ url: 'https://a.com', title: 'A', markdown: '# A', source: 'readability' });
+    const app = createApp({ cache, disablePublicHistory: true });
+    const res = await request(app, '/api/cache', { method: 'DELETE' });
+    assert.equal(res.status, 403);
+    assert.match(JSON.parse(res.body).error, /disabled/i);
+    assert.equal(cache.history(10).length, 1);
+  });
+
+  it('refuses anonymous DELETE /api/cache/:id when flag is on', async () => {
+    const cache = createCache(':memory:');
+    cache.put({ url: 'https://a.com', title: 'A', markdown: '# A', source: 'readability' });
+    const [row] = cache.history(1);
+    const app = createApp({ cache, disablePublicHistory: true });
+    const res = await request(app, '/api/cache/' + row.id, { method: 'DELETE' });
+    assert.equal(res.status, 403);
+    assert.match(JSON.parse(res.body).error, /disabled/i);
+    assert.equal(cache.history(10).length, 1);
+  });
+
+  it('still allows anonymous deletes when flag is off (open instance)', async () => {
+    const cache = createCache(':memory:');
+    cache.put({ url: 'https://a.com', title: 'A', markdown: '# A', source: 'readability' });
+    const [row] = cache.history(1);
+    const app = createApp({ cache, disablePublicHistory: false });
+    const res = await request(app, '/api/cache/' + row.id, { method: 'DELETE' });
+    assert.equal(res.status, 200);
+    assert.equal(cache.history(10).length, 0);
+  });
+
   it('keeps /s/:id working when flag is on (direct share access)', async () => {
     const cache = createCache(':memory:');
     const id = cache.put({ url: 'https://example.com/x', title: 'X', markdown: '# Hidden but reachable', source: 'readability', client: 'browser' });
