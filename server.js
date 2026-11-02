@@ -1,5 +1,5 @@
 import express from 'express';
-import { extractPost, normalizeRedditUrl } from './lib/reddit.js';
+import { extractPost, normalizeRedditUrl, RedditUnsupportedPageError } from './lib/reddit.js';
 import { extractHn, normalizeHnUrl } from './lib/hackernews.js';
 import { extractWeb, extractHtml, extractFile } from './lib/web.js';
 import { createCache, readCacheRetentionDays } from './lib/cache.js';
@@ -605,6 +605,9 @@ export function createApp(overrides = {}) {
         res.set('Content-Type', 'text/markdown; charset=utf-8');
         return res.send(markdown);
       } catch (err) {
+        if (err instanceof RedditUnsupportedPageError) {
+          return res.status(400).json({ error: err.message, code: err.code });
+        }
         if (err.message.includes('not found') || err.message.includes('Not found')) {
           return res.status(404).json({ error: 'Post not found' });
         }
