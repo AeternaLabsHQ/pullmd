@@ -1168,7 +1168,7 @@
   </style>
 </head>
 <body data-theme="dark" data-lang="de">
-  <div id="drop-overlay" aria-hidden="true"><div class="drop-box" data-i18n="drop.hint">HTML- oder E-Mail-Datei hier ablegen</div></div>
+  <div id="drop-overlay" aria-hidden="true"><div class="drop-box" data-i18n="drop.hint">Datei hier ablegen</div></div>
   <script>
     // Inline pre-paint: apply persisted/system theme + lang before first render
     (function () {
@@ -1315,10 +1315,10 @@
         <kbd>Enter</kbd>
       </p>
       <label class="drop-open">
-        <input type="file" id="html-file-input" accept=".html,.htm,text/html,.eml,message/rfc822" hidden>
+        <input type="file" id="html-file-input" accept=".html,.htm,text/html,.eml,.msg,.mhtml,.mht,.txt,.md,.markdown,.srt,.vtt,message/rfc822,text/plain,text/markdown" hidden>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="m7 10 5 5 5-5"></path><path d="M5 21h14"></path></svg>
-        <span class="aff-drag" data-i18n="drop.affordance">Alternativ: HTML- oder E-Mail-Datei hierher ziehen oder auswählen</span>
-        <span class="aff-open" data-i18n="drop.affordanceOpen">Alternativ: HTML- oder E-Mail-Datei auswählen</span>
+        <span class="aff-drag" data-i18n="drop.affordance">Alternativ: Datei hierher ziehen oder auswählen</span>
+        <span class="aff-open" data-i18n="drop.affordanceOpen">Alternativ: Datei auswählen</span>
       </label>
     </div>
 
@@ -1480,13 +1480,13 @@
           'err.empty':         'Leere Antwort vom Server.',
           'err.network':       'Netzwerkfehler: Server nicht erreichbar.',
           'err.deleteFailed':  'Löschen fehlgeschlagen.',
-          'drop.hint':         'HTML- oder E-Mail-Datei hier ablegen',
-          'drop.affordance':   'Alternativ: HTML- oder E-Mail-Datei hierher ziehen oder auswählen',
-          'drop.affordanceOpen': 'Alternativ: HTML- oder E-Mail-Datei auswählen',
+          'drop.hint':         'Datei hier ablegen',
+          'drop.affordance':   'Alternativ: Datei hierher ziehen oder auswählen',
+          'drop.affordanceOpen': 'Alternativ: Datei auswählen',
           'drop.hintDoc':          'Datei hier ablegen',
           'drop.affordanceDoc':    'Alternativ: Datei hierher ziehen oder auswählen',
           'drop.affordanceOpenDoc': 'Alternativ: Datei auswählen',
-          'err.notHtml':       'Nur HTML-Dateien (.html, .htm) und E-Mails (.eml) werden unterstützt.',
+          'err.notHtml':       'Dieses Dateiformat wird nicht unterstützt.',
           'err.fileTooLarge':  'Datei zu groß (max. 10 MB).',
           'err.fileTooLargeDoc': 'Datei zu groß (max. 25 MB).',
           'badge.chars':       '{n} chars',
@@ -1543,13 +1543,13 @@
           'err.empty':         'Empty response from server.',
           'err.network':       'Network error: server unreachable.',
           'err.deleteFailed':  'Delete failed.',
-          'drop.hint':         'Drop HTML or e-mail file here',
-          'drop.affordance':   'Alternatively: drag an HTML or e-mail file here or browse',
-          'drop.affordanceOpen': 'Alternatively: choose an HTML or e-mail file',
+          'drop.hint':         'Drop file here',
+          'drop.affordance':   'Alternatively: drag a file here or browse',
+          'drop.affordanceOpen': 'Alternatively: choose a file',
           'drop.hintDoc':          'Drop file here',
           'drop.affordanceDoc':    'Alternatively: drag a file here or browse',
           'drop.affordanceOpenDoc': 'Alternatively: choose a file',
-          'err.notHtml':       'Only HTML files (.html, .htm) and e-mails (.eml) are supported.',
+          'err.notHtml':       'This file type is not supported.',
           'err.fileTooLarge':  'File too large (max 10 MB).',
           'err.fileTooLargeDoc': 'File too large (max 25 MB).',
           'badge.chars':       '{n} chars',
@@ -2183,7 +2183,7 @@
             if (affOpen) affOpen.setAttribute('data-i18n', 'drop.affordanceOpenDoc');
             window.PullMD.setLang(window.PullMD.getLang());
             var picker = document.getElementById('html-file-input');
-            if (picker) picker.accept = '.html,.htm,.eml,message/rfc822,.pdf,.docx,.pptx,.xls,.xlsx,.epub,.zip,.csv,.json,.xml,text/html,application/pdf';
+            if (picker) picker.accept = '.html,.htm,.eml,.msg,.mhtml,.mht,.txt,.md,.markdown,.srt,.vtt,message/rfc822,text/plain,text/markdown,.pdf,.docx,.pptx,.xls,.xlsx,.epub,.zip,.csv,.json,.xml,text/html,application/pdf';
           }
           if (markitdownMediaEnabled) {
             var mpicker = document.getElementById('html-file-input');
@@ -2203,13 +2203,16 @@
         return /\.html?$/i.test(file.name || '');
       }
 
-      // E-mails are parsed by pullmd itself - always available, no sidecar.
-      function isEmlFile(file) {
-        return file.type === 'message/rfc822' || /\.eml$/i.test(file.name || '');
+      // Formats pullmd reads itself (e-mail, saved pages, text, subtitles) -
+      // always available, no sidecar.
+      var LOCAL_EXT_RE = /\.(eml|msg|mhtml?|mht|txt|md|markdown|srt|vtt)$/i;
+      function isLocalFormatFile(file) {
+        if (LOCAL_EXT_RE.test(file.name || '')) return true;
+        return /^(message\/rfc822|text\/plain|text\/markdown|text\/vtt)$/i.test(file.type || '');
       }
 
       function isDocFile(file) {
-        if (isEmlFile(file)) return true;
+        if (isLocalFormatFile(file)) return true;
         if (markitdownEnabled && DOC_EXT_RE.test(file.name || '')) return true;
         if (markitdownMediaEnabled && MEDIA_EXT_RE.test(file.name || '')) return true;
         return false;

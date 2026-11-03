@@ -932,7 +932,7 @@ export function createApp(overrides = {}) {
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       return res.send(outMd);
     } catch (err) {
-      if (err.code === 'not_email') {
+      if (err.status === 422) {
         return res.status(422).json({ error: err.message });
       }
       console.error('File conversion error:', err);

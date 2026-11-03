@@ -548,7 +548,7 @@ for it.
 | `GET /api?url=…`       | Markdown (or JSON / plain text via `format=`). Also handles direct links to documents (PDF, Office, EPUB, …) when the markitdown sidecar is configured. |
 | `GET /api/stream?url=…`| Server-Sent Events stream of extraction-stage status, ending in a `result` event. Used by the PWA. |
 | `POST /api/html`       | Convert a local/raw HTML document (body = HTML, max 10 MB). Never cached — no history entry, no share link. |
-| `POST /api/file`       | Convert an uploaded document (raw file bytes in body; set `Content-Type` to the file's MIME type; filename via `X-Filename` header or `?filename=`; max 25 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`) for document types (PDF, Office, EPUB, ...); image and audio uploads instead use the `PULLMD_VISION_*` / `PULLMD_STT_*` tier (no markitdown container needed); `.eml` e-mails are parsed by pullmd itself (see [E-mail upload](#e-mail-upload)). |
+| `POST /api/file`       | Convert an uploaded document (raw file bytes in body; set `Content-Type` to the file's MIME type; filename via `X-Filename` header or `?filename=`; max 25 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`) for document types (PDF, Office, EPUB, ...); image and audio uploads instead use the `PULLMD_VISION_*` / `PULLMD_STT_*` tier (no markitdown container needed); e-mails (`.eml`, `.msg`), saved pages (`.mhtml`), text (`.txt`, `.md`) and subtitles (`.srt`, `.vtt`) are read by pullmd itself (see [Local formats](#local-formats-e-mail-saved-pages-text-subtitles)). |
 | `GET /s/:id`           | Cached Markdown by share id; refreshes from source if > 1 h old.                 |
 | `GET /api/history`     | Recent conversions (JSON). `?limit=` 1-100, default 20. Signed-in callers see their own. |
 | `GET /api/archive`     | Paginated full archive. `?limit=` 1-200, default 50; `?offset=`.                 |
@@ -764,9 +764,18 @@ When the markitdown sidecar is running (set `MARKITDOWN_URL=http://markitdown:80
 
 If `MARKITDOWN_URL` is unset, document conversion is unavailable: a document URL (`GET /api?url=…`) and `POST /api/file` both return `502`. Regular HTML pages are unaffected, and the PWA hides the document-upload affordance (it reads the `markitdown` flag from `/api/config`).
 
-### E-mail upload
+### Local formats (e-mail, saved pages, text, subtitles)
 
-Saved e-mails (`.eml`, RFC 822) go through the same `POST /api/file` upload, drag-and-drop and file picker, but are parsed inside pullmd, so they work without the markitdown sidecar. The result is a header block (subject as `#` title, then From, To, Cc and Date) followed by the message text: the HTML part runs through the same Readability/Trafilatura pipeline as `POST /api/html`, and the plain-text part is used when there is no HTML part or it yields almost nothing. Attachments are listed by name and never converted. `frontmatter=true` adds `title` (subject), `author` (sender), `published` (date) and `source: email`; `lang=en` switches the header labels from German to English. A file without mail headers returns `422`. Like every upload, nothing is cached or shared.
+These go through the same `POST /api/file` upload, drag-and-drop and file picker, but are read inside pullmd, so they work without the markitdown sidecar. The file extension decides the format; without one, the `Content-Type` does. Like every upload, nothing is cached or shared.
+
+| Format | Result | `X-Source` |
+|---|---|---|
+| E-mail: `.eml` (RFC 822), `.msg` (Outlook) | Subject as `#` title, then From, To, Cc, Bcc and Date, then the message text. The HTML part runs through the same Readability/Trafilatura pipeline as `POST /api/html`; the plain-text part is used when there is no HTML part or it yields almost nothing (a short HTML-only mail is converted directly). Attachments are listed by name, never converted. For `.msg`, HTML that exists only inside the compressed RTF body is not unpacked; the plain-text body is used instead. `frontmatter=true` adds `title` (subject), `author` (sender) and `published` (date); `lang=en` switches the header labels from German to English. | `email` |
+| Saved page: `.mhtml` / `.mht` | The HTML root part is extracted like `POST /api/html`. The original URL (`Snapshot-Content-Location`) is passed along, so it lands in the frontmatter `url` and site recipes apply. | extractor name (`readability`, ...) |
+| Text: `.txt`, `.md` | Passed through; a `# title` line (first heading, YAML `title:`, else the file name) is added when missing. A note's own YAML frontmatter is kept as a fenced `yaml` block so it cannot clash with pullmd's. Non-UTF-8 files are decoded as Windows-1252. | `text` / `markdown` |
+| Subtitles: `.srt`, `.vtt` | Cue numbers, timestamps and styling tags removed, rolling auto-caption repeats collapsed, a new paragraph after pauses of 2 seconds or more. Title is the file name. | `subtitles` |
+
+A file that does not match its format (no mail headers, no subtitle cues, binary data posing as text) or a saved page with almost no content returns `422`.
 
 The default `docker-compose.yml` includes the `markitdown` sidecar with `MARKITDOWN_URL` pre-wired. To opt out, remove the `markitdown` service block and unset the env var.
 

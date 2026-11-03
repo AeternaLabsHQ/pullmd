@@ -102,8 +102,11 @@ curl -s -X POST --data-binary @page.html -H 'Content-Type: text/html' -H 'X-File
 # Upload a local document (PDF/DOCX/…, max 25 MB)
 curl -s -X POST --data-binary @report.pdf -H 'Content-Type: application/pdf' -H 'X-Filename: report.pdf' "__PULLMD_URL__/api/file"
 
-# Read a saved e-mail (.eml): header block + message text, attachments only listed (no sidecar needed)
+# Read a saved e-mail (.eml or Outlook .msg): header block + message text, attachments only listed (no sidecar needed)
 curl -s -X POST --data-binary @mail.eml -H 'Content-Type: message/rfc822' -H 'X-Filename: mail.eml' "__PULLMD_URL__/api/file?lang=en"
+
+# The same upload also reads saved pages (.mhtml, keeps the original URL), .txt/.md and subtitles (.srt/.vtt)
+curl -s -X POST --data-binary @talk.vtt -H 'X-Filename: talk.vtt' "__PULLMD_URL__/api/file"
 ```
 
 ### Step 2: Check if it worked
