@@ -164,8 +164,24 @@ describe('plain text and Markdown', () => {
     assert.equal(plainTextKind('text/plain', ''), 'text');
     assert.equal(plainTextKind('text/plain', 'daten.csv'), null);
     assert.equal(plainTextKind('text/markdown', 'x'), 'markdown');
-    assert.equal(plainTextKind('text/plain', 'server.log'), 'text');
+    // Any other extension: text/plain alone does not make it text (.log
+    // files are read as code files before this check anyway).
+    assert.equal(plainTextKind('text/plain', 'server.log'), null);
+    assert.equal(plainTextKind('text/plain', 'Bericht.docx'), null);
+    assert.equal(plainTextKind('text/markdown', 'Folien.pptx'), null);
     assert.equal(plainTextKind('application/octet-stream', 'server.log'), null);
+  });
+
+  it('reads a heading line with a long blank run in linear time', async () => {
+    const t0 = Date.now();
+    const r = await extractPlainText(Buffer.from(`# a${' '.repeat(100000)}b ##
+
+c${' '.repeat(100000)}d   
+
+`), { filename: 'n.md', kind: 'markdown' });
+    assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+    assert.equal(r.title, `a${' '.repeat(100000)}b`);
+    assert.ok(r.markdown.endsWith(`c${' '.repeat(100000)}d\n`));
   });
 
   it('titles a .txt by its file name', async () => {
