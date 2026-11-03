@@ -9,6 +9,12 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **E-mail upload (`.eml`).** Drop a saved e-mail onto the web UI, pick it with the file picker, or `POST` it to `/api/file`, and get the message as Markdown: the subject as title, From, To, Cc and Date below it, then the message text. The HTML part goes through the same extraction as `POST /api/html`; the plain-text part is used when there is no HTML part or it yields almost nothing. Attachments are listed by name only, not converted. Parsing happens inside pullmd (new dependency `postal-mime`), so it works without the markitdown sidecar. `frontmatter=true` fills `title`, `author`, `published` and `source: email`; `lang=en` switches the header labels to English (the web UI sends its current language). A file without mail headers returns `422`. Like other uploads, nothing is cached or shared.
+
 ## [3.17.0] - 2026-11-02
 
 ### Added

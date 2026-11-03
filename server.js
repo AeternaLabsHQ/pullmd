@@ -873,7 +873,7 @@ export function createApp(overrides = {}) {
   // history, no share link), telemetry logs a constant placeholder.
   const MAX_FILE_BYTES = '25mb';
   app.post('/api/file', gate, express.raw({ type: () => true, limit: MAX_FILE_BYTES }), async (req, res) => {
-    const { format, frontmatter, pdf } = req.query;
+    const { format, frontmatter, pdf, lang } = req.query;
     let filename = req.query.filename;
     const filenameHeader = req.headers['x-filename'];
     if (filenameHeader) {
@@ -890,7 +890,7 @@ export function createApp(overrides = {}) {
     const t0 = Date.now();
 
     try {
-      const result = await extractFileFn(req.body, { filename, contentType, pdfOcr: pdf === 'ocr', llmAllowed: llmBudget.forRequest(req) });
+      const result = await extractFileFn(req.body, { filename, contentType, pdfOcr: pdf === 'ocr', llmAllowed: llmBudget.forRequest(req), lang: lang === 'en' ? 'en' : 'de' });
 
       const fm = wantFrontmatter
         ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId: null })
@@ -932,6 +932,9 @@ export function createApp(overrides = {}) {
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       return res.send(outMd);
     } catch (err) {
+      if (err.code === 'not_email') {
+        return res.status(422).json({ error: err.message });
+      }
       console.error('File conversion error:', err);
       // 502: the markitdown sidecar is an upstream dependency (same as the web /api path).
       return res.status(502).json({ error: `Failed to convert file: ${err.message}` });

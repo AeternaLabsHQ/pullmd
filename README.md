@@ -548,7 +548,7 @@ for it.
 | `GET /api?url=…`       | Markdown (or JSON / plain text via `format=`). Also handles direct links to documents (PDF, Office, EPUB, …) when the markitdown sidecar is configured. |
 | `GET /api/stream?url=…`| Server-Sent Events stream of extraction-stage status, ending in a `result` event. Used by the PWA. |
 | `POST /api/html`       | Convert a local/raw HTML document (body = HTML, max 10 MB). Never cached — no history entry, no share link. |
-| `POST /api/file`       | Convert an uploaded document (raw file bytes in body; set `Content-Type` to the file's MIME type; filename via `X-Filename` header or `?filename=`; max 25 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`) for document types (PDF, Office, EPUB, ...); image and audio uploads instead use the `PULLMD_VISION_*` / `PULLMD_STT_*` tier (no markitdown container needed). |
+| `POST /api/file`       | Convert an uploaded document (raw file bytes in body; set `Content-Type` to the file's MIME type; filename via `X-Filename` header or `?filename=`; max 25 MB). Returns Markdown. Requires the markitdown sidecar (`MARKITDOWN_URL`) for document types (PDF, Office, EPUB, ...); image and audio uploads instead use the `PULLMD_VISION_*` / `PULLMD_STT_*` tier (no markitdown container needed); `.eml` e-mails are parsed by pullmd itself (see [E-mail upload](#e-mail-upload)). |
 | `GET /s/:id`           | Cached Markdown by share id; refreshes from source if > 1 h old.                 |
 | `GET /api/history`     | Recent conversions (JSON). `?limit=` 1-100, default 20. Signed-in callers see their own. |
 | `GET /api/archive`     | Paginated full archive. `?limit=` 1-200, default 50; `?offset=`.                 |
@@ -763,6 +763,10 @@ When the markitdown sidecar is running (set `MARKITDOWN_URL=http://markitdown:80
   The PWA supports both drag-and-drop and a file picker (desktop and mobile) for the same path.
 
 If `MARKITDOWN_URL` is unset, document conversion is unavailable: a document URL (`GET /api?url=…`) and `POST /api/file` both return `502`. Regular HTML pages are unaffected, and the PWA hides the document-upload affordance (it reads the `markitdown` flag from `/api/config`).
+
+### E-mail upload
+
+Saved e-mails (`.eml`, RFC 822) go through the same `POST /api/file` upload, drag-and-drop and file picker, but are parsed inside pullmd, so they work without the markitdown sidecar. The result is a header block (subject as `#` title, then From, To, Cc and Date) followed by the message text: the HTML part runs through the same Readability/Trafilatura pipeline as `POST /api/html`, and the plain-text part is used when there is no HTML part or it yields almost nothing. Attachments are listed by name and never converted. `frontmatter=true` adds `title` (subject), `author` (sender), `published` (date) and `source: email`; `lang=en` switches the header labels from German to English. A file without mail headers returns `422`. Like every upload, nothing is cached or shared.
 
 The default `docker-compose.yml` includes the `markitdown` sidecar with `MARKITDOWN_URL` pre-wired. To opt out, remove the `markitdown` service block and unset the env var.
 

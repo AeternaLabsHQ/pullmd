@@ -25,6 +25,7 @@
     "jose": "^6.2.12",
     "linkedom": "^0.18.13",
     "node-html-markdown": "^2.0.0",
+    "postal-mime": "^4.2.0",
     "zod": "^4.6.5"
   }
 }
