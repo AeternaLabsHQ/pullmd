@@ -77,4 +77,12 @@ describe('extractMetadata', () => {
     const meta = extractMetadata(html);
     assert.equal(meta.title, 'Heading Title');
   });
+  it('ignores <title> elements inside inline SVGs', () => {
+    const html = '<html><head><title>MHTML - Wikipedia</title></head><body><svg><title>PayPal Logo</title></svg><svg><title>Visa Logo</title></svg><p>x</p></body></html>';
+    assert.equal(extractMetadata(html).title, 'MHTML - Wikipedia');
+  });
+
+  it('still finds a title outside <head> when that is all there is', () => {
+    assert.equal(extractMetadata('<svg><title>Icon</title></svg><title>Seite</title><p>x</p>').title, 'Seite');
+  });
 });
