@@ -14,6 +14,7 @@
     "test": "node --test"
   },
   "dependencies": {
+    "@kenjiuno/decompressrtf": "^0.1.4",
     "@kenjiuno/msgreader": "^1.29.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@mozilla/readability": "^0.6.0",

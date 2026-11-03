@@ -105,7 +105,8 @@ curl -s -X POST --data-binary @report.pdf -H 'Content-Type: application/pdf' -H 
 # Read a saved e-mail (.eml or Outlook .msg): header block + message text, attachments only listed (no sidecar needed)
 curl -s -X POST --data-binary @mail.eml -H 'Content-Type: message/rfc822' -H 'X-Filename: mail.eml' "__PULLMD_URL__/api/file?lang=en"
 
-# The same upload also reads saved pages (.mhtml, keeps the original URL), .txt/.md and subtitles (.srt/.vtt)
+# The same upload also reads saved pages (.mhtml, keeps the original URL), OpenDocument (.odt/.ods/.odp), .rtf,
+# calendars/contacts (.ics/.vcf), .csv/.json/.xml, notebooks (.ipynb), source code, .txt/.md and subtitles (.srt/.vtt)
 curl -s -X POST --data-binary @talk.vtt -H 'X-Filename: talk.vtt' "__PULLMD_URL__/api/file"
 ```
 

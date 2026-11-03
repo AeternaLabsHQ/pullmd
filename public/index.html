@@ -2162,7 +2162,7 @@
       var dragDepth = 0;
 
       // Documents markitdown handles from bytes. Gated on /api/config.
-      var DOC_EXT_RE = /\.(pdf|docx|pptx|xlsx?|epub|zip|csv|json|xml)$/i;
+      var DOC_EXT_RE = /\.(pdf|docx|pptx|xlsx?|epub|zip)$/i;
       var MEDIA_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|tiff?|mp3|wav|m4a|ogg|flac|aac)$/i;
       var markitdownEnabled = false;
       var markitdownMediaEnabled = false;
@@ -2183,7 +2183,7 @@
             if (affOpen) affOpen.setAttribute('data-i18n', 'drop.affordanceOpenDoc');
             window.PullMD.setLang(window.PullMD.getLang());
             var picker = document.getElementById('html-file-input');
-            if (picker) picker.accept = '.html,.htm,.eml,.msg,.mhtml,.mht,.txt,.md,.markdown,.srt,.vtt,message/rfc822,text/plain,text/markdown,.pdf,.docx,.pptx,.xls,.xlsx,.epub,.zip,.csv,.json,.xml,text/html,application/pdf';
+            if (picker) picker.accept = '.html,.htm,text/html,' + LOCAL_ACCEPT + ',.pdf,.docx,.pptx,.xls,.xlsx,.epub,.zip,application/pdf';
           }
           if (markitdownMediaEnabled) {
             var mpicker = document.getElementById('html-file-input');
@@ -2203,13 +2203,34 @@
         return /\.html?$/i.test(file.name || '');
       }
 
-      // Formats pullmd reads itself (e-mail, saved pages, text, subtitles) -
-      // always available, no sidecar.
-      var LOCAL_EXT_RE = /\.(eml|msg|mhtml?|mht|txt|md|markdown|srt|vtt)$/i;
+      // Formats pullmd reads itself - always available, no sidecar. Mirrors
+      // the dispatch in lib/web.js extractFile().
+      var LOCAL_EXTS = [
+        'eml', 'msg', 'mhtml', 'mht', 'txt', 'md', 'markdown', 'srt', 'vtt',
+        'odt', 'ods', 'odp', 'rtf', 'ics', 'ical', 'vcf', 'vcard', 'ipynb',
+        'csv', 'tsv', 'tab', 'json', 'jsonl', 'ndjson', 'geojson', 'xml', 'rss', 'atom',
+        'rst', 'adoc', 'asciidoc', 'org', 'textile', 'wiki', 'nfo',
+        'py', 'pyw', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'java', 'kt', 'kts', 'scala',
+        'groovy', 'gradle', 'c', 'h', 'cpp', 'cc', 'cxx', 'hpp', 'hh', 'cs', 'go', 'rs',
+        'rb', 'php', 'swift', 'm', 'mm', 'dart', 'lua', 'pl', 'pm', 'r', 'jl', 'sh',
+        'bash', 'zsh', 'fish', 'ps1', 'psm1', 'bat', 'cmd', 'vb', 'vbs', 'sql', 'css',
+        'scss', 'sass', 'less', 'vue', 'svelte', 'astro', 'yaml', 'yml', 'toml', 'ini',
+        'cfg', 'conf', 'properties', 'tf', 'hcl', 'nix', 'graphql', 'gql', 'proto',
+        'diff', 'patch', 'dockerfile', 'makefile', 'mk', 'cmake', 'tex', 'bib', 'log'
+      ];
+      var LOCAL_EXT_RE = new RegExp('\\.(' + LOCAL_EXTS.join('|') + ')$', 'i');
+      var LOCAL_NAME_RE = /^(dockerfile|containerfile|gnumakefile|makefile|jenkinsfile|vagrantfile|gemfile|rakefile)$/i;
+      var LOCAL_TYPE_RE = /^(message\/rfc822|text\/(plain|markdown|vtt|calendar|vcard|x-vcard|csv|tab-separated-values|xml|rtf)|application\/(rtf|json|xml|vnd\.oasis\.opendocument\.(text|spreadsheet|presentation)))$/i;
+      var LOCAL_ACCEPT = LOCAL_EXTS.map(function (e) { return '.' + e; }).join(',') + ',message/rfc822,text/plain,text/markdown';
       function isLocalFormatFile(file) {
-        if (LOCAL_EXT_RE.test(file.name || '')) return true;
-        return /^(message\/rfc822|text\/plain|text\/markdown|text\/vtt)$/i.test(file.type || '');
+        var name = file.name || '';
+        if (LOCAL_EXT_RE.test(name) || LOCAL_NAME_RE.test(name)) return true;
+        return LOCAL_TYPE_RE.test(file.type || '');
       }
+      (function () {
+        var picker = document.getElementById('html-file-input');
+        if (picker) picker.accept = '.html,.htm,text/html,' + LOCAL_ACCEPT;
+      })();
 
       function isDocFile(file) {
         if (isLocalFormatFile(file)) return true;
