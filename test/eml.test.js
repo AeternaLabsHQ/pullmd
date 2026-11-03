@@ -35,6 +35,24 @@ function mail({ subject = 'Hallo Welt', html, text, attachment, extraHeaders = '
 
 const LONG = 'Dies ist ein ausreichend langer Absatz mit echtem Inhalt, damit die Extraktion etwas findet. '.repeat(6);
 
+describe('extractEml - Cc and legacy source header', () => {
+  it('lists Cc recipients', async () => {
+    const r = await extractEml(mail({ text: LONG, extraHeaders: 'Cc: Carla <carla@example.com>' }), { lang: 'de' });
+    assert.match(r.markdown, /\*\*Cc:\*\* Carla <carla@example\.com>/);
+  });
+
+  it('drops the legacy source line when PULLMD_SOURCE_HEADER is set', async () => {
+    const html = `<html><body><article><h1>Hallo Welt</h1><p>${LONG}</p></article></body></html>`;
+    process.env.PULLMD_SOURCE_HEADER = 'true';
+    try {
+      const r = await extractEml(mail({ html }), { filename: 'x.eml' });
+      assert.ok(!r.markdown.includes('**x.eml**'));
+    } finally {
+      delete process.env.PULLMD_SOURCE_HEADER;
+    }
+  });
+});
+
 describe('isEmlFile', () => {
   it('matches .eml by name and message/rfc822 by type', () => {
     assert.equal(isEmlFile('application/octet-stream', 'Mail.EML'), true);

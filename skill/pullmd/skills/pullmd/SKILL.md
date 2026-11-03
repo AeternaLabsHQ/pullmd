@@ -101,6 +101,9 @@ curl -s -X POST --data-binary @page.html -H 'Content-Type: text/html' -H 'X-File
 
 # Upload a local document (PDF/DOCX/…, max 25 MB)
 curl -s -X POST --data-binary @report.pdf -H 'Content-Type: application/pdf' -H 'X-Filename: report.pdf' "__PULLMD_URL__/api/file"
+
+# Read a saved e-mail (.eml): header block + message text, attachments only listed (no sidecar needed)
+curl -s -X POST --data-binary @mail.eml -H 'Content-Type: message/rfc822' -H 'X-Filename: mail.eml' "__PULLMD_URL__/api/file?lang=en"
 ```
 
 ### Step 2: Check if it worked
