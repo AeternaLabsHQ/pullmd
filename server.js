@@ -127,6 +127,17 @@ function applyTrustProxy(app, value) {
   }
 }
 
+/**
+ * `comment_depth`: a positive integer, or `all` for no limit plus loading
+ * what Reddit collapsed. Anything else falls back to the default of 3.
+ */
+export function parseCommentDepth(value) {
+  if (value === undefined || value === '') return 3;
+  if (String(value).trim().toLowerCase() === 'all') return 'all';
+  const n = parseInt(value, 10);
+  return Number.isInteger(n) && n >= 1 ? n : 3;
+}
+
 export function createApp(overrides = {}) {
   const app = express();
   // Before any route: req.ip / req.secure (rate limiters, cookie flags)
@@ -536,7 +547,7 @@ export function createApp(overrides = {}) {
       try {
         const r = await extract(url, {
           comments: wantComments,
-          commentDepth: comment_depth ? parseInt(comment_depth, 10) : 3,
+          commentDepth: parseCommentDepth(comment_depth),
           commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
           lang: reqLang,
           withMeta: true,
@@ -628,7 +639,7 @@ export function createApp(overrides = {}) {
       try {
         const r = await extractHnFn(url, {
           comments: wantComments,
-          commentDepth: comment_depth ? parseInt(comment_depth, 10) : 3,
+          commentDepth: parseCommentDepth(comment_depth),
           commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
           lang: reqLang,
           withMeta: true,
@@ -1039,7 +1050,7 @@ export function createApp(overrides = {}) {
         emit('fetching', { url });
         const r = await extract(url, {
           comments: wantComments,
-          commentDepth: comment_depth ? parseInt(comment_depth, 10) : 3,
+          commentDepth: parseCommentDepth(comment_depth),
           commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
           lang: reqLang,
           withMeta: true,
@@ -1076,7 +1087,7 @@ export function createApp(overrides = {}) {
           emit('fetching', { url });
           const r = await extractHnFn(url, {
             comments: wantComments,
-            commentDepth: comment_depth ? parseInt(comment_depth, 10) : 3,
+            commentDepth: parseCommentDepth(comment_depth),
             commentLimit: comment_limit ? parseInt(comment_limit, 10) : null,
             lang: reqLang,
             withMeta: true,

@@ -54,3 +54,15 @@ describe('extractHn', () => {
     assert.equal(typeof md, 'string');
   });
 });
+
+describe('extractHn comment_depth all', () => {
+  it('renders the full tree without a depth limit', async () => {
+    let node = { id: 99, type: 'comment', author: 'deep', text: 'bottom', children: [] };
+    for (let i = 98; i >= 80; i--) node = { id: i, type: 'comment', author: `a${i}`, text: `t${i}`, children: [node] };
+    const item = { ...itemFixture, children: [node] };
+    const limited = await extractHn('https://news.ycombinator.com/item?id=1', { commentDepth: 10, fetchImpl: ok(item) });
+    const all = await extractHn('https://news.ycombinator.com/item?id=1', { commentDepth: 'all', fetchImpl: ok(item) });
+    assert.doesNotMatch(limited, /bottom/);
+    assert.match(all, /bottom/);
+  });
+});

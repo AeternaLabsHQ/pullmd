@@ -293,6 +293,17 @@
       gap: 0.625rem 1rem;
     }
 
+    /* Comments, depth and "All" belong together: one group, set off from
+       the other switches by a thin vertical rule. */
+    .control-group {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.625rem 1rem;
+      padding-right: 1rem;
+      border-right: 1px solid var(--border-strong);
+    }
+
     /* Toggle switch */
     .toggle-label {
       display: inline-flex;
@@ -344,6 +355,7 @@
       outline: none;
     }
     #depth-input:focus { border-color: var(--accent); }
+    #depth-input:disabled { opacity: 0.4; cursor: not-allowed; }
 
     /* Go button */
     #go-btn {
@@ -1060,6 +1072,8 @@
     @media (max-width: 480px) {
       .container { padding: 1.5rem 1rem 4rem; }
       .controls { gap: 0.5rem 0.875rem; }
+      /* On a phone the group gets its own row; the rule would dangle at the line end. */
+      .control-group { gap: 0.5rem 0.875rem; padding-right: 0; border-right: 0; flex-basis: 100%; }
       #go-btn { width: 100%; margin-left: 0; justify-content: center; }
       /* Three action buttons plus the badges and the Raw|Rendered toggle do not
          fit on a phone - collapse the buttons to their icons. The accessible
@@ -1237,6 +1251,7 @@
         </div>
 
         <div class="controls">
+          <div class="control-group" id="comments-group">
           <label class="toggle-label">
             <input type="checkbox" id="comments-toggle" checked>
             <span class="toggle-track"></span>
@@ -1244,8 +1259,14 @@
           </label>
           <label class="toggle-label" id="depth-label">
             <span data-i18n="toggle.depth">Tiefe</span>
-            <input type="number" id="depth-input" value="3" min="1" max="50">
+            <input type="number" id="depth-input" value="3" min="1" max="10">
           </label>
+          <label class="toggle-label" id="all-comments-label" data-i18n-attr="title" data-i18n-attr-key="toggle.allComments.title">
+            <input type="checkbox" id="all-comments-toggle">
+            <span class="toggle-track"></span>
+            <span data-i18n="toggle.allComments">Alle</span>
+          </label>
+          </div>
           <label class="toggle-label">
             <input type="checkbox" id="frontmatter-toggle">
             <span class="toggle-track"></span>
@@ -1438,6 +1459,8 @@
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF-OCR',
           'toggle.depth':      'Tiefe',
+          'toggle.allComments': 'Alle',
+          'toggle.allComments.title': 'Alle Kommentare ohne Tiefengrenze. Lädt bei Reddit eingeklappte Kommentare mit zusätzlichen Abrufen nach, das kann bei großen Threads einige Sekunden dauern.',
           'btn.pull':          'Pull',
           'loading':           'Lade Seite…',
           'share':             'Share',
@@ -1501,6 +1524,8 @@
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF OCR',
           'toggle.depth':      'Depth',
+          'toggle.allComments': 'All',
+          'toggle.allComments.title': 'All comments, no depth limit. Loads comments Reddit collapses with extra requests, which can take a few seconds on large threads.',
           'btn.pull':          'Pull',
           'loading':           'Loading page…',
           'share':             'Share',
@@ -1685,6 +1710,8 @@
       const ocrToggle = document.getElementById('ocr-toggle');
       const depthInput = document.getElementById('depth-input');
       const depthLabel = document.getElementById('depth-label');
+      const allCommentsToggle = document.getElementById('all-comments-toggle');
+      const allCommentsLabel = document.getElementById('all-comments-label');
       const goBtn = document.getElementById('go-btn');
       const loadingEl = document.getElementById('loading');
       const errorEl = document.getElementById('error');
@@ -1991,8 +2018,10 @@
           v = localStorage.getItem('pullmd-comment-depth');
           if (v !== null) {
             var n = parseInt(v, 10);
-            if (n >= 1 && n <= 50) depthInput.value = String(n);
+            if (n >= 1 && n <= 10) depthInput.value = String(n);
           }
+          v = localStorage.getItem('pullmd-comments-all');
+          if (v !== null) allCommentsToggle.checked = v === 'true';
         } catch (e) {}
       })();
       commentsToggle.addEventListener('change', function () {
@@ -2010,11 +2039,22 @@
         try { localStorage.setItem('pullmd-pdf-ocr', String(ocrToggle.checked)); } catch (e) {}
       });
       depthInput.addEventListener('change', function () {
+        const n = parseInt(depthInput.value, 10);
+        if (!(n >= 1)) depthInput.value = '3';
+        else if (n > 10) depthInput.value = '10';
         try { localStorage.setItem('pullmd-comment-depth', depthInput.value); } catch (e) {}
       });
 
+      allCommentsToggle.addEventListener('change', function () {
+        try { localStorage.setItem('pullmd-comments-all', String(allCommentsToggle.checked)); } catch (e) {}
+        updateDepthVisibility();
+      });
+
       function updateDepthVisibility() {
-        depthLabel.style.display = commentsToggle.checked ? '' : 'none';
+        const display = commentsToggle.checked ? '' : 'none';
+        depthLabel.style.display = display;
+        allCommentsLabel.style.display = display;
+        depthInput.disabled = allCommentsToggle.checked;
       }
       commentsToggle.addEventListener('change', updateDepthVisibility);
       updateDepthVisibility();
@@ -2023,7 +2063,8 @@
         const params = new URLSearchParams({ url });
         if (!withComments) params.set('comments', 'false');
         const depth = parseInt(depthInput.value, 10);
-        if (withComments && depth && depth !== 3) params.set('comment_depth', String(depth));
+        if (withComments && allCommentsToggle.checked) params.set('comment_depth', 'all');
+        else if (withComments && depth && depth !== 3) params.set('comment_depth', String(depth));
         // Always fetch WITH frontmatter; the toggle only controls client-side
         // display (applyFrontmatterView), so flipping it needs no re-pull.
         params.set('frontmatter', 'true');

@@ -276,6 +276,21 @@ describe('extractPost loads more comments', () => {
     selftext: 'body', is_self: true, url: '', num_comments: 3, is_video: false,
   };
 
+  it('makes one request for a numeric depth and only counts what is collapsed', async () => {
+    const fetchFn = router([
+      [/\/comments\/p\/t\.json/, () => jsonResponse([
+        listing([{ kind: 't3', data: post }]),
+        listing([t1('a', 't3_p', 'A', [more('t1_a')]), more('t3_p', ['x', 'y'], 4)]),
+      ])],
+    ]);
+    global.fetch = fetchFn;
+    const md = await extractPost('https://www.reddit.com/r/sub/comments/p/t/', { commentDepth: 10, lang: 'en' });
+    assert.equal(fetchFn.calls.length, 1);
+    assert.doesNotMatch(fetchFn.calls[0], /limit=/);
+    assert.match(md, /## Comments \(1 of 3\)/);
+    assert.match(md, /_Not loaded: 4 more comments, 1 continued thread\._$/);
+  });
+
   it('fetches the continued thread so its replies show up and count', async () => {
     const fetchFn = router([
       [/\/_\/a\.json/, () => jsonResponse([listing([]), listing([t1('a', 't3_p', 'A', [t1('b', 't1_a', 'B')])])])],
@@ -285,7 +300,8 @@ describe('extractPost loads more comments', () => {
       ])],
     ]);
     global.fetch = fetchFn;
-    const md = await extractPost('https://www.reddit.com/r/sub/comments/p/t/', { commentDepth: 5, lang: 'en' });
+    const md = await extractPost('https://www.reddit.com/r/sub/comments/p/t/', { commentDepth: 'all', lang: 'en' });
+    assert.match(fetchFn.calls[0], /\/comments\/p\/t\.json\?raw_json=1&limit=500$/);
     assert.match(md, /## Comments \(3 of 3\)/);
     assert.match(md, /\*\*u\/a\*\* \[\+1\]: A\n {2}\*\*u\/b\*\* \[\+1\]: B/);
     assert.doesNotMatch(md, /Not loaded/);
@@ -299,8 +315,21 @@ describe('extractPost loads more comments', () => {
         listing([t1('a', 't3_p', 'A'), more('t3_p', ['x', 'y'])]),
       ])],
     ]);
-    const md = await extractPost('https://www.reddit.com/r/sub/comments/p/t/', { lang: 'de' });
+    const md = await extractPost('https://www.reddit.com/r/sub/comments/p/t/', { commentDepth: 'all', lang: 'de' });
     assert.match(md, /## Kommentare \(1 von 3\)/);
     assert.match(md, /_Nicht geladen: 2 weitere Kommentare\._$/);
+  });
+});
+
+describe('parseCommentDepth', () => {
+  it('accepts positive integers and "all", falls back to 3', async () => {
+    const { parseCommentDepth } = await import('../server.js');
+    assert.equal(parseCommentDepth(undefined), 3);
+    assert.equal(parseCommentDepth(''), 3);
+    assert.equal(parseCommentDepth('7'), 7);
+    assert.equal(parseCommentDepth('all'), 'all');
+    assert.equal(parseCommentDepth('ALL'), 'all');
+    assert.equal(parseCommentDepth('0'), 3);
+    assert.equal(parseCommentDepth('abc'), 3);
   });
 });
