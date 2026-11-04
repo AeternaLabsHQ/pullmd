@@ -455,7 +455,7 @@ built-in fetch/browse tool - not just when that one fails:
 Returns clean Markdown (text/markdown). Optional query params:
 
   comments=false        skip Reddit / Hacker News comments
-  comment_depth=N       comment nesting depth (default 3)
+  comment_depth=N|all   comment nesting depth (default 3)
   frontmatter=true      prepend YAML metadata block
   format=text           strip Markdown, return plain text
   nocache=true          bypass the 1h cache and refetch
@@ -681,12 +681,12 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">Include comments (Reddit and Hacker News). <code>false</code> returns just the post. No effect on other URLs.</td>
           </tr>
           <tr><td><code>comment_depth</code></td><td><code>3</code></td>
-            <td lang="de">Maximale Verschachtelungstiefe (1–50), für Reddit und Hacker News.</td>
-            <td lang="en">Max nesting depth (1–50), for Reddit and Hacker News.</td>
+            <td lang="de">Maximale Verschachtelungstiefe (1–10), für Reddit und Hacker News. <code>all</code> zeigt den ganzen Thread: keine Tiefengrenze, und bei Reddit werden eingeklappte Kommentare („weitere Kommentare“, „Thread fortsetzen“) mit zusätzlichen Abrufen nachgeladen. In der Oberfläche ist das der Schalter „Alle“.</td>
+            <td lang="en">Max nesting depth (1–10), for Reddit and Hacker News. <code>all</code> returns the whole thread: no depth limit, and on Reddit collapsed comments ("load more", "continue this thread") are loaded with extra requests. In the web UI this is the "All" switch.</td>
           </tr>
           <tr><td><code>comment_limit</code></td><td>—</td>
-            <td lang="de">Optionale Obergrenze für Top-Level-Kommentare. Was Reddit einklappt („weitere Kommentare“, „Thread fortsetzen“), lädt PullMD nach, bis zu einer Request-Grenze pro Abruf; was dann noch fehlt, steht als Hinweis unter den Kommentaren.</td>
-            <td lang="en">Optional cap on top-level comments. Comments Reddit collapses ("load more", "continue this thread") are loaded on top, up to a request limit per conversion; anything still missing is noted below the comments.</td>
+            <td lang="de">Optionale Obergrenze für Top-Level-Kommentare. Reddit liefert pro Abruf etwa 200 Kommentare; was fehlt, steht als Hinweis unter den Kommentaren.</td>
+            <td lang="en">Optional cap on top-level comments. Reddit returns about 200 comments per request; anything missing is noted below the comments.</td>
           </tr>
           <tr><td><code>frontmatter</code></td><td><code>false</code></td>
             <td lang="de">YAML-Frontmatter mit Metadaten voranstellen.</td>
