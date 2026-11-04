@@ -243,6 +243,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `REDDIT_CLIENT_ID`     | no       | OAuth credentials for Reddit. Without them, PullMD uses the public JSON API (lower rate limit).     |
 | `REDDIT_CLIENT_SECRET` | no       |                                                                                                      |
 | `REDDIT_USER_AGENT`    | no       | Reddit requires a unique UA. Default: `PullMD/1.0 (URL-to-Markdown service)`.                       |
+| `PULLMD_REDDIT_MORE_REQUESTS` | no | Extra Reddit requests per conversion for comments Reddit collapses ("load more comments", "continue this thread"). Default `20` with `REDDIT_CLIENT_ID`/`SECRET`, `5` without; max `200`, `0` turns it off. Whatever is still missing is noted below the comments. |
 | `DISABLE_PUBLIC_HISTORY` | no     | When `true`, hides the global recent-conversions list and archive (`/api/history` + `/api/archive` return 403, so do anonymous deletes via `DELETE /api/cache` and `/api/cache/:id`, the MCP `list_recent` tool returns an error, `/api/stats` omits its per-domain lists, frontend hides the section). `/s/:id` share links keep working. Default: `false`. |
 | `PULLMD_USER_AGENT`    | no       | Pin a single outbound User-Agent for every web fetch. Disables rotation. Useful for CI or when one specific UA is known to work. |
 | `PULLMD_UA_FEED_URL`   | no       | URL of a JSON feed of current real-world UAs. Default: [WinFuture23/real-world-user-agents](https://github.com/WinFuture23/real-world-user-agents). Set to an empty string to disable live refresh and rely on the built-in seed pool. |
@@ -567,7 +568,7 @@ for it.
 | --------------- | ------- | ---------------------------------------------------------------------------------- |
 | `url`           | —       | Required.                                                                          |
 | `comments`      | `true`  | Include Reddit / Hacker News comments. Ignored for other URLs.                     |
-| `comment_depth` | `3`     | Max nesting depth (1–10). Applies to Reddit and Hacker News.                       |
+| `comment_depth` | `3`     | Max nesting depth (1–50). Applies to Reddit and Hacker News.                       |
 | `comment_limit` | none    | Max top-level comments (uncapped by default).                                      |
 | `frontmatter`   | `false` | Prepend YAML metadata.                                                             |
 | `format`        | `md`    | `text` strips Markdown; `json` returns structured response.                        |
