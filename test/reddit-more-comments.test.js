@@ -209,6 +209,22 @@ describe('expandMoreComments', () => {
   });
 });
 
+describe('formatComments deleted parents and scores', () => {
+  it('keeps live replies under a deleted comment behind a placeholder', () => {
+    const del = t1('d', 't3_p', '[deleted]', [t1('r', 't1_d', 'R')]);
+    del.data.author = '[deleted]';
+    const gone = t1('g', 't3_p', '[removed]');
+    gone.data.author = '[deleted]';
+    const md = formatComments(listing([del, gone]), { totalComments: 3, depth: 3, lang: 'en' });
+    assert.equal(md, '## Comments (1 of 3)\n\n*[deleted]*\n  **u/r** [+1]: R\n');
+  });
+  it('prints negative scores without a plus sign', () => {
+    const c = t1('n', 't3_p', 'N');
+    c.data.score = -3;
+    assert.match(formatComments(listing([c]), { totalComments: 1, depth: 3 }), /\*\*u\/n\*\* \[-3\]: N/);
+  });
+});
+
 describe('formatComments not-loaded hint', () => {
   const tree = listing([t1('a', 't3_p', 'A')]);
   it('renders in German and English, without zero counts', () => {
@@ -228,13 +244,18 @@ describe('formatComments not-loaded hint', () => {
 });
 
 describe('readMoreRequestBudget', () => {
-  it('defaults to 20, accepts 0, clamps and rejects junk', () => {
-    assert.equal(readMoreRequestBudget({}), 20);
-    assert.equal(readMoreRequestBudget({ PULLMD_REDDIT_MORE_REQUESTS: '0' }), 0);
-    assert.equal(readMoreRequestBudget({ PULLMD_REDDIT_MORE_REQUESTS: '5' }), 5);
-    assert.equal(readMoreRequestBudget({ PULLMD_REDDIT_MORE_REQUESTS: '9999' }), 200);
-    assert.equal(readMoreRequestBudget({ PULLMD_REDDIT_MORE_REQUESTS: 'abc' }), 20);
-    assert.equal(readMoreRequestBudget({ PULLMD_REDDIT_MORE_REQUESTS: '-1' }), 20);
+  const oauth = { REDDIT_CLIENT_ID: 'id', REDDIT_CLIENT_SECRET: 'secret' };
+  it('defaults to 20 with API credentials and 5 without', () => {
+    assert.equal(readMoreRequestBudget(oauth), 20);
+    assert.equal(readMoreRequestBudget({}), 5);
+    assert.equal(readMoreRequestBudget({ PULLMD_REDDIT_MORE_REQUESTS: '' }), 5);
+  });
+  it('accepts 0, clamps and rejects junk', () => {
+    assert.equal(readMoreRequestBudget({ ...oauth, PULLMD_REDDIT_MORE_REQUESTS: '0' }), 0);
+    assert.equal(readMoreRequestBudget({ PULLMD_REDDIT_MORE_REQUESTS: '12' }), 12);
+    assert.equal(readMoreRequestBudget({ ...oauth, PULLMD_REDDIT_MORE_REQUESTS: '9999' }), 200);
+    assert.equal(readMoreRequestBudget({ ...oauth, PULLMD_REDDIT_MORE_REQUESTS: 'abc' }), 20);
+    assert.equal(readMoreRequestBudget({ PULLMD_REDDIT_MORE_REQUESTS: '-1' }), 5);
   });
 });
 
