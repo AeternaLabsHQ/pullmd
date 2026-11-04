@@ -34,6 +34,7 @@ services:
       - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
       - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
       - REDDIT_USER_AGENT=${REDDIT_USER_AGENT:-}
+      - PULLMD_REDDIT_MORE_REQUESTS=${PULLMD_REDDIT_MORE_REQUESTS:-}
       - DISABLE_PUBLIC_HISTORY=${DISABLE_PUBLIC_HISTORY:-false}
       # Authentication (v2.0+) - see MIGRATION.md before changing on an existing instance.
       - PULLMD_AUTH_MODE=${PULLMD_AUTH_MODE:-disabled}

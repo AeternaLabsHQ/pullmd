@@ -20,6 +20,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ### Fixed
 
+- **Reddit threads no longer lose collapsed and deeply nested comments.** Reddit's comment JSON stops at a depth and size limit and puts the rest behind "load more comments" and "continue this thread" placeholders, which PullMD dropped, so long or deep threads came out incomplete. These placeholders are now loaded and the comments put back where they belong, with indentation counted from the top of the thread. Loading takes at most 20 extra Reddit requests per conversion (`PULLMD_REDDIT_MORE_REQUESTS`, `0` turns it off) and stops early on a rate limit; whatever is still missing is noted below the comments ("Nicht geladen: 3 weitere Kommentare" / "Not loaded: 3 more comments"). Placeholders below `comment_depth`, or beyond `comment_limit`, are not loaded. `comment_depth` now goes up to 50 in the web UI and the MCP `read_url` tool (was 10), since Reddit's own depth limit is 10. The count in the header can stay below Reddit's total: Reddit counts deleted and removed comments, PullMD does not show them.
 - **Page titles no longer pick up icon labels.** The title was read from every `<title>` element on the page, including those inside inline SVG icons, so a page with payment logos came out as "MHTML - WikipediaPayPal LogoVisa Logo...". Only the document title is used now. Seen on a saved page; it applies to all HTML extraction.
 
 ## [3.17.0] - 2026-11-02

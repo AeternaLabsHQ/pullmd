@@ -44,8 +44,8 @@ The response is `text/markdown` — ready to use as-is.
 | --------------- | ------- | --------------------------------------------------------------------------- |
 | `url`           | —       | Required.                                                                   |
 | `comments`      | `true`  | Include Reddit / Hacker News comments. Ignored for other URLs.              |
-| `comment_depth` | `3`     | Comment nesting depth (1–10), Reddit and Hacker News.                       |
-| `comment_limit` | none    | Max top-level Reddit comments (Reddit returns ~200 without a cap).          |
+| `comment_depth` | `3`     | Comment nesting depth (1–50), Reddit and Hacker News.                       |
+| `comment_limit` | none    | Max top-level Reddit comments (uncapped by default).                        |
 | `frontmatter`   | `false` | Prepend YAML metadata (title, source, quality, share id, …).                |
 | `format`        | `md`    | `text` strips Markdown; `json` returns a structured response with metadata. |
 | `nocache`       | `false` | Bypass the 1-hour cache and refetch from source.                            |

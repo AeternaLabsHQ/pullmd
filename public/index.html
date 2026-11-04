@@ -1244,7 +1244,7 @@
           </label>
           <label class="toggle-label" id="depth-label">
             <span data-i18n="toggle.depth">Tiefe</span>
-            <input type="number" id="depth-input" value="3" min="1" max="10">
+            <input type="number" id="depth-input" value="3" min="1" max="50">
           </label>
           <label class="toggle-label">
             <input type="checkbox" id="frontmatter-toggle">
@@ -1991,7 +1991,7 @@
           v = localStorage.getItem('pullmd-comment-depth');
           if (v !== null) {
             var n = parseInt(v, 10);
-            if (n >= 1 && n <= 10) depthInput.value = String(n);
+            if (n >= 1 && n <= 50) depthInput.value = String(n);
           }
         } catch (e) {}
       })();
