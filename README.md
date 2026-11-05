@@ -41,7 +41,7 @@ What that saves, measured on three public pages (tokens counted with the
 | --- | ---: | ---: | ---: |
 | Encyclopedia article (long-form) | 99,458 | 12,549 | 662 |
 | Developer documentation page | 48,611 | 6,591 | 454 |
-| Reddit thread with comments | blocked (bot check), no thread content | 6,381 | 644 |
+| Reddit thread with comments, using Reddit API credentials | blocked (bot check), no thread content | 6,381 | 644 |
 
 The `curl` column is what a naive fetch tool hands an agent. The last
 column is [query-scoped extraction](#query-scoped-extraction): only the
@@ -52,7 +52,7 @@ sections relevant to a question.
 **Reads almost anything**
 
 - **Web pages** through a fallback chain: Cloudflare's native Markdown, then Readability + Trafilatura (best result wins), then headless Chromium for JavaScript-heavy sites
-- **Reddit and Hacker News** threads with their comment trees (depth and count configurable)
+- **Reddit and Hacker News** threads with their comment trees (depth and count configurable; Reddit needs [API credentials](#reddit-access))
 - **Documents**: PDF, Word, PowerPoint, Excel, EPUB, by URL or upload, plus an optional OCR tier for table-grade PDFs
 - **YouTube** title, description and transcript with clickable timecodes, no API key needed
 - **Images and audio** via any OpenAI-compatible or local model (captions, transcripts)
@@ -240,7 +240,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `MARKITDOWN_YT_CHUNK`  | no (sidecar) | Transcript block size in seconds (default `30`). `0` keeps the original per-snippet granularity. Overridable per-request via `?yt_chunk=`. |
 | `MARKITDOWN_YT_LANGS`  | no (sidecar) | Comma-separated preferred transcript languages (e.g. `de,en`). Falls back to the first available language if none of the preferred ones exist. |
 | `MARKITDOWN_YT_PROXY`  | no (sidecar) | HTTP(S) proxy URL for YouTube requests. Datacenter IP addresses are often rate-limited by YouTube's transcript API; a residential or ISP proxy can help. |
-| `REDDIT_CLIENT_ID`     | no       | OAuth credentials for Reddit. Without them, PullMD uses the public JSON API (lower rate limit).     |
+| `REDDIT_CLIENT_ID`     | no       | OAuth credentials from an existing Reddit app. Required to read Reddit, see [Reddit access](#reddit-access). |
 | `REDDIT_CLIENT_SECRET` | no       |                                                                                                      |
 | `REDDIT_USER_AGENT`    | no       | Reddit requires a unique UA. Default: `PullMD/1.0 (URL-to-Markdown service)`.                       |
 | `PULLMD_REDDIT_MORE_REQUESTS` | no | With `comment_depth=all`: extra Reddit requests per conversion for comments Reddit collapses ("load more comments", "continue this thread"). Default `20` with `REDDIT_CLIENT_ID`/`SECRET`, `5` without; max `200`, `0` turns it off. Whatever is still missing is noted below the comments. |
@@ -286,6 +286,12 @@ minute and IP (valid links are never throttled). With sign-in
 enabled (`PULLMD_AUTH_MODE=single-admin` or `multi-user`) history is
 scoped per user anyway; the switch matters for instances without
 sign-in.
+
+### Reddit access
+
+PullMD reads Reddit through Reddit's Data API, using `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` from an existing app. Without them Reddit blocks the requests and `/api` answers `502`.
+
+Reddit stopped accepting new requests for API access on 2026-10-31. It says it will start removing access for apps and users that have not registered on 2027-01-12, and close public access for all remaining apps in March 2027 ([announcement](https://www.reddit.com/r/redditdev/comments/1wubcvf/)). PullMD's Reddit support ends with that access. PullMD has no login or session cookie option, and none is planned.
 
 ---
 
