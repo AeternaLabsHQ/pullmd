@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Changed
+
+- **The docs now state how Reddit access works today.** They described reading Reddit without API credentials as a lower rate limit and pointed to `prefs/apps` for new credentials. Reddit blocks these requests and no longer accepts new API access requests, and it closes public API access in March 2027 ([announcement](https://www.reddit.com/r/redditdev/comments/1wubcvf/)). See [Reddit access](./README.md#reddit-access). PullMD has no login or session cookie option, and none is planned.
+
 ## [3.18.0] - 2026-11-04
 
 ### Added

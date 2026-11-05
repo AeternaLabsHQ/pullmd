@@ -13,7 +13,7 @@ PullMD is unavailable.
 
 PullMD routes each URL through the extraction path that fits it:
 
-1. **Reddit** — auto-detected URLs go through Reddit's JSON API with full comment trees.
+1. **Reddit** — auto-detected URLs go through Reddit's JSON API with full comment trees. Needs API credentials on the server; without them the request fails with `502`.
 2. **Hacker News** — auto-detected item pages, comment permalinks, and listings (`/news`, `/newest`, `/ask`, `/show`, `/jobs`, `/best`) go through the HN API and come back as a clean nested comment tree.
 3. **Cloudflare** — sites that support `Accept: text/markdown` get native Markdown directly.
 4. **Static HTML** — Mozilla Readability and Trafilatura run in parallel; the higher-quality output wins.

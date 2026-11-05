@@ -355,7 +355,7 @@
       <p lang="de">PullMD ruft eine beliebige URL ab und liefert sie als sauberes Markdown zurück. Je nach Quelle wird der passende Extraktions-Pfad gewählt:</p>
       <p lang="en">PullMD fetches any URL and returns it as clean Markdown. It picks the right extraction path depending on the source:</p>
       <ul class="doc-list" lang="de">
-        <li><strong>Reddit</strong> — eigene Pipeline für Posts, Kommentare, Subreddit-Listings (mit Tiefe und Limit konfigurierbar).</li>
+        <li><strong>Reddit</strong> — eigene Pipeline für Posts, Kommentare, Subreddit-Listings (mit Tiefe und Limit konfigurierbar). Braucht auf dem Server Reddit-API-Zugangsdaten; Reddit schließt diesen Zugang bis März 2027.</li>
         <li><strong>Hacker News</strong> — eigene Pipeline für Items, Kommentar-Permalinks und Listings (Front/Newest/Ask/Show/Jobs); verschachtelte Kommentare mit konfigurierbarer Tiefe.</li>
         <li><strong>Cloudflare-Markdown</strong> — wenn die Quelle <code>Accept: text/markdown</code> nativ unterstützt, wird das direkt durchgereicht (sauberster Output).</li>
         <li><strong>Readability + Trafilatura</strong> — für statisches HTML laufen beide Extraktoren; die Ausgabe mit der besseren Qualitätsbewertung gewinnt. Trafilatura ist ein optionaler Sidecar; ohne ihn bleibt es bei Readability.</li>
@@ -363,7 +363,7 @@
         <li><strong>Dokumente, YouTube, Bilder, Audio</strong> — je nach Instanz-Konfiguration; siehe <a href="#files">Dateien konvertieren</a>.</li>
       </ul>
       <ul class="doc-list" lang="en">
-        <li><strong>Reddit</strong> — dedicated pipeline for posts, comments, subreddit listings (configurable depth and limit).</li>
+        <li><strong>Reddit</strong> — dedicated pipeline for posts, comments, subreddit listings (configurable depth and limit). Needs Reddit API credentials on the server; Reddit closes this access by March 2027.</li>
         <li><strong>Hacker News</strong> — dedicated pipeline for items, comment permalinks, and listings (front/newest/ask/show/jobs); nested comments with configurable depth.</li>
         <li><strong>Cloudflare-Markdown</strong> — when the source supports <code>Accept: text/markdown</code> natively, that's passed through directly (cleanest output).</li>
         <li><strong>Readability + Trafilatura</strong> — static HTML runs through both extractors and the one with the better quality score wins. Trafilatura is an optional sidecar; without it, Readability alone is used.</li>
