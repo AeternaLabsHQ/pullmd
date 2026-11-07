@@ -38,4 +38,6 @@ RUN mkdir -p /data && chown -R app:app /app /data
 # the unprivileged app user via su-exec.
 EXPOSE 3000
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-CMD ["node", "server.js"]
+# YouTube answers with about 19 KB of response headers; Node allows 16 KB by default
+# and fetch then fails with UND_ERR_HEADERS_OVERFLOW.
+CMD ["node", "--max-http-header-size=65536", "server.js"]

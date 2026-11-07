@@ -11,6 +11,12 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+## [3.18.1] - 2026-11-07
+
+### Fixed
+
+- YouTube URLs failed with `fetch failed` because the response headers exceeded the default limit of 16 KB. The server now starts with `--max-http-header-size=65536`.
+
 ### Fixed
 
 - **Pages that split one piece of writing across several `<article>` blocks now keep all of them.** Readability commits to one candidate, so a series of short posts by the same author came back as a single post, and the coverage guard does not reach pages this short. Blocks that open with the same link now count as a series, unless they carry headings, are mostly links, or hold too little of the page. That leaves teaser lists and discussions alone. Each block is converted on its own and joined, without duplicates, stray blocks by others, or trailing counters. Reported as `source: article-series`, with the numbers in `metadata.extractorReason`; `PULLMD_ARTICLE_SERIES=off` turns it off.
