@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pages that split one piece of writing across several `<article>` blocks now keep all of them.** Readability commits to one candidate, so a series of short posts by the same author came back as a single post, and the coverage guard does not reach pages this short. Blocks that open with the same link now count as a series, unless they carry headings, are mostly links, or hold too little of the page. That leaves teaser lists and discussions alone. Each block is converted on its own and joined, without duplicates, stray blocks by others, or trailing counters. Reported as `source: article-series`, with the numbers in `metadata.extractorReason`; `PULLMD_ARTICLE_SERIES=off` turns it off.
+
 ### Changed
 
 - **The docs now state how Reddit access works today.** They described reading Reddit without API credentials as a lower rate limit and pointed to `prefs/apps` for new credentials. Reddit blocks these requests and no longer accepts new API access requests, and it closes public API access in March 2027 ([announcement](https://www.reddit.com/r/redditdev/comments/1wubcvf/)). See [Reddit access](./README.md#reddit-access). PullMD has no login or session cookie option, and none is planned.

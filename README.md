@@ -260,6 +260,7 @@ All variables go in `.env` (copy from `.env.example`):
 | `PULLMD_FILENAME_DATE_PREFIX` | no | Prefix template for the suggested download filename (`X-Suggested-Filename`). Unset = no prefix. Tokens `YYYY MM DD HH mm ss` are substituted in local time, all other characters pass through; anything outside `A-Za-z0-9._-` ends up as a hyphen. Example: `YYYY-MM-DD-HH-mm-ss-` gives `2026-08-01-13-33-42-YT-some-talk-dQw4w9WgXcQ.md`. |
 | `PULLMD_CACHE_RETENTION_DAYS` | no | How long cache rows survive without a re-fetch, in days. Default: `90`. `0` = unlimited: nothing is ever pruned, so the cache doubles as an archive. The accepted range is `0` to `36500` (100 years); anything else warns once at startup and falls back to `90`. Share links expire with their row - `/s/:id` stops resolving once the row is older than the retention window. Lowering the value on a running instance prunes every row older than the new value on the next cache write (any conversion). |
 | `PULLMD_COVERAGE_GUARD` | no | Set to `off` to disable the coverage guard. Default (unset): on. The guard notices when an extraction kept only a sliver of the page - the failure mode of page-builder one-pagers, whose chapters sit in flat sibling containers that Readability's single-candidate scoring discards - and re-converts the container holding the body instead. It only ever grows the result, records `source: coverage-guard`, and explains itself in `metadata.extractorReason`. |
+| `PULLMD_ARTICLE_SERIES` | no | Set to `off` to disable article series. Default (unset): on. When a page publishes one piece of writing as several short `<article>` blocks by the same author, Readability keeps one of them. PullMD then converts each block and joins them, leaving out duplicates and stray blocks by others. Teaser lists and discussions are left alone. It only ever grows the result, records `source: article-series`, and explains itself in `metadata.extractorReason`. |
 
 `PUBLIC_URL` matters for self-hosting: the help page and downloadable
 skill embed it as the canonical endpoint. Set it correctly and your
@@ -592,7 +593,7 @@ Both `query` and `max_tokens`, and `images` (`"on"` / `"off"`), are also availab
 
 ### Response headers
 
-- `X-Source` — `reddit` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
+- `X-Source` — `reddit` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `article-series` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
 - `X-Quality` — `0.0`–`1.0` extraction confidence
 - `X-Share-Id` — the 32-hex permalink id
 - `X-Suggested-Filename` — a download filename for this conversion, e.g. `YT-some-talk-dQw4w9WgXcQ.md`. YouTube gets title plus video id, images/audio/documents keep the original file name from the URL, everything else uses the title; `PULLMD_FILENAME_DATE_PREFIX` prepends a date. Also on `/s/:id`, `POST /api/html` and `POST /api/file`; on `/api/stream` the same value arrives as `suggestedFilename` in the `result` event, since SSE has no headers to carry it.
@@ -957,6 +958,7 @@ To write or contribute a recipe, see the **[site-recipe contributor guide](./SIT
 - `lib/llm/` — provider resolver + adapters for image captioning (vision), audio transcription (STT), and PDF OCR against OpenAI-compatible endpoints.
 - `lib/frontmatter.js` — YAML frontmatter builder with the `PULLMD_FRONTMATTER_FIELDS` allowlist.
 - `lib/coverage-guard.js` — detects extractions that kept only a sliver of the page and recovers the container holding the body.
+- `lib/article-series.js` - detects pages that split one piece of writing across several `<article>` blocks by the same author and joins them.
 - `lib/query-extract.js` — Opt-in query-scoped extraction (`?query=`): BM25 over heading-based sections of the converted markdown, returning only the relevant sections/blocks. Composes `lib/markdown-sections.js` (block/section parser) and `lib/bm25.js` (tokenizer + scorer).
 - `public/` — PWA frontend (vanilla JS, dark/paper themes, service worker, EventSource client for `/api/stream`).
 - `skill/pullmd/` — Claude Code skill source (templated with `__PULLMD_URL__`).
