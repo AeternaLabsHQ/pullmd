@@ -1,0 +1,71 @@
+---
+title: MCP server
+description: Add PullMD's MCP server to Claude Code, Cursor and other MCP clients.
+---
+
+# MCP server
+
+Every PullMD instance serves a remote MCP server at `/mcp` (Streamable HTTP transport, stateless). It has three tools: `read_url`, `get_share` and `list_recent`. The client needs no install, and tool updates reach every client when you update PullMD.
+
+## Add it to your client
+
+Replace `http://localhost:3000` with your instance's address.
+
+<Tabs>
+  <TabItem value="claude-code" label="Claude Code" default>
+    ```bash
+    claude mcp add --transport http pullmd http://localhost:3000/mcp
+    ```
+
+    With sign-in enabled, add your [API key](/self-hosting/authentication#api-keys) in place of `<api-key>`:
+
+    ```bash
+    claude mcp add --transport http pullmd https://pullmd.example.com/mcp \
+      --header "Authorization: Bearer <api-key>"
+    ```
+  </TabItem>
+  <TabItem value="cursor" label="Cursor and other clients">
+    Add this to the client's MCP configuration (for Cursor, `~/.cursor/mcp.json`):
+
+    ```json
+    {
+      "mcpServers": {
+        "pullmd": {
+          "type": "http",
+          "url": "http://localhost:3000/mcp"
+        }
+      }
+    }
+    ```
+
+    With sign-in enabled, add `"headers": { "Authorization": "Bearer <api-key>" }`.
+  </TabItem>
+  <TabItem value="desktop" label="Claude Desktop and claude.ai">
+    These clients can't send a custom header, and Claude Desktop ignores HTTP servers in `claude_desktop_config.json`. Add PullMD as a custom connector with OAuth instead: see [Connect claude.ai and Claude Desktop](/agents/claude-ai-connector).
+  </TabItem>
+</Tabs>
+
+<Check title="Tool call works">Ask your agent to "read https://example.com". It should call `read_url` and get back Markdown that starts with a short YAML block followed by `# Example Domain`.</Check>
+
+## The tools
+
+| Tool | What it does |
+| --- | --- |
+| `read_url` | Converts a URL to Markdown. Takes the options in the [MCP tools reference](/reference/mcp-tools), including `query` for [query-scoped extraction](/guides/query-scoped-extraction). |
+| `get_share` | Returns a cached conversion by its share id, refreshing it if it's more than an hour old. |
+| `list_recent` | Lists recent conversions with their share ids. With sign-in enabled, only your own. |
+
+Full parameters and output for each are in the [MCP tools reference](/reference/mcp-tools).
+
+The agent picks the tools up from their descriptions. `read_url` describes itself as the preferred way to read any URL, so most agents use it in place of their built-in fetch tool without being told.
+
+## Client support
+
+| Client | API key (`Authorization: Bearer`) | OAuth |
+| --- | :---: | :---: |
+| Claude Code | Yes | Yes |
+| Cursor | Yes | Untested |
+| Claude Desktop | No | Yes |
+| claude.ai | No | Yes |
+
+When sign-in is off, every client connects without credentials.

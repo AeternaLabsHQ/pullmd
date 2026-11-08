@@ -1,0 +1,81 @@
+---
+title: Reverse proxy and HTTPS
+sidebar_label: Reverse proxy
+description: Run PullMD behind Traefik, Caddy, nginx or a tunnel, and set PULLMD_TRUST_PROXY so rate limits and cookies work.
+---
+
+# Reverse proxy and HTTPS
+
+To reach PullMD from the internet, put it behind a reverse proxy that handles HTTPS. Set `PUBLIC_URL` and `PULLMD_TRUST_PROXY`. `PULLMD_TRUST_PROXY` tells PullMD to believe the proxy's forwarding headers.
+
+## Traefik
+
+PullMD ships a compose file with Traefik labels. It joins an external Docker network called `proxy` and publishes no port of its own. To start it, download the file, set your domain, and run:
+
+```bash
+curl -O https://raw.githubusercontent.com/AeternaLabsHQ/pullmd/main/docker-compose.traefik.yml
+echo "HOST_DOMAIN=pullmd.example.com" >> .env
+docker compose -f docker-compose.traefik.yml up -d
+```
+
+The labels expect Traefik entry points named `http` and `https`, redirect HTTP to HTTPS, and use the TLS settings of your Traefik instance. The file sets `PULLMD_TRUST_PROXY=1` and `PUBLIC_URL=https://${HOST_DOMAIN}`, so there's nothing else to configure.
+
+## Any other proxy
+
+Behind Caddy, nginx, a Cloudflare tunnel or a load balancer, add to `.env`:
+
+```bash
+PUBLIC_URL=https://pullmd.example.com
+PULLMD_TRUST_PROXY=1
+```
+
+### Choose a PULLMD_TRUST_PROXY value
+
+PullMD ignores `X-Forwarded-For`, `X-Forwarded-Proto` and `X-Forwarded-Host` unless this setting says the connection comes from a proxy. It's off by default.
+
+| Value | Meaning |
+| --- | --- |
+| unset, `false`, `off`, `no`, `0` | Off. Forwarding headers are ignored. |
+| `1`, `2`, … | Trust this many proxies in front of PullMD. |
+| `true`, `yes`, `on` | Trust every hop. The client address is then whatever the client puts first in `X-Forwarded-For`, so prefer a count. |
+| Comma-separated list | Proxy addresses or networks, such as `172.18.0.0/16`, or the keywords `loopback`, `linklocal` and `uniquelocal`. |
+
+<Warning title="A count trusts any connection">A count trusts whatever connects. Use `1` only if PullMD's port is reachable through the proxy alone. The default `docker-compose.yml` publishes port 3000 on the host; either remove the `ports:` lines or set the proxy's address instead of a count.</Warning>
+
+An invalid list logs a warning at startup and leaves the setting off.
+
+### What goes wrong without it
+
+Every request appears to come from the proxy, so all visitors share one set of rate limits:
+
+- 10 login attempts a minute and 5 signups an hour
+- 120 lookups of unknown share links a minute
+- The OAuth limits (60 a minute for authorization and tokens, 10 client registrations an hour)
+- The hourly [image, audio and OCR budget](/guides/images-and-audio#hourly-budget) for visitors who aren't signed in
+
+PullMD logs this once when it sees an `X-Forwarded-For`, `Forwarded` or `X-Forwarded-Proto` header with the setting off:
+
+```text
+Requests arrive through a proxy but PULLMD_TRUST_PROXY is not set: all clients share one rate-limit bucket and the client address is the proxy's. See MIGRATION.md.
+```
+
+## Example: Caddy
+
+This Caddyfile proxies a domain to PullMD on its Docker network:
+
+```caddy
+pullmd.example.com {
+    reverse_proxy pullmd:3000
+}
+```
+
+Run Caddy on the same Docker network as PullMD and set `PULLMD_TRUST_PROXY` to Caddy's network, or remove PullMD's published port and use `1`.
+
+## Sign-in behind a proxy
+
+With [sign-in](/self-hosting/authentication) enabled, check the `Host` header and the referrer policy:
+
+- **The `Host` header:** Login and other form posts (`/login`, `/signup`, `/logout`, `/oauth/consent`) are accepted when the browser's `Origin`, or its `Referer` if `Origin` is absent or `null`, names the host the request arrived for or the host of `PUBLIC_URL`. Only host names are compared. Requests with neither header are accepted. If your proxy rewrites `Host` to an internal name, set `PUBLIC_URL` correctly or pass the original `Host` through. Otherwise login fails with `403 Forbidden: form posts are accepted from this site only.`
+- **No `Referrer-Policy: no-referrer`:** With that policy, browsers send `Origin: null` on form posts and PullMD refuses them. The browser default and `same-origin` both work.
+
+The session cookie is marked `Secure` when the request arrived over HTTPS or `PUBLIC_URL` starts with `https://`. Browsers then drop it on plain `http://` LAN addresses, so open PullMD through its HTTPS address (or `localhost`) to sign in.

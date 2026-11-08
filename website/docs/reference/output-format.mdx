@@ -1,0 +1,178 @@
+---
+title: Output format
+description: The Markdown body, frontmatter fields, response headers and JSON shape PullMD returns.
+---
+
+# Output format
+
+A PullMD conversion returns a Markdown body, optional frontmatter, response headers and, with `format=json`, a JSON object. Errors use one JSON shape.
+
+## The body
+
+Every result starts with the title as a level-1 heading, followed by the content. With the `trafilatura` extractor, the heading appears twice when the page has its own matching `<h1>`. The source URL, date and metadata are in the [frontmatter](#frontmatter), which you request separately. A short result:
+
+```markdown
+# Release checklist
+
+Run through these steps before every release so nothing ships half-finished.
+
+## Before tagging
+
+- Update the changelog with every user-facing change.
+```
+
+Tables come out without padding spaces, which saves tokens. Reddit and Hacker News threads add a horizontal rule and a comments section after the post.
+
+## Formats
+
+| `format` | `Content-Type` | Body |
+| --- | --- | --- |
+| `md` (default) | `text/markdown` | Markdown |
+| `text` | `text/plain` | The same content with headings, emphasis, quote markers and list bullets simplified. Links become `text (url)` and images become their URL. Tables, code blocks, ordered lists and horizontal rules keep their Markdown. |
+| `json` | `application/json` | The Markdown and its metadata in one object |
+
+### JSON
+
+A `format=json` response for `https://example.com`, shortened:
+
+```json
+{
+  "markdown": "# Example Domain\n\nThis domain is for use in documentation examples…",
+  "metadata": {
+    "title": "Example Domain",
+    "description": null,
+    "author": null,
+    "publishedTime": null,
+    "language": "en",
+    "sourceUrl": "https://example.com",
+    "statusCode": 200,
+    "quality": 0.65,
+    "extractorReason": "low quality (0.2) → rendered via playwright",
+    "contentLength": 905
+  },
+  "source": "playwright",
+  "shareId": "87e87713d5aa7329c7248a44dc5ed321"
+}
+```
+
+The example leaves out some `metadata` fields: `canonical`, `modifiedTime`, and the Open Graph and Twitter card fields (`ogTitle`, `ogImage`, `twitterCard` and so on). A field the page doesn't have is `null`. `contentLength` and `extractorReason` are present for pages extracted by Readability, Trafilatura or Playwright and for `POST /api/html`. Uploads have `contentLength` without `extractorReason`, and Reddit, Hacker News and Cloudflare Markdown results have neither. A cached Reddit or Hacker News result has a shorter `metadata` object that holds only the fields it stores, such as `title`, `author`, `published`, `upvotes`, `sourceUrl` and `quality`.
+
+On a cache hit, `quality` is recomputed from the cached Markdown, so it can differ from the value of the fresh fetch.
+
+For `POST /api/html` and `POST /api/file`, `statusCode` is `null`, and so is `sourceUrl` for files. With `query`, an `extract` object is added. `shareId` is `null` for uploads. Every field is described in the [API reference](/reference/api/convert/convert-a-url).
+
+## Frontmatter
+
+Add `frontmatter=true` to get a YAML block before the body:
+
+```yaml
+---
+title: Markdown - Wikipedia
+url: https://en.wikipedia.org/wiki/Markdown
+source: readability
+fetched: 2026-10-19T00:37:20.456Z
+quality: 1
+language: en
+extractor_reason: tables preserved (33 vs 3)
+share_id: 676e61c856410ee32501a44b154fbc31
+---
+```
+
+A field appears only when it has a value.
+
+| Field | Present for | Value |
+| --- | --- | --- |
+| `title` | Results with a title (uploaded files have none) | Page title |
+| `url` | Results with a source URL | Source URL. Uploaded files and `POST /api/html` without `url` have none. |
+| `source` | All | Which extractor produced the result. See [`X-Source` values](#x-source-values). |
+| `fetched` | All | When this response was built (ISO 8601) |
+| `quality` | All | Extraction confidence, `0` to `1` |
+| `author` | Pages, Reddit, Hacker News, YouTube | Author or poster. Reddit values start with `u/`. |
+| `published` | Pages, Reddit, Hacker News, YouTube | Publication date. ISO 8601 for Reddit and Hacker News; pages and YouTube give the string the page states. |
+| `modified` | Pages | Last-modified date from the page |
+| `description` | Pages | Meta or Open Graph description |
+| `language` | Pages | Page language |
+| `image` | Pages | Open Graph or Twitter image |
+| `site` | Pages | Site name |
+| `extractor_reason` | Pages | Why this extractor won, or why the page was rendered |
+| `share_id` | Cached results | Share id. Open at `/s/<id>`. |
+| `subreddit`, `upvotes` | Reddit (`upvotes` also Hacker News) | Post details. `subreddit` starts with `r/`. |
+| `duration`, `views` | YouTube | Video length and view count |
+| `image_size` | Captioned images | `WIDTHxHEIGHT` |
+| `audio_seconds` | Transcribed audio | Length in seconds |
+| `llm_model`, `llm_tokens` | Captions, transcripts and PDF OCR | Model and total tokens, when the provider reports usage |
+| `llm_prompt_tokens`, `llm_completion_tokens` | Captions, transcripts and PDF OCR | Token split, when the provider reports it |
+| `pdf_pages` | PDF OCR | Pages processed |
+| `extracted`, `extract_confidence`, `sections_selected`, `original_tokens`, `returned_tokens` | Requests with `query` | See [Query-scoped extraction](/guides/query-scoped-extraction) |
+
+MCP `read_url` results always include a frontmatter block, even with `frontmatter=false`, with `source`, `share_id`, `share_url`, `quality` and `cached`. `get_share` results carry `url`, `source`, `share_id`, `share_url`, `refreshed` and `age_ms`. See [MCP tools](/reference/mcp-tools).
+
+[Site recipes](/guides/site-recipes) can add their own fields.
+
+### Keep only some fields
+
+To trim tokens for agents, set `PULLMD_FRONTMATTER_FIELDS` to the fields to keep:
+
+```bash
+PULLMD_FRONTMATTER_FIELDS=title,url,source
+```
+
+Unknown names are ignored with a warning at startup. If none of the names are valid, every field is kept.
+
+## Response headers
+
+| Header | Present | Value |
+| --- | --- | --- |
+| `X-Source` | Every conversion | Which extractor produced the result |
+| `X-Quality` | Every conversion | `0` to `1` |
+| `X-Share-Id` | Cached conversions | 32-character hex share id |
+| `X-Suggested-Filename` | Every conversion | A file name for saving the result, such as `example-domain.md` |
+| `X-Transcript-Status` | Fresh YouTube fetches | `ok`, `none`, `blocked` or `error` |
+| `X-Extracted`, `X-Extract-Confidence`, `X-Extract-Sections`, `X-Extract-Original-Tokens`, `X-Extract-Returned-Tokens` | Requests with `query` | See [Query-scoped extraction](/guides/query-scoped-extraction#read-the-result) |
+
+`/api/stream` can't send headers after the stream starts, so the `result` event carries `source`, `shareId` and `suggestedFilename` instead, plus `transcriptStatus` for fresh web conversions.
+
+### Suggested file names
+
+YouTube results are named `YT-<title>-<video id>.md`. Documents, images and audio use the original file name with `.md`. Everything else uses the title, then the file name in the URL, the share id, or `pullmd`. File names and titles are lowercased, characters other than letters and digits become hyphens, the result is cut to 60 characters, and the original extension is dropped. To put a date in front, set [`PULLMD_FILENAME_DATE_PREFIX`](/reference/configuration#output).
+
+## X-Source values
+
+| Value | Meaning |
+| --- | --- |
+| `cloudflare` | The site served Markdown itself |
+| `readability` | Mozilla Readability on the static HTML |
+| `readability-fallback` | Readability couldn't find an article and returned the whole page body |
+| `trafilatura` | Trafilatura on the static HTML |
+| `playwright` | Rendered in headless Chromium, then extracted |
+| `coverage-guard` | The coverage guard replaced a result that missed most of the page |
+| `article-series` | Several short `<article>` blocks by the same author were joined |
+| `recipe-content` | A site recipe named the article body |
+| `reddit` | Reddit API |
+| `hackernews` | Hacker News API |
+| `youtube` | YouTube transcript |
+| `markitdown` | Document conversion |
+| `pdf-ocr` | PDF OCR provider |
+| `image-caption` | Vision model |
+| `audio-transcript` | Speech-to-text model |
+| `email`, `text`, `markdown`, `subtitles`, `opendocument`, `rtf`, `calendar`, `contact`, `data`, `feed`, `notebook`, `code` | An [uploaded file PullMD read itself](/guides/documents#upload-formats-pullmd-reads-itself) |
+
+## Errors
+
+Errors are JSON with an `error` message for every `format`:
+
+```json
+{ "error": "Missing required parameter: url" }
+```
+
+| Status | When |
+| --- | --- |
+| `400` | Missing or invalid parameter, empty upload, or a Reddit page that isn't a post or subreddit |
+| `401` | Sign-in is on and no valid credentials were sent |
+| `403` | URL blocked by [SSRF protection](/self-hosting/ssrf-protection), a URL that can't be parsed or isn't `http` or `https` on `GET /api`, or history and deletes refused by `DISABLE_PUBLIC_HISTORY` |
+| `404` | Share link, cache entry or Reddit post not found |
+| `413` | Upload too large |
+| `422` | Uploaded HTML has almost no content, or an uploaded file doesn't match its format |
+| `429` | Rate limit reached. Share-link lookups send a `Retry-After` header. |
+| `500` | Unexpected Reddit error, or extraction failed on `POST /api/html` |
+| `502` | The source or a sidecar failed |

@@ -1,0 +1,1069 @@
+openapi: 3.0.3
+info:
+  title: PullMD API
+  version: 3.15.2
+  license:
+    name: AGPL-3.0-or-later
+    url: https://github.com/AeternaLabsHQ/pullmd/blob/main/LICENSE
+  description: |
+    PullMD is self-hosted, so every request goes to your own instance. Replace `http://localhost:3000` with your `PUBLIC_URL`.
+
+    Conversion endpoints return Markdown (`text/markdown`) by default. Add `format=json` for a JSON envelope or `format=text` for plain text.
+servers:
+  - url: http://localhost:3000
+tags:
+  - name: Convert
+    description: Turn a URL, an HTML document or an uploaded file into Markdown.
+  - name: Share links
+    description: Read a cached conversion by its share id.
+  - name: History and cache
+    description: List and delete cached conversions.
+  - name: Instance
+    description: Health, configuration and usage of the instance. These endpoints never require sign-in.
+  - name: Account
+    description: The signed-in user.
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: 'Needed only when the instance has sign-in enabled (`PULLMD_AUTH_MODE` is `single-admin` or `multi-user`). Send `Bearer pmd_<key>` with an API key created at `/settings`. In `single-admin` mode, the legacy `PULLMD_AUTH_TOKEN` is also accepted as a bearer token. OAuth access tokens work only on `/mcp`. Browser sessions use the `pullmd_session` cookie instead.'
+  parameters:
+    url:
+      name: url
+      in: query
+      required: true
+      description: The page, document, image or audio file to convert, or a YouTube video when `MARKITDOWN_YOUTUBE` is set. Reddit and Hacker News links are detected automatically.
+      schema: { type: string, format: uri }
+      example: https://en.wikipedia.org/wiki/Markdown
+    comments:
+      name: comments
+      in: query
+      description: Include the comment tree for Reddit and Hacker News links. `false` or `0` turns it off. Ignored for other URLs. A cached copy that has comments is served with them, so add `nocache` to fetch without comments.
+      schema: { type: boolean, default: true }
+    comment_depth:
+      name: comment_depth
+      in: query
+      description: Maximum comment nesting depth for Reddit and Hacker News, or `all` for the whole thread, including comments Reddit collapses. Any other value uses the default. Setting it bypasses the cache.
+      schema: { type: string, default: '3' }
+    images:
+      name: images
+      in: query
+      description: 'Reddit posts only: `on` or `off` describes and transcribes the images of the post with the vision model, overriding `PULLMD_EMBEDDED_IMAGES` unless that is `off`. Also accepts `true`, `1`, `false` and `0`.'
+      schema: { type: string, enum: ['on', 'off'] }
+    comment_limit:
+      name: comment_limit
+      in: query
+      description: Maximum number of top-level comments. Uncapped by default, and `0` or a value that isn't an integer also means no cap. Setting it bypasses the cache.
+      schema: { type: integer }
+    frontmatter:
+      name: frontmatter
+      in: query
+      description: Prepend a YAML block with the title, source URL, extractor, quality and other metadata. See [Output format](/reference/output-format).
+      schema: { type: boolean, default: false }
+    format:
+      name: format
+      in: query
+      description: '`md` returns Markdown, `text` strips the Markdown syntax, `json` returns the Markdown and its metadata in a JSON object.'
+      schema: { type: string, enum: [md, text, json], default: md }
+    nocache:
+      name: nocache
+      in: query
+      description: Skip the one-hour cache and fetch the source again.
+      schema: { type: boolean, default: false }
+    render:
+      name: render
+      in: query
+      description: '`force` always renders the page in headless Chromium, `skip` never does. By default PullMD decides per page. An unrecognized value is ignored. Setting it bypasses the cache.'
+      schema: { type: string, enum: [force, skip] }
+    extractor:
+      name: extractor
+      in: query
+      description: Use one extractor and skip the automatic pick of the best result. An unrecognized value is ignored. Setting it bypasses the cache.
+      schema: { type: string, enum: [readability, trafilatura, playwright] }
+    pdf:
+      name: pdf
+      in: query
+      description: '`ocr` sends PDFs to the OCR provider configured with `PULLMD_PDF_OCR_API_KEY`, which keeps tables intact. Without a provider, PullMD uses the standard conversion. Setting it bypasses the cache.'
+      schema: { type: string, enum: [ocr] }
+    yt_timecodes:
+      name: yt_timecodes
+      in: query
+      description: 'YouTube transcript timecodes: `links` (clickable timestamp links), `plain` (`[MM:SS]` labels) or `none`. An unrecognized value is ignored. Setting it bypasses the cache.'
+      schema: { type: string, enum: [links, plain, none], default: links }
+    yt_chunk:
+      name: yt_chunk
+      in: query
+      description: Group the YouTube transcript into blocks of this many seconds. `0` keeps each original snippet. A value that isn't a whole number is ignored. Setting it bypasses the cache.
+      schema: { type: integer, minimum: 0, default: 30 }
+    lang:
+      name: lang
+      in: query
+      description: Language of the comments section heading. `en` gives `## Comments`, and any other value gives `## Kommentare`.
+      schema: { type: string, enum: [de, en], default: de }
+    filename:
+      name: filename
+      in: query
+      description: Original file name. Prefer the `X-Filename` header, which stays out of proxy access logs.
+      schema: { type: string }
+    xFilename:
+      name: X-Filename
+      in: header
+      description: Original file name, URI-encoded. Used for the suggested download name and to help detect the file type.
+      schema: { type: string }
+      example: report.pdf
+  headers:
+    X-Source:
+      description: 'Which extractor produced the result: `cloudflare`, `readability`, `readability-fallback`, `trafilatura`, `playwright`, `recipe-content`, `coverage-guard`, `markitdown`, `youtube`, `reddit`, `hackernews`, `image-caption`, `audio-transcript`, `pdf-ocr`, `article-series`, or for uploads PullMD reads itself `email`, `text`, `markdown`, `subtitles`, `opendocument`, `rtf`, `calendar`, `contact`, `data`, `feed`, `notebook` or `code`.'
+      schema: { type: string }
+    X-Quality:
+      description: Extraction confidence from `0.0` to `1.0`.
+      schema: { type: number }
+    X-Share-Id:
+      description: 32-character hex id of the cached copy. Open it at `/s/<id>`.
+      schema: { type: string }
+    X-Suggested-Filename:
+      description: A download file name for the result, such as `YT-some-talk-dQw4w9WgXcQ.md`.
+      schema: { type: string }
+    X-Transcript-Status:
+      description: 'YouTube only. `ok`, `none` (the video has no transcript), or `blocked` / `error`, which are temporary and not cached.'
+      schema: { type: string, enum: [ok, none, blocked, error] }
+    X-Extracted:
+      description: Present when `query` is set. `true` when only matching sections were returned, `false` when the whole page was.
+      schema: { type: boolean }
+    X-Extract-Confidence:
+      description: '`high`, `medium` or `low`. Omitted when the page was small enough that extraction was skipped.'
+      schema: { type: string, enum: [high, medium, low] }
+    X-Extract-Sections:
+      description: Number of sections included in the result.
+      schema: { type: integer }
+    X-Extract-Original-Tokens:
+      description: Estimated tokens in the full page (characters divided by 4).
+      schema: { type: integer }
+    X-Extract-Returned-Tokens:
+      description: Estimated tokens in the returned Markdown.
+      schema: { type: integer }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string, description: What went wrong. }
+        code: { type: string, description: 'Machine-readable reason, when there is one. `bot_challenge`: the site is behind a bot-protection challenge; retrying won''t help.' }
+        vendor: { type: string, description: 'With `bot_challenge`: who served the challenge, `Cloudflare` or `Bunny Shield`.' }
+    Conversion:
+      type: object
+      description: With `format=json`, the response is this JSON object.
+      properties:
+        markdown: { type: string, description: 'The converted Markdown, including the frontmatter block when `frontmatter=true`.' }
+        metadata:
+          type: object
+          nullable: true
+          description: 'Page metadata found during extraction. A field the source doesn''t have is `null`. `contentLength` and `extractorReason` appear for pages extracted by Readability, Trafilatura or Playwright and for `POST /api/html`. Uploads have `contentLength` without `extractorReason`, and Reddit, Hacker News and Cloudflare Markdown results have neither. A cached Reddit or Hacker News result has a shorter object with the fields it stores.'
+          properties:
+            title: { type: string, nullable: true, description: 'Page title, from `<title>`, `og:title` or the first heading.' }
+            description: { type: string, nullable: true, description: 'Page description, from the `description` or `og:description` meta tag.' }
+            canonical: { type: string, nullable: true, description: The canonical URL the page declares. }
+            author: { type: string, nullable: true, description: 'Author, from the `author` or `article:author` meta tag.' }
+            publishedTime: { type: string, nullable: true, description: 'Publication time, from `article:published_time`, as the page states it.' }
+            modifiedTime: { type: string, nullable: true, description: 'Last-modified time, from `article:modified_time`, as the page states it.' }
+            language: { type: string, nullable: true, description: 'Page language, from `<html lang>` or `og:locale`.' }
+            ogImage: { type: string, nullable: true, description: 'Preview image URL, from `og:image`.' }
+            ogSiteName: { type: string, nullable: true, description: 'Site name, from `og:site_name`.' }
+            ogTitle: { type: string, nullable: true, description: 'Title from the `og:title` meta tag.' }
+            ogDescription: { type: string, nullable: true, description: 'Description from the `og:description` meta tag.' }
+            ogType: { type: string, nullable: true, description: 'Content type from the `og:type` meta tag, such as `article` or `website`.' }
+            twitterCard: { type: string, nullable: true, description: 'Card type from the `twitter:card` meta tag.' }
+            twitterTitle: { type: string, nullable: true, description: 'Title from the `twitter:title` meta tag.' }
+            twitterDescription: { type: string, nullable: true, description: 'Description from the `twitter:description` meta tag.' }
+            twitterImage: { type: string, nullable: true, description: 'Image URL from the `twitter:image` meta tag.' }
+            sourceUrl: { type: string, nullable: true, description: 'The URL that was converted. For `POST /api/html`, the `url` you passed; `null` for uploaded files.' }
+            statusCode: { type: integer, nullable: true, description: 'HTTP status of the fetched page. `null` for HTML and file uploads.' }
+            published: { type: string, description: 'Publication time as an ISO 8601 string. Present on cached Reddit and Hacker News results.' }
+            upvotes: { type: integer, description: 'Post score. Present on cached Reddit and Hacker News results.' }
+            contentLength: { type: integer, description: 'Length of the Markdown, in characters. Absent for Reddit, Hacker News and Cloudflare Markdown results.' }
+            quality: { type: number, description: 'Extraction confidence from 0 to 1. On a cache hit it is recomputed from the cached Markdown, so it can differ from the fresh value.' }
+            extractorReason: { type: string, nullable: true, description: 'Why this extractor was chosen. Absent for uploads and for Reddit, Hacker News and Cloudflare Markdown results.' }
+        source: { type: string, description: Which extractor produced the result. Same values as the `X-Source` header. }
+        shareId: { type: string, nullable: true, description: 'Share id, or `null` when the result was not cached.' }
+        extract:
+          type: object
+          description: Present only when `query` is set.
+          properties:
+            extracted: { type: boolean, description: '`true` when only matching sections were returned; `false` when the whole page came back (small page or no match).' }
+            confidence:
+              type: string
+              nullable: true
+              enum: [high, medium, low]
+              description: '`high` when the sections cover at least half of the query terms, `medium` otherwise, `low` when nothing matched and the whole page was returned. `null` when the page was small enough to return whole. A query with no usable terms also gives `low`.'
+            sectionsSelected: { type: integer, description: 'Number of page sections returned. `0` when the whole page came back.' }
+            originalTokens: { type: integer, description: Estimated tokens of the whole page (characters divided by 4). }
+            returnedTokens: { type: integer, description: Estimated tokens of the returned Markdown. }
+    ServiceStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [ok, down, degraded, not-configured]
+          description: '`not-configured` when the sidecar''s URL variable is empty; it doesn''t count as down.'
+        latencyMs: { type: integer, description: 'Health-check round trip, in milliseconds. Present when the sidecar answered, including `unhealthy` and `http <status>`. Absent when it is unreachable, timed out or not configured.' }
+        error:
+          type: string
+          description: 'Why it is down: `timeout`, `unreachable`, `misconfigured` (the URL can''t be parsed), `unhealthy` (it reported itself unhealthy), `http <status>`, or `policy-missing` (`status: degraded`: a Playwright sidecar older than 3.15.2).'
+    Status:
+      type: object
+      properties:
+        ok: { type: boolean, description: '`false` when any configured sidecar is down. Matches the HTTP status: 200 or 503.' }
+        version: { type: string, description: PullMD version. }
+        services:
+          type: object
+          description: One entry per sidecar. Results are cached for 5 seconds.
+          properties:
+            trafilatura: { allOf: [{ $ref: '#/components/schemas/ServiceStatus' }], description: 'The Trafilatura sidecar, the second text extractor (`TRAFILATURA_URL`).' }
+            playwright: { allOf: [{ $ref: '#/components/schemas/ServiceStatus' }], description: 'The Playwright sidecar, which renders JavaScript-heavy pages in headless Chromium (`PLAYWRIGHT_URL`).' }
+            markitdown: { allOf: [{ $ref: '#/components/schemas/ServiceStatus' }], description: 'The MarkItDown sidecar, which converts documents such as PDF and Office files, and fetches YouTube transcripts (`MARKITDOWN_URL`).' }
+        error: { type: string, description: '`check-failed` when the status check itself failed. `services` is empty then.' }
+    StreamMessage:
+      type: object
+      description: 'Server-sent events. Each message is an `event:` line and a `data:` line holding a JSON object.'
+      properties:
+        event:
+          type: string
+          enum: [status, result, error]
+          description: '`status` reports progress (any number of times), then exactly one `result` or `error` ends the stream.'
+        data:
+          description: The JSON payload. Its shape depends on `event`.
+          oneOf:
+            - title: status
+              type: object
+              properties:
+                stage: { type: string, enum: [fetching, extracting, rendering], description: 'What PullMD is doing: fetching the page, extracting the content, or rendering it in the browser.' }
+                url: { type: string, description: 'With `fetching`: the URL being fetched.' }
+                cached: { type: boolean, description: 'With `fetching`: `true` when the result comes from the cache.' }
+                source: { type: string, description: 'With `extracting`: the extractor at work. Same values as the `X-Source` header.' }
+                note: { type: string, description: 'With `extracting`: extra detail, such as why PDF OCR fell back.' }
+                reason: { type: string, description: 'With `rendering`: why the page is rendered in the browser.' }
+            - title: result
+              type: object
+              properties:
+                markdown: { type: string, description: 'The converted Markdown, with the frontmatter block when `frontmatter=true`.' }
+                source: { type: string, description: 'Which extractor produced the result. Same values as the `X-Source` header.' }
+                shareId: { type: string, nullable: true, description: 'Share id, or `null` when the result was not cached.' }
+                transcriptStatus: { type: string, nullable: true, description: 'Sent for fresh web conversions, not for cached, Reddit or Hacker News results. The transcript status for a YouTube video, same values as the `X-Transcript-Status` header, and `null` for other pages.' }
+                suggestedFilename: { type: string, description: 'A ready-made file name, same as the `X-Suggested-Filename` header on `GET /api`.' }
+            - title: error
+              type: object
+              properties:
+                message: { type: string, description: 'What went wrong. A blocked URL gives `URL not allowed: …`.' }
+    HistoryItem:
+      type: object
+      properties:
+        id: { type: integer, description: 'Cache row id. Use it with `DELETE /api/cache/{id}`.' }
+        url: { type: string, description: The converted URL. }
+        title: { type: string, nullable: true, description: Page title. }
+        source: { type: string, description: 'Which extractor produced the result. Same values as the `X-Source` header.' }
+        share_id: { type: string, nullable: true, description: 'Share id. Open the result at `/s/{share_id}`.' }
+        client: { type: string, description: 'Which client made the request: `api`, `pwa`, `claude` or `browser`. MCP requests are recorded as `api`.' }
+        created_at: { type: string, description: When the row was last written (UTC). }
+paths:
+  /api:
+    get:
+      tags: [Convert]
+      operationId: convertUrl
+      summary: Convert a URL
+      description: |
+        Fetches a URL and returns the main content as Markdown. Web pages go through Cloudflare's native Markdown, Readability, Trafilatura and, for JavaScript-heavy pages, headless Chromium. Documents, YouTube videos, images and audio are converted when the matching sidecar or provider is configured.
+
+        Results are cached for one hour. A cached result is served unless you pass `nocache` or a parameter that changes the output. A request that bypasses the cache replaces the cached copy for that URL with its own result, so the next plain request is served that result.
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/url'
+        - name: query
+          in: query
+          description: A question about the page. PullMD returns only the sections that answer it. The PullMD README reports typically 70-95% fewer tokens on long pages. See [Query-scoped extraction](/guides/query-scoped-extraction).
+          schema: { type: string }
+          example: what is CommonMark
+        - name: max_tokens
+          in: query
+          description: 'Token budget for `query`. No effect without `query`. With `query`, a value that isn''t an integer from 64 to 20000 returns `400`. A page of at most `max(800, floor(1.25 × max_tokens))` estimated tokens comes back whole, even if that is over the budget: `X-Extracted` is `false` and `X-Extract-Confidence` is not sent.'
+          schema: { type: integer, minimum: 64, maximum: 20000, default: 600 }
+        - $ref: '#/components/parameters/format'
+        - $ref: '#/components/parameters/frontmatter'
+        - $ref: '#/components/parameters/nocache'
+        - $ref: '#/components/parameters/comments'
+        - $ref: '#/components/parameters/comment_depth'
+        - $ref: '#/components/parameters/images'
+        - $ref: '#/components/parameters/comment_limit'
+        - $ref: '#/components/parameters/lang'
+        - $ref: '#/components/parameters/render'
+        - $ref: '#/components/parameters/extractor'
+        - $ref: '#/components/parameters/pdf'
+        - $ref: '#/components/parameters/yt_timecodes'
+        - $ref: '#/components/parameters/yt_chunk'
+      responses:
+        '200':
+          description: The page as Markdown.
+          headers:
+            X-Source: { $ref: '#/components/headers/X-Source' }
+            X-Quality: { $ref: '#/components/headers/X-Quality' }
+            X-Share-Id: { $ref: '#/components/headers/X-Share-Id' }
+            X-Suggested-Filename: { $ref: '#/components/headers/X-Suggested-Filename' }
+            X-Transcript-Status: { $ref: '#/components/headers/X-Transcript-Status' }
+            X-Extracted: { $ref: '#/components/headers/X-Extracted' }
+            X-Extract-Confidence: { $ref: '#/components/headers/X-Extract-Confidence' }
+            X-Extract-Sections: { $ref: '#/components/headers/X-Extract-Sections' }
+            X-Extract-Original-Tokens: { $ref: '#/components/headers/X-Extract-Original-Tokens' }
+            X-Extract-Returned-Tokens: { $ref: '#/components/headers/X-Extract-Returned-Tokens' }
+          content:
+            text/markdown:
+              schema: { type: string }
+              example: |
+                # Markdown - Wikipedia
+
+                <!-- … -->
+
+                In 2002, [Aaron Swartz](https://en.wikipedia.org/wiki/Aaron%5FSwartz "Aaron Swartz") created [atx](https://en.wikipedia.org/wiki/Atx%5F%28markup%5Flanguage%29 "Atx (markup language)") and referred to it as "the true structured text format". Gruber created the Markdown language in 2004 with Swartz as his "sounding board".
+
+                <!-- … -->
+            text/plain:
+              schema: { type: string, description: 'With `format=text`: the content with the Markdown syntax removed.' }
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversion' }
+        '400':
+          description: '`url` is missing, `query` is set and `max_tokens` isn''t an integer from 64 to 20000, `images` is invalid, or a Reddit link isn''t a post, gallery or subreddit page (`"code": "reddit_unsupported_page"`).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Missing required parameter: url' }
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate:
+              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '403':
+          description: The URL resolves to a private, loopback, link-local or cloud-metadata address, its host name doesn't resolve, it can't be parsed, or its scheme isn't `http` or `https`. With `render=force` or `extractor=playwright`, also when the page navigates the browser to such an address. See [SSRF protection](/self-hosting/ssrf-protection).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'URL not allowed: blocked address 169.254.169.254 for host 169.254.169.254' }
+        '404':
+          description: A Reddit link points to a post that doesn't exist.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Post not found }
+        '500':
+          description: An unexpected error while fetching a Reddit post.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Internal server error }
+        '502':
+          description: The source could not be fetched or converted, Reddit rate-limited (`Reddit rate limit. Try again later.`) or blocked (`Reddit blocked the request.`) the request, or the site is behind a bot-protection challenge (`code` is `bot_challenge`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                fetchFailed:
+                  summary: Fetch failed
+                  value: { error: 'Failed to extract page: Page fetch failed with status 404' }
+                botChallenge:
+                  summary: Bot-protection challenge
+                  value: { error: 'Site is behind a bot-protection challenge (Cloudflare); PullMD does not solve these. Workaround: save the page from your browser and upload the HTML via POST /api/html.', code: bot_challenge, vendor: Cloudflare }
+  /api/html:
+    post:
+      tags: [Convert]
+      operationId: convertHtml
+      summary: Convert HTML
+      description: |
+        Converts an HTML document you send in the request body, such as a page saved from a browser. Use it for pages PullMD can't reach, such as pages behind a login.
+
+        Nothing is cached: no history entry and no share link. JavaScript in the document is never run, so an app shell with no server-rendered content returns `422`.
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - name: url
+          in: query
+          description: The page's original address. Used to resolve relative links and in the metadata.
+          schema: { type: string, format: uri }
+        - name: extractor
+          in: query
+          description: Use one extractor and skip the automatic pick of the best result.
+          schema: { type: string, enum: [readability, trafilatura] }
+        - $ref: '#/components/parameters/format'
+        - $ref: '#/components/parameters/frontmatter'
+        - $ref: '#/components/parameters/filename'
+        - $ref: '#/components/parameters/xFilename'
+      requestBody:
+        required: true
+        description: The raw HTML, up to 10 MB. Send it with `Content-Type` set to `text/html` or `application/xhtml+xml`.
+        content:
+          text/html:
+            schema: { type: string }
+            example: '<!doctype html><html><head><title>Saved page</title></head><body><article><h1>Saved page</h1><p>The article text.</p></article></body></html>'
+      responses:
+        '200':
+          description: The document as Markdown.
+          headers:
+            X-Source: { $ref: '#/components/headers/X-Source' }
+            X-Quality: { $ref: '#/components/headers/X-Quality' }
+            X-Suggested-Filename: { $ref: '#/components/headers/X-Suggested-Filename' }
+          content:
+            text/markdown:
+              schema: { type: string }
+              example: |
+                # Release checklist
+
+                Run through these steps before every release so nothing ships half-finished.
+
+                ## Before tagging
+
+                - Update the changelog with every user-facing change.
+                - Run the full test suite on a clean checkout.
+                - Bump the version in package.json.
+            text/plain:
+              schema: { type: string, description: 'With `format=text`: the content with the Markdown syntax removed.' }
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversion' }
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate:
+              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '400':
+          description: The body is empty or not sent as `text/html`, or `url` is not a valid URL.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Send raw HTML in the request body with Content-Type: text/html' }
+        '413':
+          description: The body is larger than 10 MB.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: File too large (max 10 MB). / Datei zu groß (max. 10 MB). }
+        '422':
+          description: The document has under 200 characters of content after extraction, as when a page loads its content with JavaScript.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Extraction found almost no content - this file looks like a JavaScript app shell. Submit the original URL instead. / Die Extraktion fand kaum Inhalt - die Datei wirkt wie eine JavaScript-App. Bitte übermittle stattdessen die Original-URL.' }
+        '500':
+          description: 'Extraction failed. The message starts with `Failed to extract HTML:`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /api/file:
+    post:
+      tags: [Convert]
+      operationId: convertFile
+      summary: Convert a file
+      description: |
+        Converts an uploaded file. Send the raw bytes as the request body with `Content-Type` set to the file's type. PullMD reads the raw body and doesn't decode multipart forms.
+
+        PDF, Word, PowerPoint, Excel, EPUB and ZIP files need the MarkItDown sidecar. PullMD reads e-mail, saved pages, text, subtitles, OpenDocument, RTF, calendars, contacts, data files, feeds, notebooks and source code itself; see [Documents](/guides/documents#upload-formats-pullmd-reads-itself). Images and audio need a vision or speech-to-text provider; without one, PullMD returns their metadata only. Nothing is cached: no history entry and no share link.
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/xFilename'
+        - $ref: '#/components/parameters/filename'
+        - $ref: '#/components/parameters/format'
+        - $ref: '#/components/parameters/frontmatter'
+        - $ref: '#/components/parameters/pdf'
+        - $ref: '#/components/parameters/lang'
+      requestBody:
+        required: true
+        description: The file's raw bytes, up to 25 MB. PullMD accepts any `Content-Type`, and `X-Filename` or `filename` helps it detect the file type.
+        content:
+          application/pdf:
+            schema: { type: string, format: binary }
+      responses:
+        '200':
+          description: The file as Markdown.
+          headers:
+            X-Source: { $ref: '#/components/headers/X-Source' }
+            X-Quality: { $ref: '#/components/headers/X-Quality' }
+            X-Suggested-Filename: { $ref: '#/components/headers/X-Suggested-Filename' }
+          content:
+            text/markdown:
+              schema: { type: string }
+              example: |
+                # report.pdf
+
+                Release checklist
+
+                Run through these steps before every release so nothing ships half-finished.
+
+                Before tagging
+
+                Update the changelog with every user-facing change.
+                Run the full test suite on a clean checkout.
+            text/plain:
+              schema: { type: string, description: 'With `format=text`: the content with the Markdown syntax removed.' }
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversion' }
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate:
+              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '400':
+          description: The body is empty.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Send the raw file bytes in the request body. / Sende die rohen Datei-Bytes im Request-Body. }
+        '413':
+          description: The file is larger than 25 MB.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: File too large (max 25 MB). / Datei zu groß (max. 25 MB). }
+        '422':
+          description: The file doesn't match its format, such as an `.eml` file without mail headers.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Not an e-mail: no From/To/Subject/Date headers found. / Keine E-Mail: keine From/To/Subject/Date-Header gefunden.' }
+        '502':
+          description: The conversion failed, for example because the MarkItDown sidecar is not configured or not reachable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Failed to convert file: markitdown sidecar unavailable or could not convert this document' }
+  /api/stream:
+    get:
+      tags: [Convert]
+      operationId: convertUrlStream
+      summary: Convert a URL with progress
+      description: |
+        Same conversion as `GET /api`, delivered as Server-Sent Events so you can show progress. `status` events report each stage, and the stream ends with one `result` event or one `error` event. The web app uses this endpoint.
+
+        Errors after the stream has started, including blocked URLs, arrive as an `error` event rather than an HTTP status. To use `query`, call `GET /api`.
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/url'
+        - $ref: '#/components/parameters/frontmatter'
+        - $ref: '#/components/parameters/nocache'
+        - $ref: '#/components/parameters/comments'
+        - $ref: '#/components/parameters/comment_depth'
+        - $ref: '#/components/parameters/images'
+        - $ref: '#/components/parameters/comment_limit'
+        - $ref: '#/components/parameters/lang'
+        - $ref: '#/components/parameters/render'
+        - $ref: '#/components/parameters/extractor'
+        - $ref: '#/components/parameters/pdf'
+        - $ref: '#/components/parameters/yt_timecodes'
+        - $ref: '#/components/parameters/yt_chunk'
+      responses:
+        '200':
+          description: An event stream of progress updates, ending with the result or an error.
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/StreamMessage' }
+              example: |
+                event: status
+                data: {"stage":"fetching","url":"https://example.com"}
+
+                event: status
+                data: {"stage":"extracting","source":"readability"}
+
+                event: status
+                data: {"stage":"rendering","reason":"low quality (0.2)"}
+
+                event: status
+                data: {"stage":"extracting","source":"playwright"}
+
+                event: result
+                data: {"markdown":"# Example Domain\n\nThis domain is for use in documentation examples…","source":"playwright","shareId":"2f2f4a7b37f071b7e3137d42eb9dbec3","transcriptStatus":null,"suggestedFilename":"example-domain.md"}
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate:
+              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '400':
+          description: '`url` is missing.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'Missing required parameter: url' }
+  /s/{id}:
+    get:
+      tags: [Share links]
+      operationId: getShare
+      summary: Get a shared conversion
+      description: |
+        Returns a cached conversion by its share id. If the copy is more than an hour old, PullMD fetches the source again first. If the source is gone, you get the last good copy, so share links keep working after the original page disappears.
+
+        Share links never need sign-in. They expire with their cache row (`PULLMD_CACHE_RETENTION_DAYS`, 90 days by default), and stop working at once when the admin (or anyone, with sign-in off) deletes the conversion.
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The 32-character hex share id from the `X-Share-Id` header or `shareId` field.
+          schema: { type: string }
+          example: 2f2f4a7b37f071b7e3137d42eb9dbec3
+        - name: format
+          in: query
+          description: '`text` strips the Markdown syntax. Any other value returns Markdown.'
+          schema: { type: string, enum: [md, text], default: md }
+      responses:
+        '200':
+          description: The cached Markdown.
+          headers:
+            X-Suggested-Filename: { $ref: '#/components/headers/X-Suggested-Filename' }
+          content:
+            text/markdown:
+              schema: { type: string }
+              example: |
+                # Example Domain
+
+                This domain is for use in documentation examples without needing permission. This is not a service; avoid relying on it for testing and monitoring purposes.
+
+                [Learn more](https://iana.org/help/example-domains)
+            text/plain:
+              schema: { type: string, description: 'With `format=text`: the content with the Markdown syntax removed.' }
+        '404':
+          description: No conversion has this id, or it has expired.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Share link not found or expired }
+        '429':
+          description: Too many unknown ids from your address (more than 120 a minute). Only ids that don't exist count toward the limit, so requests for existing share links are never counted.
+          headers:
+            Retry-After:
+              description: Seconds until the address can try again.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: rate_limited }
+  /api/history:
+    get:
+      tags: [History and cache]
+      operationId: listHistory
+      summary: List recent conversions
+      description: Recent conversions, newest first. When sign-in is enabled you see only your own.
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - name: limit
+          in: query
+          description: 'Number of items. Values above 100 are capped at 100 and negative values become 1. `0` or a value that isn''t a number uses the default.'
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: The most recent conversions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HistoryItem' }
+              example: 
+                - { id: 2, url: 'https://example.com', title: Example Domain, source: playwright, share_id: 2f2f4a7b37f071b7e3137d42eb9dbec3, client: api, created_at: '2026-10-19 00:37:30' }
+                - { id: 1, url: 'https://en.wikipedia.org/wiki/Markdown', title: Markdown - Wikipedia, source: readability, share_id: 676e61c856410ee32501a44b154fbc31, client: api, created_at: '2026-10-19 00:37:14' }
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate:
+              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '403':
+          description: '`DISABLE_PUBLIC_HISTORY` is on and you are not signed in.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Public history is disabled on this instance. }
+  /api/archive:
+    get:
+      tags: [History and cache]
+      operationId: listArchive
+      summary: Page through all conversions
+      description: Every cached conversion, newest first, with a total count for paging. When sign-in is enabled you see only your own.
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - name: limit
+          in: query
+          description: 'Number of items per page. Values above 200 are capped at 200 and negative values become 1. `0` or a value that isn''t a number uses the default. No `400`.'
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - name: offset
+          in: query
+          description: 'Number of items to skip. Past the end you get an empty `items` list with the real `total`.'
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: One page of conversions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    description: 'Conversions on this page, newest first.'
+                    items: { $ref: '#/components/schemas/HistoryItem' }
+                  total: { type: integer, description: 'Total number of conversions you can see (all of them, or your own when signed in). Use it with `limit` and `offset` to page.' }
+              example: 
+                items:
+                  - { id: 2, url: 'https://example.com', title: Example Domain, source: playwright, share_id: 2f2f4a7b37f071b7e3137d42eb9dbec3, client: api, created_at: '2026-10-19 00:37:30' }
+                total: 2
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate:
+              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '403':
+          description: '`DISABLE_PUBLIC_HISTORY` is on and you are not signed in.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Public history is disabled on this instance. }
+  /api/cache/{id}:
+    delete:
+      tags: [History and cache]
+      operationId: deleteCacheEntry
+      summary: Delete a conversion
+      description: |
+        Removes one conversion. What gets removed depends on who asks:
+
+        - **Admin, or anyone when sign-in is off**: the shared cache row, for every user, along with its share link (`scope: global`).
+        - **Regular user**: only the entry in your own history. The shared row and its share link keep working (`scope: user`).
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 'The numeric `id` from `/api/history` or `/api/archive`. Conversion responses carry only the share id. To delete a conversion you made, list `/api/history` and take the `id` of the item whose `share_id` matches. Don''t pass a share id here. The id is read up to its first non-digit, so a share id that starts with digits (such as `676e61c8…`) is taken as id `676`.'
+          schema: { type: integer }
+          example: 42
+      responses:
+        '200':
+          description: The entry was removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, description: Always `true`. }
+                  id: { type: integer, description: The id that was removed. }
+                  scope:
+                    type: string
+                    enum: [global, user]
+                    description: '`global`: the entry was deleted from the cache for everyone (admin, or sign-in off). `user`: it was removed from your own history only; the cached page stays for others.'
+              example: { ok: true, id: 42, scope: global }
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate:
+              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '400':
+          description: '`id` is not a number, or is `0`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Invalid ID }
+        '404':
+          description: No entry with this id (in your history, when signed in), or the instance runs without a cache.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error: { type: string, description: '`Entry not found`, or `Cache not available` when the instance has no cache.' }
+                  id: { type: integer, description: The id you sent. Absent when the cache isn't available. }
+              example: { error: Entry not found, id: 42 }
+  /api/cache:
+    delete:
+      tags: [History and cache]
+      operationId: clearCache
+      summary: Delete all conversions
+      description: Clears the whole cache (admin, or anyone when sign-in is off) or, for a regular user, their own history only.
+      security: [{}, { bearerAuth: [] }]
+      responses:
+        '200':
+          description: The entries were removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, description: Always `true`. }
+                  scope:
+                    type: string
+                    enum: [global, user]
+                    description: '`global`: the whole cache was cleared (admin, or sign-in off). `user`: only your own history was cleared; cached pages stay for others.'
+                  removed: { type: integer, description: Number of entries removed. }
+              example: { ok: true, scope: global, removed: 17 }
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate:
+              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+  /api/status:
+    get:
+      tags: [Instance]
+      operationId: getStatus
+      summary: Check sidecar health
+      description: |
+        Reports whether each extraction sidecar answers. Returns `200` when every configured sidecar is up and `503` when one is down or degraded, so a plain HTTP monitor can watch it. A sidecar you never configured counts as healthy. Results are cached for 5 seconds.
+
+        See [Monitoring](/self-hosting/monitoring).
+      security: []
+      responses:
+        '200':
+          description: Every configured sidecar is up.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+              example: 
+                ok: true
+                version: 3.15.2
+                services:
+                  trafilatura: { status: ok, latencyMs: 7 }
+                  playwright: { status: ok, latencyMs: 67 }
+                  markitdown: { status: ok, latencyMs: 8 }
+        '503':
+          description: At least one configured sidecar is down or degraded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Status' }
+              example: 
+                ok: false
+                version: 3.15.2
+                services:
+                  trafilatura: { status: ok, latencyMs: 7 }
+                  playwright: { status: down, error: unreachable }
+                  markitdown: { status: ok, latencyMs: 8 }
+  /api/config:
+    get:
+      tags: [Instance]
+      operationId: getConfig
+      summary: Get enabled features
+      description: Which optional features this instance has turned on. The web app reads it to show or hide controls.
+      security: []
+      responses:
+        '200':
+          description: Feature flags.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disablePublicHistory: { type: boolean, description: '`true` when `DISABLE_PUBLIC_HISTORY` is on: history and archive need sign-in.' }
+                  authMode: { type: string, enum: [disabled, single-admin, multi-user], description: 'Sign-in mode. `disabled` when sign-in is off.' }
+                  authMisconfigured: { type: boolean, description: '`true` when `PULLMD_AUTH_TOKEN` is set but sign-in is off (`authMode` is `disabled`), so the token has no effect.' }
+                  signupOpen: { type: boolean, description: '`true` when new users can create an account: `authMode` is `multi-user` and `PULLMD_ALLOW_SIGNUP` allows it.' }
+                  markitdown: { type: boolean, description: Document conversion is available. }
+                  vision: { type: boolean, description: Image captioning is configured. }
+                  stt: { type: boolean, description: Audio transcription is configured. }
+                  pdfOcr: { type: boolean, description: The PDF OCR provider is configured. }
+                  markitdownYoutube: { type: boolean, description: YouTube transcripts are on. }
+              example: { disablePublicHistory: false, authMode: disabled, authMisconfigured: false, signupOpen: false, markitdown: true, vision: false, stt: false, pdfOcr: false, markitdownYoutube: false }
+  /api/recipes/status:
+    get:
+      tags: [Instance]
+      operationId: getRecipesStatus
+      summary: Check site recipes
+      description: How many [site recipes](/guides/site-recipes) loaded, how many were rejected and why, and which recipe frontmatter fields the allowlist dropped.
+      security: []
+      responses:
+        '200':
+          description: Recipe status.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, description: '`true` when no recipe was rejected.' }
+                  loaded: { type: integer, description: 'Number of recipes in use, across all files.' }
+                  rejected: { type: integer, description: 'Number of recipes that failed validation and were skipped. Check the container log for the reason.' }
+                  sources:
+                    type: array
+                    description: One entry per recipe file that was found.
+                    items:
+                      type: object
+                      properties:
+                        path: { type: string, description: Path of the recipe file inside the container. }
+                        loaded: { type: integer, description: Recipes loaded from this file. }
+                        rejected: { type: integer, description: Recipes rejected from this file. }
+                  filteredFrontmatterFields:
+                    type: array
+                    description: 'Recipe frontmatter fields dropped by the `PULLMD_FRONTMATTER_FIELDS` allowlist. Empty when the allowlist is not set.'
+                    items:
+                      type: object
+                      properties:
+                        recipe: { type: string, description: Recipe name. }
+                        fields: { type: array, items: { type: string }, description: Fields of this recipe that are dropped. }
+              example: 
+                ok: true
+                loaded: 8
+                rejected: 0
+                sources:
+                  - { path: /app/site-recipes.default.json, loaded: 8, rejected: 0 }
+                filteredFrontmatterFields: []
+  /api/stats:
+    get:
+      tags: [Instance]
+      operationId: getStats
+      summary: Get extraction stats
+      description: Counts, average quality and latency per extractor over a time window. The per-domain lists (`lowQualityDomains`, `fallbackByDomain`) are included only for the admin, or for everyone when sign-in is off and public history is on.
+      security: []
+      parameters:
+        - name: window
+          in: query
+          description: 'How far back to look, as an SQLite date modifier such as `-24 hours` or `-30 days`. The log keeps 30 days. A value SQLite cannot parse matches nothing: the response has `total` `0` and no error.'
+          schema: { type: string, default: '-7 days' }
+          example: '-30 days'
+      responses:
+        '200':
+          description: Extraction stats.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer, description: 'Requests logged in the window, cache hits included. The log keeps 30 days.' }
+                  window: { type: string, description: The time window used. }
+                  bySource:
+                    type: array
+                    description: 'Requests per extractor, most used first. Absent when `total` is `0`.'
+                    items:
+                      type: object
+                      properties:
+                        source: { type: string, description: 'Extractor. Same values as the `X-Source` header.' }
+                        count: { type: integer, description: Requests this extractor handled. }
+                        pct: { type: number, description: 'Share of `total`, in percent, one decimal.' }
+                        avgQuality: { type: number, nullable: true, description: 'Average quality score, 0 to 1.' }
+                        avgLen: { type: integer, nullable: true, description: 'Average length of the Markdown, in characters.' }
+                        avgMs: { type: integer, nullable: true, description: 'Average time per request, in milliseconds.' }
+                  lowQualityDomains:
+                    type: array
+                    description: 'Up to 20 domains whose fresh (not cached) results scored below 0.4, most frequent first. Only for the admin, or everyone when sign-in is off and public history is on. Absent when `total` is `0`.'
+                    items:
+                      type: object
+                      properties:
+                        domain: { type: string, nullable: true, description: 'Domain. `null` for uploaded files.' }
+                        count: { type: integer, description: Low-quality results from this domain. }
+                        avgQuality: { type: number, description: Their average quality score. }
+                  fallbackByDomain:
+                    type: array
+                    description: 'Up to 20 domains where extraction fell back to plain Readability, most frequent first. Same visibility as `lowQualityDomains`. Absent when `total` is `0`.'
+                    items:
+                      type: object
+                      properties:
+                        domain: { type: string, nullable: true, description: Domain. }
+                        count: { type: integer, description: Fallbacks for this domain. }
+              example: 
+                total: 13
+                window: '-7 days'
+                bySource:
+                  - { source: playwright, count: 5, pct: 38.5, avgQuality: 0.72, avgLen: 2074, avgMs: 4802 }
+                  - { source: readability, count: 4, pct: 30.8, avgQuality: 0.89, avgLen: 32030, avgMs: 981 }
+                lowQualityDomains:
+                  - { domain: www.youtube.com, count: 1, avgQuality: 0.3 }
+                fallbackByDomain: []
+  /api/storage:
+    get:
+      tags: [Instance]
+      operationId: getStorage
+      summary: Get cache size
+      description: 'Size of the cache, how many rows will expire soon, and cache traffic over the last 7 days. The hit rate is `cacheHits7d / requests7d`. The 7-day counts come from the request log, which keeps entries after their cache rows are deleted, so they can be non-zero while `total` is `0`.'
+      security: []
+      responses:
+        '200':
+          description: Cache statistics.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer, description: Conversions in the cache. }
+                  expiringSoon: { type: integer, description: 'Conversions that will be deleted by retention within the next 10 days. `0` when retention is unlimited.' }
+                  oldest: { type: string, nullable: true, description: 'When the oldest conversion was written (UTC). `null` when the cache is empty.' }
+                  retentionDays: { type: integer, description: 'How long conversions are kept (`PULLMD_CACHE_RETENTION_DAYS`). `0` means forever.' }
+                  dbSizeBytes: { type: integer, description: 'Size of the SQLite database file, in bytes.' }
+                  cacheHits7d: { type: integer, description: Requests served from the cache in the last 7 days. }
+                  requests7d: { type: integer, description: All requests in the last 7 days. }
+              example: { total: 4, expiringSoon: 0, oldest: '2026-10-19 00:37:14', retentionDays: 90, dbSizeBytes: 208896, cacheHits7d: 4, requests7d: 13 }
+  /api/me:
+    get:
+      tags: [Account]
+      operationId: getMe
+      summary: Get the current user
+      description: 'Who you are signed in as. Accepts an API key or a session cookie; OAuth access tokens work only on `/mcp`. Available only when sign-in is enabled.'
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The signed-in user.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer, description: User id. }
+                  email: { type: string, description: The user's email address. }
+                  is_admin: { type: boolean, description: '`true` for the admin account.' }
+              example: { id: 1, email: you@example.com, is_admin: true }
+        '401':
+          description: Not signed in.
+          headers:
+            WWW-Authenticate:
+              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '404':
+          description: 'Sign-in is off (`PULLMD_AUTH_MODE=disabled`), so the endpoint doesn''t exist. The body is the web server''s default HTML page, not JSON.'
+          content:
+            text/html:
+              schema: { type: string }
+              example: |
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                <meta charset="utf-8">
+                <title>Error</title>
+                </head>
+                <body>
+                <pre>Cannot GET /api/me</pre>
+                </body>
+                </html>

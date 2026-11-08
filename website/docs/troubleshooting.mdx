@@ -1,0 +1,79 @@
+---
+title: Troubleshooting
+description: Fixes for thin results, blocked URLs, failed documents, sign-in problems behind a proxy, and settings that don't take effect.
+---
+
+# Troubleshooting
+
+Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality` headers of the result (which extractor ran, and how confident it was).
+
+<AccordionGroup>
+  <Accordion title="A page comes back nearly empty or with the wrong content">
+    1. Check `/api/status`. If `playwright` is `down`, JavaScript-heavy pages can't be rendered.
+    2. Retry with `render=force` to render the page in the browser.
+    3. Try `extractor=trafilatura` or `extractor=readability` if the wrong part of the page was kept.
+    4. Add `nocache=true` so you're not looking at an old cached result.
+    5. If one site is always wrong, write a [site recipe](/guides/site-recipes).
+
+    Some sites serve a login wall to servers. PullMD can't get past it; save the page from your browser and use [`POST /api/html`](/guides/local-html).
+  </Accordion>
+  <Accordion title="502: bot_challenge">
+    ```json
+    { "error": "Site is behind a bot-protection challenge (Cloudflare); PullMD does not solve these. …", "code": "bot_challenge", "vendor": "Cloudflare" }
+    ```
+
+    The site answered with a Cloudflare or Bunny Shield challenge page ("Just a moment…", "Establishing a secure connection…"). PullMD doesn't solve these, and the headless browser is blocked by them too, so retrying won't help. Open the page in your browser, save it as HTML and send it to [`POST /api/html`](/guides/local-html).
+  </Accordion>
+  <Accordion title="403: URL not allowed">
+    The URL points at a private, loopback or metadata address, or its host name doesn't resolve. With `render=force` or `extractor=playwright`, it can also mean the page tried to navigate the browser to one of those addresses. That's server-side request forgery (SSRF) protection; see [SSRF protection](/self-hosting/ssrf-protection). To allow an internal host, set `PULLMD_ALLOWED_HOSTS`, and add it to the compose file's `environment:` list so it reaches the container.
+  </Accordion>
+  <Accordion title="401: Authentication required">
+    Sign-in is on and the request had no valid credentials. Send an API key as `Authorization: Bearer pmd_…` (create one under **Settings** in the web app). A key from another instance, or one that was revoked, gives the same error. See [Authentication](/self-hosting/authentication#api-keys).
+  </Accordion>
+  <Accordion title="A setting in .env has no effect">
+    The compose files (`docker-compose.yml` and `docker-compose.traefik.yml`) pass variables to the container one by one. As of v3.18.2, `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_COVERAGE_GUARD` and `PULLMD_FILENAME_DATE_PREFIX` aren't in the list. Add a line such as `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service.
+
+    Check what the container received:
+
+    ```bash
+    docker exec pullmd printenv | grep PULLMD_
+    ```
+
+    Use the full `docker-compose.yml` from the repository, not the shortened one in the README, and run `docker compose up -d` after the change.
+  </Accordion>
+  <Accordion title="502 for a PDF or Office file">
+    `Failed to convert file: markitdown sidecar unavailable or could not convert this document` (upload) or `Failed to extract page: markitdown sidecar unavailable or could not convert this document` (URL) means the MarkItDown sidecar is down, not configured, or couldn't read the file. Check `/api/status`, then `docker compose logs markitdown`.
+
+    Uploads over 25 MB return `413`. A URL whose body exceeds `PULLMD_MAX_FETCH_BYTES` (50 MB by default) returns `502` with `response larger than the 50 MB limit`.
+  </Accordion>
+  <Accordion title="YouTube returns the page text but no transcript">
+    The YouTube tier is off by default. Set `MARKITDOWN_YOUTUBE=true` in `.env` and run `docker compose up -d` (a plain `restart` doesn't re-read `.env`). If `X-Transcript-Status` is `blocked`, YouTube is rate-limiting your server's IP; retry later or set `MARKITDOWN_YT_PROXY`. See [YouTube transcripts](/guides/youtube).
+  </Accordion>
+  <Accordion title="Reddit: 502 Reddit blocked the request">
+    Reddit blocks requests without API credentials. Set `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` from an existing Reddit app. See [Reddit credentials](/guides/reddit-and-hacker-news#reddit-credentials). `502 Reddit rate limit. Try again later.` means Reddit throttled the request; retry later. See [Reddit credentials](/guides/reddit-and-hacker-news#reddit-credentials).
+  </Accordion>
+  <Accordion title="Comments heading is in German">
+    The default for `lang` is `de`. Pass `lang=en` (and `nocache=true` if the thread was fetched in the last hour).
+  </Accordion>
+  <Accordion title="Login fails behind a reverse proxy">
+    `403 Forbidden: form posts are accepted from this site only.` means the browser's `Origin` doesn't match the host PullMD sees. Set `PUBLIC_URL` to the public address, or have the proxy pass the original `Host` header. Make sure the proxy sends no `Referrer-Policy: no-referrer` header.
+
+    If login succeeds but you're immediately signed out, you're probably using a plain `http://` address while `PUBLIC_URL` is `https://`; the browser drops the `Secure` cookie. Use the HTTPS address.
+
+    See [Reverse proxy](/self-hosting/reverse-proxy#sign-in-behind-a-proxy).
+  </Accordion>
+  <Accordion title="Everyone hits rate limits at once">
+    Behind a proxy without `PULLMD_TRUST_PROXY`, every visitor looks like the proxy and shares one limit. The log says `Requests arrive through a proxy but PULLMD_TRUST_PROXY is not set`. See [Reverse proxy](/self-hosting/reverse-proxy).
+  </Accordion>
+  <Accordion title="Image or audio returns no caption or transcript">
+    No vision or speech-to-text provider is configured, or the hourly budget (`PULLMD_LLM_RATE_LIMIT`) is used up, so PullMD treats the URL as a web page. An image URL then returns a heading with the image link, and an audio URL returns an empty body. Check `/api/config`: `vision` and `stt` show whether a provider is set. See [Images and audio](/guides/images-and-audio).
+  </Accordion>
+  <Accordion title="claude.ai says it couldn't reach the MCP server">
+    Check that the instance is reachable from the internet on HTTPS, that `OAUTH_JWT_SECRET` and `PUBLIC_URL` are set, and that sign-in is enabled. A firewall or web-application-firewall rule that blocks some countries or networks can stop claude.ai before the request reaches PullMD, so check your proxy's logs too.
+  </Accordion>
+  <Accordion title="The admin password in .env doesn't work">
+    The admin is created from `.env` only on the first start. Later changes are ignored. Reset it with `docker compose exec pullmd node scripts/admin.js reset-password you@example.com`.
+  </Accordion>
+</AccordionGroup>
+
+To report a bug, [open an issue](https://github.com/AeternaLabsHQ/pullmd/issues) with the URL, the response headers and `/api/status`.

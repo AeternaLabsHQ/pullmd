@@ -1,0 +1,58 @@
+name: Docs
+
+on:
+  pull_request:
+    paths: ['website/**', '.github/workflows/docs.yml']
+  push:
+    branches: [main]
+    paths: ['website/**', '.github/workflows/docs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - id: pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+      - run: npm ci
+      # Fails on any broken internal link (onBrokenLinks: 'throw').
+      - run: npm run build
+        env:
+          # Builds for the address Pages serves, including a custom domain.
+          SITE_URL: ${{ github.event_name != 'pull_request' && steps.pages.outputs.origin || '' }}
+          SITE_BASE_URL: ${{ github.event_name != 'pull_request' && format('{0}/', steps.pages.outputs.base_path) || '' }}
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

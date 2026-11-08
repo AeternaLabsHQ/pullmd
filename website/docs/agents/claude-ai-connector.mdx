@@ -1,0 +1,90 @@
+---
+title: Connect claude.ai and Claude Desktop
+sidebar_label: claude.ai and Claude Desktop
+description: Turn on PullMD's built-in OAuth 2.1 server so claude.ai and Claude Desktop can use your instance as a custom connector.
+---
+
+# Connect claude.ai and Claude Desktop
+
+claude.ai and Claude Desktop add remote MCP servers as custom connectors, and connectors authenticate with OAuth. PullMD includes an OAuth 2.1 server for this. Once it's on, you add the connector with your instance's URL and sign in to PullMD once.
+
+## Requirements
+
+- Your instance is reachable from the internet, and `PUBLIC_URL` is set to its public address. claude.ai connects from the internet, not from your network.
+- Sign-in is enabled: `PULLMD_AUTH_MODE` is `single-admin` or `multi-user`. See [Authentication](/self-hosting/authentication).
+
+## Set up
+
+<Steps>
+  <Step title="Generate a signing secret">
+    ```bash
+    openssl rand -hex 32
+    ```
+
+    Use a new value. Don't reuse a password or another secret.
+  </Step>
+  <Step title="Add the OAuth settings to .env">
+    ```bash
+    PULLMD_AUTH_MODE=single-admin
+    PULLMD_ADMIN_EMAIL=you@example.com
+    PULLMD_ADMIN_PASSWORD=a-long-password
+    OAUTH_JWT_SECRET=<signing-secret>
+    PUBLIC_URL=https://pullmd.example.com
+    ```
+
+    Replace `<signing-secret>` with the generated value. `OAUTH_JWT_SECRET` must be at least 32 characters, or PullMD exits at startup. `PUBLIC_URL` must be your instance's public origin. PullMD uses it as the token issuer and audience, so a wrong value makes every token invalid.
+  </Step>
+  <Step title="Restart PullMD">
+    ```bash
+    docker compose up -d
+    ```
+  </Step>
+  <Step title="Add the connector">
+    In claude.ai, open **Settings → Connectors → Add custom connector** and enter:
+
+    ```
+    https://pullmd.example.com/mcp
+    ```
+
+    Leave the OAuth client ID and secret empty. claude.ai finds PullMD's OAuth endpoints and registers itself.
+  </Step>
+  <Step title="Sign in and approve">
+    The first time you use the connector, claude.ai sends you to PullMD's login page, then to a consent screen. Approve it and you're back in claude.ai with the three PullMD tools available.
+  </Step>
+</Steps>
+
+In Claude Desktop, add the connector the same way under **Settings → Connectors**.
+
+## Tokens
+
+| Token | Format | Lifetime |
+| --- | --- | --- |
+| Access token | JWT signed with `OAUTH_JWT_SECRET` | 1 hour. Accepted only on `/mcp`. |
+| Refresh token | Opaque, starts with `pmd_rt_` | 30 days. Replaced on every refresh. |
+
+If a refresh token is used twice, PullMD treats it as stolen and revokes the whole chain; the user must sign in again. To revoke a refresh token, send `POST /oauth/revoke` with the form fields `token` and `client_id`, plus `client_secret` for a client that has one. Access tokens stay valid until they expire.
+
+Access tokens work only on `/mcp`. Scripts that call `/api` need an API key from `/settings`.
+
+The only scope is `mcp:full`: convert URLs and read your history.
+
+## Standards
+
+PullMD implements the parts of OAuth 2.1 that MCP clients use: Dynamic Client Registration (RFC 7591), PKCE with S256 (RFC 7636), Authorization Server Metadata (RFC 8414), Protected Resource Metadata (RFC 9728) and Token Revocation (RFC 7009). The metadata is at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`.
+
+## Without OAuth
+
+With OAuth off, a reverse proxy can accept the API key as part of the URL path, because the connector dialog has no header field. This is a workaround from the community; OAuth replaces it.
+
+```caddy
+@bearer header Authorization "Bearer {$AUTH_TOKEN}"
+handle @bearer { reverse_proxy pullmd:3000 }
+
+@token_path path /{$AUTH_TOKEN}/* /{$AUTH_TOKEN}
+handle @token_path {
+    uri strip_prefix /{$AUTH_TOKEN}
+    reverse_proxy pullmd:3000
+}
+```
+
+Then use `https://your-instance.example.com/<TOKEN>/mcp` as the connector URL. Anyone who sees that URL has full access, so treat it as a password.

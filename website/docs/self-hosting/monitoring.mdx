@@ -1,0 +1,60 @@
+---
+title: Monitoring
+description: Watch PullMD's sidecars with /api/status, and track extraction quality with /api/stats and /api/storage.
+---
+
+# Monitoring
+
+A broken sidecar degrades results without taking PullMD down. If the Playwright sidecar dies, JavaScript-heavy pages come back nearly empty while every request still answers `200`. Monitor `/api/status` to catch it.
+
+## Health check
+
+To check the sidecars, request `/api/status`:
+
+```bash
+curl -i http://localhost:3000/api/status
+```
+
+This response shows the Playwright sidecar down:
+
+```json
+{
+  "ok": false,
+  "version": "3.18.2",
+  "services": {
+    "trafilatura": { "status": "ok", "latencyMs": 13 },
+    "playwright": { "status": "down", "error": "unreachable" },
+    "markitdown": { "status": "ok", "latencyMs": 14 }
+  }
+}
+```
+
+- The endpoint returns HTTP `200` when every configured sidecar answers and `503` when at least one is down or degraded, so a plain HTTP status check is enough.
+- Each sidecar's `status` is `ok`, `down`, `degraded` or `not-configured`. A sidecar you didn't configure counts as healthy.
+- `error` is one of `unreachable`, `timeout`, `unhealthy`, `http <code>`, `misconfigured` or `policy-missing`. It never includes internal host names, because the endpoint is public.
+- `degraded` with `policy-missing` means the `pullmd-playwright` image is older than 3.15.2 and doesn't enforce [SSRF protection](/self-hosting/ssrf-protection). Renders keep working. To clear it, update that image.
+- If the check itself fails, the endpoint returns `503` with `"error": "check-failed"`.
+- The endpoint needs no sign-in, so a monitor can poll it without credentials.
+- PullMD caches results for 5 seconds, and simultaneous requests share one check, so polling can't flood your sidecars.
+
+### Uptime Kuma
+
+Add a monitor of type **HTTP(s)** with the URL `https://pullmd.example.com/api/status` and accepted status codes `200-299`.
+
+## Extraction stats
+
+[`GET /api/stats`](/reference/api/instance/get-extraction-stats) shows how each extractor performed over the last 7 days: count, share, average quality, average length and average time. To use another period, set `window` to a SQLite `datetime` modifier such as `-30 days`. An invalid value returns `"total": 0`.
+
+```bash
+curl "http://localhost:3000/api/stats?window=-30%20days"
+```
+
+A sudden drop in `playwright` results, or a rise in low-quality results, points to a broken sidecar or a site that changed. The per-domain lists (`lowQualityDomains`, `fallbackByDomain`) show which sites to write a [recipe](/guides/site-recipes) for. They're visible only to the admin, or to everyone when sign-in is off and public history is on.
+
+## Cache size
+
+[`GET /api/storage`](/reference/api/instance/get-cache-size) reports the number of cached conversions (`total`), the database size (`dbSizeBytes`), how many rows expire within 10 days (`expiringSoon`), the oldest entry, the retention period, and the cache hits and total requests over 7 days (`cacheHits7d`, `requests7d`).
+
+## Recipes
+
+[`GET /api/recipes/status`](/reference/api/instance/check-site-recipes) returns `"ok": false` when one or more recipes were rejected. The response also lists loaded and rejected counts per recipe file. Check it after you change your recipes.

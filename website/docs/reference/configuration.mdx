@@ -1,0 +1,128 @@
+---
+title: Configuration
+description: Every PullMD environment variable, grouped by what it controls, with defaults.
+---
+
+# Configuration
+
+PullMD is configured with environment variables. With Docker Compose, put them in a `.env` file next to `docker-compose.yml` and run `docker compose up -d` to apply them. Every variable is optional unless marked.
+
+<Warning title="Compose passthrough">`PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` (marked † below) aren't passed through by the compose files as of v3.18.2. Add a line for each one you use to the `pullmd` service's `environment:` list, for example `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}`.</Warning>
+
+## Server
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PORT` | `3000` | Host port the default compose file publishes. |
+| `PUBLIC_URL` | `http://localhost:${PORT}` (Traefik file: `https://${HOST_DOMAIN}`) | Public address of the instance. Used on `/help`, in the skill bundle and MCP share links, for OAuth, and to accept login forms. An `https://` value marks the session cookie `Secure`. |
+| `HOST_DOMAIN` | | Traefik compose file only. Host name without scheme, used for routing. |
+| `PULLMD_TRUST_PROXY` | off (Traefik file: `1`) | When to believe `X-Forwarded-*` headers: a hop count, `true`, or a list of proxy addresses. See [Reverse proxy](/self-hosting/reverse-proxy). |
+| `CACHE_DB` | `/data/cache.db` | Path of the SQLite database (cache, history, accounts). `./data/cache.db` when run without Docker. |
+
+## Sidecars
+
+| Variable | Default (compose) | Description |
+| --- | --- | --- |
+| `TRAFILATURA_URL` | `http://trafilatura:8001/extract` | Trafilatura sidecar. Unset: Readability only. |
+| `PLAYWRIGHT_URL` | `http://playwright:8002/render` | Headless browser sidecar. Unset: no rendering of JavaScript pages. |
+| `MARKITDOWN_URL` | `http://markitdown:8003/convert` | Document sidecar. Unset: documents return `502` and YouTube transcripts are off. |
+
+## Output
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PULLMD_FRONTMATTER_FIELDS` | all fields | Comma-separated list of frontmatter fields to keep, such as `title,url,source`. Unknown names are ignored with a warning at startup. See [Output format](/reference/output-format#frontmatter). |
+| `PULLMD_SOURCE_HEADER` | off | Any non-empty value, including `false`, adds the source line under the title that versions before 3.0 had. Leave it empty or unset to turn it off. |
+| `PULLMD_COVERAGE_GUARD` † | on | `off` disables the [coverage guard](/how-it-works#the-coverage-guard). |
+| `PULLMD_ARTICLE_SERIES` † | on | `off` keeps one block when a page publishes one piece of writing as several short `<article>` blocks by the same author. |
+| `PULLMD_FILENAME_DATE_PREFIX` † | none | Date prefix for `X-Suggested-Filename`. Tokens `YYYY MM DD HH mm ss`, in the server's time zone (set `TZ` to change it). `YYYY-MM-DD-` gives `2026-08-01-YT-some-talk-dQw4w9WgXcQ.md`. Characters outside `A-Za-z0-9._-` become `-`. |
+
+## Cache and history
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PULLMD_CACHE_RETENTION_DAYS` | `90` | Days a conversion is kept after it was last written. A cache hit doesn't extend it; a new fetch of the URL does. `0` keeps everything. Range `0` to `36500`. An invalid value logs a warning and uses `90`. |
+| `DISABLE_PUBLIC_HISTORY` | `false` | `true`, `1`, `yes` or `on` (any case) hides everyone's history when sign-in is off: `/api/history`, `/api/archive`, `DELETE /api/cache` and `DELETE /api/cache/:id` return `403` to anonymous callers. Share links keep working. |
+
+## Fetching
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PULLMD_ALLOWED_HOSTS` † | none | Internal hosts or networks PullMD may fetch, such as `10.0.5.0/24,wiki.internal`. See [SSRF protection](/self-hosting/ssrf-protection). |
+| `PULLMD_MAX_FETCH_BYTES` | `52428800` (50 MB) | Size limit for fetched pages and documents. Response headers must arrive within 15 seconds and the whole fetch must finish within 60 seconds. An invalid or non-positive value uses the default. |
+| `PULLMD_USER_AGENT` | rotating | Fixed user agent for every web fetch. |
+| `PULLMD_UA_FEED_URL` | a public feed of current browser user agents | Where the rotating user agents come from, refreshed every 48 hours. The default is a public feed on `raw.githubusercontent.com`, so PullMD makes an outbound request to it. PullMD keeps the desktop entries that start with `Mozilla/` and uses the feed only when it has at least 5. Empty string: use the built-in list only. |
+| `PULLMD_SITE_RECIPES` | | Path to your [site recipes](/guides/site-recipes) file, such as `/data/site-recipes.json`. Unset: PullMD loads `data/site-recipes.json` from its working directory when that file exists (outside Docker). |
+
+## Authentication
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PULLMD_AUTH_MODE` | `disabled` | `disabled`, `single-admin` or `multi-user`. See [Authentication](/self-hosting/authentication). |
+| `PULLMD_ADMIN_EMAIL` | | Required on the first start with sign-in on. The first admin's email. |
+| `PULLMD_ADMIN_PASSWORD` | | Required on the first start with sign-in on. At least 8 characters. Changing it later has no effect. |
+| `PULLMD_ALLOW_SIGNUP` † | on | `false`, `0`, `no` or `off` closes `/signup` in `multi-user` mode. Any other value keeps it open. |
+| `OAUTH_JWT_SECRET` | | At least 32 characters. Turns on OAuth for [claude.ai and Claude Desktop](/agents/claude-ai-connector). |
+| `PULLMD_AUTH_TOKEN` | | Deprecated shared bearer token, `single-admin` mode only. |
+
+## Images, audio and OCR
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PULLMD_VISION_API_KEY` | | Turns on image captions. |
+| `PULLMD_VISION_BASE_URL` | OpenAI | OpenAI-compatible API for captions. |
+| `PULLMD_VISION_MODEL` | `gpt-4o-mini` | Caption model. |
+| `PULLMD_STT_API_KEY` | | Turns on audio transcripts. |
+| `PULLMD_STT_BASE_URL` | OpenAI | OpenAI-compatible API for transcripts. |
+| `PULLMD_STT_MODEL` | `whisper-1` | Transcription model. |
+| `PULLMD_LLM_API_KEY` | | Shared key for captions and transcripts when their own keys aren't set. |
+| `PULLMD_LLM_BASE_URL` | | Shared base URL for captions and transcripts. |
+| `PULLMD_PDF_OCR_API_KEY` | | Turns on [PDF optical character recognition (OCR)](/guides/documents#tables-in-pdfs-use-ocr). Doesn't fall back to the shared key. |
+| `PULLMD_PDF_OCR_BASE_URL` | `https://api.mistral.ai/v1` | OCR API. The endpoint must speak the Mistral OCR API (`POST /ocr`). |
+| `PULLMD_PDF_OCR_MODEL` | `mistral-ocr-latest` | OCR model. |
+| `PULLMD_LLM_RATE_LIMIT` | `30` | Requests per hour for captions, transcripts and OCR together, per user or address. `0` turns the limit off, and a non-numeric value uses `30`. Over the limit, PullMD falls back to the regular conversion (metadata only for images and audio) and doesn't cache that result. |
+| `PULLMD_EMBEDDED_IMAGES` † | `on-request` | Describe images in Reddit posts: `off`, `on-request` or `always`. An invalid value logs a warning and uses `on-request`. See [Describe images in Reddit posts](/guides/reddit-and-hacker-news#describe-images-in-reddit-posts). |
+| `PULLMD_EMBEDDED_IMAGES_MAX` † | `4` | Maximum images transcribed per post, `1` to `20`. |
+
+## YouTube
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MARKITDOWN_YOUTUBE` | off | Any non-empty value, including `false`, turns on [YouTube transcripts](/guides/youtube). Set on the `pullmd` service. |
+| `MARKITDOWN_YT_TIMECODES` | `links` | `links`, `plain` or `none`. Set on the `markitdown` service. |
+| `MARKITDOWN_YT_CHUNK` | `30` | Transcript block length in seconds. `0` keeps each caption line. |
+| `MARKITDOWN_YT_LANGS` | first available | Preferred transcript languages, such as `de,en`. |
+| `MARKITDOWN_YT_PROXY` | | HTTP(S) proxy for YouTube requests. |
+
+## Reddit
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `REDDIT_CLIENT_ID` | | Reddit app credentials, needed to read Reddit. See [Reddit credentials](/guides/reddit-and-hacker-news#reddit-credentials). |
+| `REDDIT_CLIENT_SECRET` | | Secret for the Reddit app in `REDDIT_CLIENT_ID`. |
+| `REDDIT_USER_AGENT` | `PullMD/1.0 (URL-to-Markdown service)` | Reddit requires a unique user agent: `platform:appname:version (by u/yourname)`. |
+| `PULLMD_REDDIT_MORE_REQUESTS` | `20` with credentials, `5` without | Extra Reddit requests per conversion to load collapsed comments with `comment_depth=all`. Maximum `200`, and `0` turns the loading off. |
+
+## Document sidecar limits
+
+Set on the `markitdown` service.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `MARKITDOWN_CONVERT_TIMEOUT` | `60` | Seconds before a conversion is stopped. `0` turns it off. |
+| `MARKITDOWN_MEM_LIMIT` | `1g` | Memory limit for the container. |
+| `MARKITDOWN_MEM_LIMIT_MB` | `0` | Memory cap per conversion in MB. `0` uses the container limit. |
+
+## Fixed limits
+
+PullMD enforces these limits, and none has a setting:
+
+| Limit | Value |
+| --- | --- |
+| `POST /api/html` body | 10 MB |
+| `POST /api/file` body | 25 MB |
+| `/mcp` request body | 1 MB |
+| Login attempts | 10 per minute per address |
+| Signups | 5 per hour per address |
+| Unknown share-link lookups | 120 per minute per address |
+| Cache freshness | 1 hour |

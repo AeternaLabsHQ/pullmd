@@ -2,6 +2,7 @@ node_modules
 data
 .git
 docs
+website
 test
 .env*
 .claude

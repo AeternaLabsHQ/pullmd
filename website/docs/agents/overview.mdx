@@ -1,0 +1,31 @@
+---
+title: Connect an AI agent
+sidebar_label: Overview
+description: "Choose how your agent reads the web through PullMD: the MCP server, the Claude Code skill, or a prompt."
+---
+
+# Connect an AI agent
+
+PullMD gives agents one tool: read this URL and return clean Markdown. There are three ways to hand it to an agent. All three call your PullMD instance, so pick the one your agent supports best.
+
+| | [MCP server](/agents/mcp-server) | [Claude Code skill](/agents/claude-code-skill) | [Prompt](/agents/prompt) |
+| --- | --- | --- | --- |
+| Works with | Claude Code, Cursor, Claude Desktop, claude.ai and other MCP clients | Claude Code | Any agent that can make HTTP requests |
+| Install | One command or a JSON entry | Unzip into `~/.claude/skills` | Paste into the system prompt |
+| How the agent calls PullMD | Native tools: `read_url`, `get_share`, `list_recent` | `curl` to the REST API | `curl` or its own fetch tool |
+| Updates | Automatic: tools live on your instance | Download the zip again | Edit the prompt |
+
+**Start with the MCP server** if your agent supports MCP. The agent sees typed tools with descriptions, so it uses them without extra instructions.
+
+## Before you start
+
+You need a running PullMD instance that the agent can reach. For an agent on your own machine, `http://localhost:3000` works. For claude.ai or a teammate's agent, the instance must be on a public HTTPS address: see [Installation](/self-hosting/installation) and [Reverse proxy](/self-hosting/reverse-proxy).
+
+<Tip title="Setup commands on /help">Open `/help` on your instance. It shows the setup commands for all three options with your instance's address already filled in.</Tip>
+
+## If sign-in is enabled
+
+With `PULLMD_AUTH_MODE` set to `single-admin` or `multi-user`, agents must authenticate:
+
+- **Claude Code, Cursor and scripts**: create an API key at `/settings` and send it as `Authorization: Bearer pmd_…`.
+- **Claude Desktop and claude.ai**: their connector settings have no header field, so they use OAuth. See [Connect claude.ai and Claude Desktop](/agents/claude-ai-connector).

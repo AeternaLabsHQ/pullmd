@@ -1,0 +1,117 @@
+---
+title: MCP tools
+description: Parameters and output of the `read_url`, `get_share` and `list_recent` MCP tools.
+---
+
+# MCP tools
+
+The Model Context Protocol (MCP) server at `/mcp` provides `read_url`, `get_share` and `list_recent`. To connect a client, see [MCP server](/agents/mcp-server).
+
+## read_url
+
+Converts a URL to Markdown with the same extraction and cache as `GET /api`. Hacker News URLs use the general web extraction, so `read_url` returns no Hacker News comment tree. For Hacker News URLs, call `GET /api`.
+
+<ParamField name="url" type="string" required>
+  The URL to convert.
+</ParamField>
+<ParamField name="query" type="string">
+  A question, at least one character. Returns only the matching sections. See [Query-scoped extraction](/guides/query-scoped-extraction).
+</ParamField>
+<ParamField name="max_tokens" type="integer" default="600">
+  Token budget for `query`, `64` to `20000`. Has no effect without `query`, but a value outside the range is rejected.
+</ParamField>
+<ParamField name="frontmatter" type="boolean" default="false">
+  Include the full frontmatter block.
+</ParamField>
+<ParamField name="nocache" type="boolean" default="false">
+  Skip the one-hour cache.
+</ParamField>
+<ParamField name="comments" type="boolean" default="true">
+  Include Reddit comments. Ignored for other URLs.
+</ParamField>
+<ParamField name="comment_depth" type="integer or 'all'" default="3">
+  Reply depth, `1` to `10`, or `"all"` for the whole thread. See [Shape the comments](/guides/reddit-and-hacker-news#shape-the-comments).
+</ParamField>
+<ParamField name="comment_limit" type="integer">
+  Maximum top-level comments, `1` to `500`.
+</ParamField>
+<ParamField name="images" type="string">
+  `on` or `off`. Describe and transcribe the images of a Reddit post with the vision model. See [Describe images in Reddit posts](/guides/reddit-and-hacker-news#describe-images-in-reddit-posts).
+</ParamField>
+<ParamField name="lang" type="string" default="de">
+  Comments heading language, `de` or `en`.
+</ParamField>
+<ParamField name="extractor" type="string">
+  `readability`, `trafilatura` or `playwright`.
+</ParamField>
+<ParamField name="yt_timecodes" type="string" default="links">
+  `links`, `plain` or `none`.
+</ParamField>
+<ParamField name="yt_chunk" type="integer" default="30">
+  Transcript block length in seconds. `0` keeps each caption line.
+</ParamField>
+<ParamField name="pdf_ocr" type="boolean" default="false">
+  Use the OCR provider for PDFs. The REST equivalent is `pdf=ocr`. Requires `PULLMD_PDF_OCR_API_KEY`; without it, PDFs use the default text extraction and no error is returned.
+</ParamField>
+
+`read_url` has no `format` or `render` parameter. To force a browser render, set `extractor` to `playwright`. A call that sets `nocache`, `extractor`, `yt_timecodes`, `yt_chunk` or `pdf_ocr` skips the cache.
+
+**Output:** Markdown text that starts with a short YAML block, whether or not `frontmatter` is on:
+
+```yaml
+---
+source: readability
+share_id: 1db53bd711064ea50853ce8dc7288a50
+share_url: http://localhost:3000/s/1db53bd711064ea50853ce8dc7288a50
+quality: 1
+cached: true
+---
+```
+
+`share_url` uses your `PUBLIC_URL`. With `query` and no match, the body starts with `<!-- query-extract: no match; returning full page -->`.
+
+**Errors** come back as an error result (`isError: true`). Messages include:
+
+| Message | Cause |
+| --- | --- |
+| `URL not allowed: …` | The URL, a redirect, or a page loaded in the browser points at a private or metadata address, or the host doesn't resolve. See [SSRF protection](/self-hosting/ssrf-protection). |
+| `Site is behind a bot-protection challenge (Cloudflare); …` | The site served a bot-protection challenge. The message names the provider, such as Cloudflare or Bunny Shield. The message includes the workaround: save the page and send it to `POST /api/html`. |
+| `Page fetch failed with status 404` | The site answered with an error status. The message carries the status. |
+| `MCP error -32602: Input validation error: …` | A parameter is out of range, for example `max_tokens` below `64`. The message names the parameter and the limit. |
+
+## get_share
+
+Returns a cached conversion by share id. If it's more than an hour old, PullMD fetches the source again first; if the source is gone, you get the last good copy. Use it as a stable, live link to content that changes, such as a subreddit feed.
+
+<ParamField name="id" type="string" required>
+  The 32-character hex share id from a `read_url` result.
+</ParamField>
+
+**Output:** Markdown with a YAML block that includes `refreshed` (whether it was fetched again) and `age_ms` (age of the copy in milliseconds). An unknown, expired or malformed id returns an error result: `Share id not found or expired`.
+
+## list_recent
+
+Lists recent conversions, newest first. With sign-in enabled, you see only your own. With sign-in off and `DISABLE_PUBLIC_HISTORY=true`, it returns an error result: `Public history is disabled on this instance.`
+
+<ParamField name="limit" type="integer" default="10">
+  Number of items, `1` to `50`.
+</ParamField>
+
+**Output:** A JSON array with one object per conversion. This example is shortened to one item:
+
+```json
+[
+  {
+    "url": "https://en.wikipedia.org/wiki/Markdown",
+    "title": "Markdown - Wikipedia",
+    "source": "readability",
+    "share_id": "1db53bd711064ea50853ce8dc7288a50",
+    "share_url": "http://localhost:3000/s/1db53bd711064ea50853ce8dc7288a50",
+    "created_at": "2026-10-23 23:48:55"
+  }
+]
+```
+
+## Authentication
+
+With [sign-in](/self-hosting/authentication) enabled, `/mcp` needs an API key (`Authorization: Bearer pmd_…`) or an OAuth access token. A request without one gets HTTP `401` with a `WWW-Authenticate` header that points MCP clients to the OAuth metadata, which is how claude.ai starts its sign-in. Without sign-in, `/mcp` is open.

@@ -1,0 +1,56 @@
+---
+title: SSRF protection
+description: How PullMD stops URLs from reaching your internal network, and how to allow specific internal hosts.
+---
+
+# SSRF protection
+
+A service that fetches any URL you give it could be pointed at your own network: an admin panel on `192.168.1.1`, a database on `10.0.0.5`, or the cloud metadata service that hands out credentials. PullMD blocks these requests by default.
+
+Before every fetch, PullMD resolves the host name and checks each address. It refuses addresses in these ranges:
+
+- Private networks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`)
+- Loopback (`127.0.0.0/8`, `::1`)
+- Link-local, including the cloud metadata address `169.254.169.254`
+- Carrier-grade NAT (`100.64.0.0/10`), including Alibaba Cloud's metadata address `100.100.100.200`
+- `0.0.0.0/8`, multicast, reserved and documentation ranges
+- IPv6 loopback, link-local, multicast and unique-local (`fc00::/7`, which covers AWS's IPv6 metadata address `fd00:ec2::254`)
+- Any of the blocked IPv4 ranges written in IPv6 form (IPv4-mapped, NAT64, 6to4, IPv4-compatible)
+
+This request targets the cloud metadata address:
+
+```bash
+curl "http://localhost:3000/api?url=http://169.254.169.254/latest/meta-data/"
+```
+
+```json
+{ "error": "URL not allowed: blocked address 169.254.169.254 for host 169.254.169.254" }
+```
+
+PullMD answers `403`. It refuses a host name that doesn't resolve at all the same way, with `could not resolve host` in the message. Only `http` and `https` URLs are fetched; other schemes such as `ftp:` are refused with `scheme not allowed`.
+
+## Where it applies
+
+- `GET /api` and the MCP `read_url` tool check the URL before doing anything else.
+- `GET /api/stream` checks it too and reports a refusal as an `error` event, because the stream has already started.
+- Every redirect is checked before it's followed, so a public URL that redirects to an internal address is stopped at the redirect.
+- The browser render (Playwright sidecar) applies the same rules to everything Chromium loads on its own: redirects, meta refresh, script navigation, iframes, subresources and WebSockets. A blocked subresource is dropped and the render continues. With `render=force` or `extractor=playwright`, a page that navigates to a blocked address returns `403`. On the automatic render, PullMD keeps the static result and notes the refusal in `extractorReason` (`extractor_reason` in Markdown frontmatter). This needs v3.15.2 or later on both the `pullmd` and `pullmd-playwright` images.
+- A refused URL is never cached and never gets a share link.
+
+## Allow an internal host
+
+To convert pages from an intranet wiki or a document server on your network, list them in `PULLMD_ALLOWED_HOSTS`:
+
+```bash
+PULLMD_ALLOWED_HOSTS=10.0.5.0/24,wiki.internal
+```
+
+Entries are CIDR ranges, single IP addresses, or exact host names (matched case-insensitively, on any port, with no subdomain matching), separated by commas. A host-name entry skips the address checks, so list only names you control. Malformed CIDR entries are dropped without a warning. Empty (the default) blocks every internal address. PullMD passes the list to the Playwright sidecar with each render, so you set it in one place.
+
+<Note title="Compose files omit this setting">As of v3.18.2, the compose files don't pass `PULLMD_ALLOWED_HOSTS` to the container. Add `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service's `environment:` list. See [Installation](/self-hosting/installation#configure).</Note>
+
+## Known limit
+
+Static fetches connect to the addresses the check validated, one DNS query per request, and every redirect hop is pinned the same way. The Playwright sidecar can't pin its connections, because Chromium resolves names itself. A DNS-rebinding attack on a browser render, where a name resolves to a public address for the check and an internal one for the connection, isn't fully prevented.
+
+For a boundary that doesn't depend on PullMD's own checks, put the Playwright sidecar on a Docker network shared only with `pullmd`. The sidecar doesn't need to reach your other containers, unless an internal host you list in `PULLMD_ALLOWED_HOSTS` is reachable only on a Docker network, in which case the sidecar needs access to it.

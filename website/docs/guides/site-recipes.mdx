@@ -1,0 +1,116 @@
+---
+title: Site recipes
+description: Fix extraction for a specific site with a small JSON rule that forces a browser render, strips noise, names the article body, or adds frontmatter fields.
+---
+
+# Site recipes
+
+A site recipe is a JSON rule that changes how PullMD extracts pages from one site. Use one when a site keeps coming out wrong and a general setting doesn't fix it. Recipes contain no code.
+
+Write a recipe for these problems:
+
+| Problem | Recipe fix |
+| --- | --- |
+| The page is a JavaScript shell or a bot check until it's rendered | `fetch.render: "force"` |
+| A "you may also like" rail or newsletter box leaks into the Markdown | `select.remove` |
+| The wrong part of the page is kept as the article | `select.content`, or `preprocess` with `unwrap` |
+| A comparison table drawn with CSS comes out as loose words | `preprocess` with `grid-to-table` |
+| You want the author or price from the page's structured data | `frontmatter` |
+
+PullMD ships with eight built-in recipes, including recipes for GitHub issues, Booking.com, and ScienceDaily.
+
+## Add your own recipe
+
+<Steps>
+  <Step title="Create the recipe file">
+    In the `data` folder next to your compose file (mounted at `/data` in the container), create `site-recipes.json` containing a JSON array:
+
+    ```json
+    [
+      {
+        "name": "news-example-articles",
+        "host": ["www.news.example.com", "news.example.com"],
+        "path": "/articles/**",
+        "fetch": { "render": "force", "wait_for": ".article-body", "wait_timeout_ms": 5000 },
+        "select": { "remove": ["aside.you-may-like", "div.newsletter-cta"] }
+      }
+    ]
+    ```
+  </Step>
+  <Step title="Point PullMD at it">
+    Add this to `.env`:
+
+    ```bash
+    PULLMD_SITE_RECIPES=/data/site-recipes.json
+    ```
+  </Step>
+  <Step title="Restart">
+    Recipes load at startup, so restart to apply changes.
+
+    ```bash
+    docker compose up -d
+    ```
+  </Step>
+  <Step title="Check that it loaded">
+    ```bash
+    curl http://localhost:3000/api/recipes/status
+    ```
+
+    ```json
+    {
+      "ok": true,
+      "loaded": 9,
+      "rejected": 0,
+      "sources": [
+        { "path": "/app/site-recipes.default.json", "loaded": 8, "rejected": 0 },
+        { "path": "/data/site-recipes.json", "loaded": 1, "rejected": 0 }
+      ],
+      "filteredFrontmatterFields": []
+    }
+    ```
+
+    If your recipe was rejected, the startup log says why. A file that isn't valid JSON, or whose root isn't an array, is ignored as a whole with a warning in the log, and the status stays `ok: true`. The log lines start with `[recipes]`: `docker compose logs pullmd | grep recipes`.
+  </Step>
+  <Step title="Test it">
+    Convert a page from the site, skipping the cache:
+
+    ```bash
+    curl "http://localhost:3000/api?url=https://news.example.com/articles/foo&nocache=true&frontmatter=true"
+    ```
+  </Step>
+</Steps>
+
+When a recipe file changes, PullMD ignores cached conversions made before the next start, so every page is extracted again under the new rules. Share links are unaffected.
+
+## Matching
+
+A recipe applies when both `host` and `path` match the URL.
+
+- **`host`**: a host name or a list of them. `*` matches anything, including dots. `*.example.com` matches subdomains but not `example.com`. Matching ignores case.
+- **`path`**: a pattern for the URL path. `*` matches one path segment; `**` matches any depth. `/docs/**` matches `/docs/a/b` but not `/docs`. Defaults to `/**`, which matches every path. Matching is case-sensitive.
+
+Every matching recipe applies. PullMD combines lists such as `select.remove` and `preprocess`, and takes single values such as `extractor` from the last matching recipe. Built-in recipes load first, then yours.
+
+## Recipe fields
+
+| Field | Purpose |
+| --- | --- |
+| `name` | Required. Unique id shown in logs and the status endpoint. |
+| `host` | Required. Host pattern or list of patterns. |
+| `path` | Path pattern. Default `/**`. |
+| `fetch` | `render` (`force` or `skip`), `wait_for` (CSS selector to wait for), `wait_timeout_ms` (up to `15000`), `mobile_ua` (render as a phone), `pdf` (`ocr`). |
+| `select.remove` | CSS selectors to delete before extraction. |
+| `select.content` | CSS selectors that are the article body. Replaces the extractor's own guess. |
+| `preprocess` | HTML edits that run in order before extraction: `remove-attr`, `remove-class`, `remove-element`, `unwrap`, `replace-with-text`, `prepend-text`, `grid-to-table`. |
+| `extractor` | Force `readability`, `trafilatura` or `playwright`. |
+| `frontmatter` | Extra frontmatter fields from the page's JSON-LD or from CSS selectors. |
+
+A recipe with an unknown field is rejected.
+
+## When a recipe does nothing
+
+Recipes apply to web pages, and to HTML you send to `POST /api/html` with `url` set. Check the `X-Source` header of the result: a recipe runs only when it's `readability`, `readability-fallback`, `trafilatura`, `playwright`, `coverage-guard` or `recipe-content`. Results from `cloudflare`, `reddit`, `hackernews`, `youtube`, `markitdown`, `pdf-ocr`, `image-caption` or `audio-transcript` never reach the recipe step.
+
+When you force a render, write selectors against the rendered page in your browser's inspector. The page source can differ.
+
+For every `preprocess` action, structured data in the frontmatter, rebuilding CSS-grid tables, automated tests, and contributing a recipe to the built-ins, see the [site-recipe contributor guide](https://github.com/AeternaLabsHQ/pullmd/blob/main/SITE-RECIPES.md).

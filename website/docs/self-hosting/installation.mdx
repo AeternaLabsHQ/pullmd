@@ -1,0 +1,106 @@
+---
+title: Installation
+description: Run PullMD with Docker Compose, choose which sidecars to keep, set the public URL, and run it without Docker for development.
+---
+
+# Installation
+
+PullMD runs as four containers: the PullMD server and three optional helpers ("sidecars"). The default compose file starts all four with working settings.
+
+| Container | Image | Purpose | Without it |
+| --- | --- | --- | --- |
+| `pullmd` | `aeternalabshq/pullmd` | API, web app, MCP server, cache | Required |
+| `trafilatura` | `aeternalabshq/pullmd-trafilatura` | Second HTML extractor | Readability is the only extractor |
+| `playwright` | `aeternalabshq/pullmd-playwright` | Headless browser for JavaScript-heavy pages (about 3.7 GB) | JavaScript-heavy pages may come back thin |
+| `markitdown` | `aeternalabshq/pullmd-markitdown` | Documents, and YouTube transcripts when `MARKITDOWN_YOUTUBE=true` is set on `pullmd` | Document links and uploads return `502`; no YouTube transcripts |
+
+Images are published for `amd64` and `arm64` on Docker Hub, and mirrored on GitHub's registry as `ghcr.io/aeternalabshq/pullmd`, `pullmd-trafilatura`, `pullmd-playwright` and `pullmd-markitdown`.
+
+## Install
+
+To install PullMD, download the compose file and start it:
+
+```bash
+mkdir pullmd && cd pullmd
+curl -O https://raw.githubusercontent.com/AeternaLabsHQ/pullmd/main/docker-compose.yml
+docker compose up -d
+```
+
+PullMD listens on `http://localhost:3000`. The cache, history and user accounts are stored in `./data`.
+
+## Configure
+
+All settings are environment variables. Put them in a `.env` file next to `docker-compose.yml` and run `docker compose up -d` again to apply them. A local install needs no `.env`. This example sets the port and the public URL:
+
+```bash
+# .env
+PORT=3080
+PUBLIC_URL=https://pullmd.example.com
+```
+
+The compose file passes each variable to the container through its own line. Use the downloaded compose file. The shorter version in the README doesn't pass settings beyond the basics to PullMD.
+
+<Warning title="Four settings need an extra line">
+  `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_COVERAGE_GUARD` and `PULLMD_FILENAME_DATE_PREFIX` are not in the compose file's list as of v3.18.2, so setting them in `.env` alone has no effect. Add the ones you use to the `environment:` list of the `pullmd` service:
+
+  ```yaml
+  services:
+    pullmd:
+      environment:
+        - PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}
+        - PULLMD_ALLOW_SIGNUP=${PULLMD_ALLOW_SIGNUP:-}
+  ```
+</Warning>
+
+Every variable is listed in the [configuration reference](/reference/configuration).
+
+## Set the public URL
+
+`PUBLIC_URL` is the address people and agents use to reach PullMD. It's written into the `/help` page, the [Claude Code skill](/agents/claude-code-skill) bundle and share links in MCP results, and it's required for [OAuth](/agents/claude-ai-connector).
+
+The default compose file sets it to `http://localhost:${PORT}`. Change it as soon as PullMD is reachable from anywhere else:
+
+```bash
+PUBLIC_URL=https://pullmd.example.com
+```
+
+## Remove a sidecar
+
+To save disk space or memory, delete the sidecar's block from `docker-compose.yml` and remove its `…_URL` line and its entry under `depends_on` from the `pullmd` service. PullMD notices the missing URL and skips that step.
+
+The Playwright sidecar saves the most space: it adds about 3.7 GB of browser binaries. Without it, PullMD returns what static extraction found and says so in `extractor_reason`.
+
+## Pin a version
+
+`:latest` follows the newest release. To upgrade only when you choose, pin a version on all four images, for example:
+
+```yaml
+image: aeternalabshq/pullmd:3.18.2
+```
+
+`aeternalabshq/pullmd:2` stays on the last 2.x release. See [Upgrading](/self-hosting/upgrading).
+
+## Run without Docker
+
+To develop PullMD, run the server with Node.js 22 (the version the Docker image uses). Without the sidecars, Readability is the only HTML extractor, and document links and uploads return `502`.
+
+```bash
+git clone https://github.com/AeternaLabsHQ/pullmd.git
+cd pullmd
+npm install
+npm start      # http://localhost:3000
+npm test       # node --test
+```
+
+The cache is created at `./data/cache.db`. Set `TRAFILATURA_URL`, `PLAYWRIGHT_URL` and `MARKITDOWN_URL` to use sidecar containers you run separately. Here `PORT` sets the port the server listens on.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Reverse proxy and HTTPS" icon="shield" href="/self-hosting/reverse-proxy">
+    Put PullMD behind Traefik, Caddy or nginx.
+  </Card>
+  <Card title="Authentication" icon="gear" href="/self-hosting/authentication">
+    Turn on sign-in before you expose PullMD.
+  </Card>
+</CardGroup>

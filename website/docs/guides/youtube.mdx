@@ -1,0 +1,94 @@
+---
+title: YouTube transcripts
+description: Get a YouTube video's title, description and transcript as Markdown, with clickable timecodes. No API key needed.
+---
+
+# YouTube transcripts
+
+With the YouTube tier on, a YouTube link returns the video's title, description, and full transcript, grouped into blocks with timecodes. PullMD needs no YouTube API key. It recognizes `youtube.com` (also `www.`, `m.` and `music.`) links with `/watch?v=` or `/shorts/`, and `youtu.be/<id>` links.
+
+```bash
+curl "http://localhost:3000/api?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+```
+
+```markdown
+# Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)
+
+## Description
+
+The official video for "Never Gonna Give You Up" by Rick Astley. …
+
+## Transcript
+
+[00:01](https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1s) …
+
+[00:35](https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=35s) …
+```
+
+## Turn it on
+
+The YouTube tier is off by default and needs the MarkItDown sidecar, which the default compose file runs. To turn it on, set `MARKITDOWN_YOUTUBE` to any non-empty value in `.env`, such as `true`. An empty or unset value leaves it off.
+
+```bash
+MARKITDOWN_YOUTUBE=true
+```
+
+Then restart:
+
+```bash
+docker compose up -d
+```
+
+With the tier off, a YouTube link goes through the normal web pipeline and returns the page's text without the transcript.
+
+## Timecode format
+
+| Parameter | Values | Default | Effect |
+| --- | --- | --- | --- |
+| `yt_timecodes` | `links`, `plain`, `none` | `links` | `links`: each block starts with a link to that moment. `plain`: `[MM:SS]` labels, or `[H:MM:SS]` from one hour on. `none`: transcript text only. |
+| `yt_chunk` | seconds | `30` | Groups the transcript into blocks of this length. `0` keeps each caption line separate. |
+
+```bash
+curl "http://localhost:3000/api?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ&yt_timecodes=plain&yt_chunk=60"
+```
+
+To change the defaults for every request, set `MARKITDOWN_YT_TIMECODES` and `MARKITDOWN_YT_CHUNK` on the `markitdown` service. Requests with either parameter skip the cache.
+
+## Transcript language
+
+By default PullMD returns the first transcript track available. To prefer certain languages, set a comma-separated list on the `markitdown` service:
+
+```bash
+MARKITDOWN_YT_LANGS=de,en
+```
+
+PullMD uses the first language in the list that exists for the video, and falls back to the first available track.
+
+## Check the transcript status
+
+Every YouTube response that isn't served from the cache has an `X-Transcript-Status` header:
+
+| Value | Meaning | Cached |
+| --- | --- | --- |
+| `ok` | Transcript included | Yes |
+| `none` | The video has no transcript, or is unavailable, age-restricted, or unplayable | Yes |
+| `blocked` | YouTube rate-limited or blocked the request (HTTP 429) | No, retry later |
+| `error` | The transcript fetch failed | No, retry later |
+
+On `/api/stream` the same value is `transcriptStatus` in the `result` event.
+
+## Rate limits on servers
+
+YouTube heavily rate-limits transcript requests from data-center IP ranges. If PullMD runs on a cloud server and you often see `blocked`, route the sidecar's transcript requests through a residential or ISP proxy:
+
+```bash
+MARKITDOWN_YT_PROXY=http://user:pass@proxy.example.com:8080
+```
+
+The proxy doesn't cover the request PullMD makes for the video page itself. If that request is blocked, the response is `502` before the transcript step.
+
+## Frontmatter fields
+
+With `frontmatter=true`, YouTube results include `author` (the channel), `published`, `duration`, and `views` in addition to the usual fields. See [Output format](/reference/output-format).
+
+The suggested file name starts with `YT-` and ends with the video id, for example `YT-rick-astley-never-gonna-give-you-up-official-video-4k-remast-dQw4w9WgXcQ.md`.
