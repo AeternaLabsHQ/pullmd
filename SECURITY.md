@@ -46,20 +46,20 @@ Not security issues:
 
 ## Known and accepted residuals
 
-The SSRF guard resolves a hostname before fetching and re-checks every
-redirect hop, but a DNS record that changes between the check and the fetch
-(DNS rebinding) is not caught. This was disclosed with the guard in
-[PR #42](https://github.com/AeternaLabsHQ/pullmd/pull/42) and is accepted;
-operators who need a stricter boundary should run pullmd on an egress-filtered
-network. Please do not re-report it.
+The static fetch path (`lib/ssrf.js`) resolves a hostname, checks every
+answer against the address policy and, since 3.18.2, opens the socket to
+exactly the address it checked; a name that rebinds between check and
+connect (DNS rebinding) is no longer followed there. This gap was disclosed
+with the guard in [PR #42](https://github.com/AeternaLabsHQ/pullmd/pull/42)
+and was an accepted residual until then.
 
-The Playwright sidecar applies the same policy to every request Chromium
-makes (since 3.15.2, [GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77)),
-with the same DNS-rebinding residual: the sidecar resolves a name and Chromium
-resolves it again. Operators who want a boundary that does not depend on the
-application can put the sidecar on its own bridge network with no other
-service on it; nothing in pullmd needs the sidecar to see the other
-containers.
+The Playwright sidecar applies the same address policy to every request
+Chromium makes (since 3.15.2, [GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77)),
+but Chromium resolves names itself, so the DNS-rebinding residual remains on
+that path and is accepted. Operators who want a boundary that does not depend
+on the application can put the sidecar on its own bridge network with no
+other service on it; nothing in pullmd needs the sidecar to see the other
+containers. Please do not re-report it.
 
 Text transcribed from Reddit post images (`PULLMD_EMBEDDED_IMAGES`, since 3.16.0)
 is untrusted third-party content and can carry prompt injection. The output

@@ -699,14 +699,16 @@ PULLMD_ALLOWED_HOSTS=10.0.5.0/24,wiki.internal
 
 Empty (the default) means every internal target stays blocked.
 
-> **Known residual:** the guard checks resolved IPs at request time but does
-> not pin the outbound socket to the address it checked, so a DNS-rebinding
-> attack (where the name resolves differently between check and connect) is
-> not fully closed. When PullMD runs behind an outbound HTTP proxy, the proxy
-> resolves names itself — its egress filtering, not this guard, is the
-> authoritative layer for traffic it forwards.
+> **Known residual:** the static fetch path opens its socket to exactly the
+> address it checked (since v3.18.2), so a DNS-rebinding attack (where the name
+> resolves differently between check and connect) no longer works there. The
+> Playwright sidecar lets Chromium resolve names itself, so that path keeps the
+> residual; give the sidecar its own bridge network if you need a boundary
+> that does not depend on the application. When PullMD runs behind an outbound
+> HTTP proxy, the proxy resolves names itself — its egress filtering, not this
+> guard, is the authoritative layer for traffic it forwards.
 
-Reported as [#41](https://github.com/AeternaLabsHQ/pullmd/issues/41), shipped in v3.3.0.
+Reported as [#41](https://github.com/AeternaLabsHQ/pullmd/issues/41), shipped in v3.3.0; socket pinning in v3.18.2.
 
 ---
 

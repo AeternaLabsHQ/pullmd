@@ -11,6 +11,12 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+## [3.18.2] - 2026-11-08
+
+### Fixed
+
+- **The SSRF guard now connects to the address it checked.** The static fetch path resolved a hostname, checked the answers, and then let the HTTP client resolve the name a second time for the socket, so a name that changed its answer in between (DNS rebinding) could reach an internal address. This was documented as an accepted residual since v3.3.0. The guard now hands the validated addresses to the connection (undici `Agent` with a pinned lookup), one DNS query per request instead of two, and every redirect hop is pinned the same way. A hostname the connector sees without a prior check is resolved and checked before the socket opens. The Playwright sidecar is unchanged: Chromium resolves names itself, and that residual stays documented in `SECURITY.md`.
+
 ## [3.18.1] - 2026-11-07
 
 ### Fixed

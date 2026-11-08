@@ -1,6 +1,6 @@
 {
   "name": "pullmd",
-  "version": "3.18.1",
+  "version": "3.18.2",
   "type": "module",
   "main": "server.js",
   "license": "AGPL-3.0-or-later",
@@ -28,6 +28,7 @@
     "linkedom": "^0.18.13",
     "node-html-markdown": "^2.0.0",
     "postal-mime": "^4.2.0",
+    "undici": "^7.30.0",
     "zod": "^4.6.5"
   }
 }
