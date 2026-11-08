@@ -11,6 +11,23 @@ You can expect an acknowledgement within 7 days. There is no bug bounty; this
 is a volunteer-maintained project. Reporters are credited in the changelog
 unless they ask not to be.
 
+### What a report needs
+
+pullmd runs with one `docker compose up`. A report has to show the problem on
+a running instance of the current release:
+
+- the version tested (`GET /api/status` or the image tag)
+- the exact request(s) sent to pullmd and the response(s) received
+- for SSRF claims, what the internal stand-in service logged
+
+A reproduction against a re-implementation of the code, a static reading of a
+single file, or a proof of concept that was never run against pullmd itself
+does not meet this bar. Reports written by or with automated tooling are fine
+as long as the finding was verified on a real instance by a person who read
+this policy; reports that evidently were not are closed without reply, as are
+re-reports of the residuals listed below. No CVE is assigned for accepted
+residuals or for behaviour this document describes as intended.
+
 ## Scope
 
 In scope:
