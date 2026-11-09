@@ -54,6 +54,11 @@ services:
       # Hourly budget for the paid media tiers (image caption, audio transcription,
       # PDF OCR), per signed-in user or client address. Default 30; 0 = off.
       - PULLMD_LLM_RATE_LIMIT=${PULLMD_LLM_RATE_LIMIT:-}
+      # Async file conversions (POST /api/file?async=1): minutes a finished result
+      # waits for pickup (default 60; 0 = async jobs off) and the memory all held
+      # results may use together in MB (default 64).
+      - PULLMD_FILE_JOB_TTL_MINUTES=${PULLMD_FILE_JOB_TTL_MINUTES:-}
+      - PULLMD_FILE_JOB_MAX_MB=${PULLMD_FILE_JOB_MAX_MB:-}
       # Size limit for fetched pages/documents in bytes. Default 52428800 (50 MB).
       - PULLMD_MAX_FETCH_BYTES=${PULLMD_MAX_FETCH_BYTES:-}
       - CACHE_DB=/data/cache.db

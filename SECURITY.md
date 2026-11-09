@@ -74,6 +74,10 @@ This is the documented open mode, not a vulnerability. Operators who share an
 instance should enable sign-in or set `DISABLE_PUBLIC_HISTORY=true`, which
 also refuses anonymous deletes, or keep the port off public networks.
 
+### Async file conversion results
+
+An upload sent with `async=1` (`POST /api/file`) is converted in the background, and its result waits in memory under a random 128-bit job id until the client deletes it or the retention time passes (`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default). It is never written to disk or to the cache, and a restart loses it. With sign-in enabled, a job is bound to the account that created it, and any other account gets the same `404` as for an unknown id. Without sign-in, the job id is the only credential, as with share links: anyone who has the id can read and delete the result.
+
 ## Supported versions
 
 Only the latest minor release receives fixes. Upgrade before reporting.

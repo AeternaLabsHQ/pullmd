@@ -611,8 +611,12 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">Convert a saved HTML file (max 10 MB).</td>
           </tr>
           <tr><td><code>POST /api/file</code></td>
-            <td lang="de">Dokument-Upload konvertieren (max. 25 MB).</td>
-            <td lang="en">Convert an uploaded document (max 25 MB).</td>
+            <td lang="de">Dokument-Upload konvertieren (max. 25 MB). Mit <code>?async=1</code> im Hintergrund, siehe <a href="#files">Dateien konvertieren</a>.</td>
+            <td lang="en">Convert an uploaded document (max 25 MB). With <code>?async=1</code> in the background, see <a href="#files">Converting files</a>.</td>
+          </tr>
+          <tr><td><code>GET · DELETE /api/file/jobs/:id</code></td>
+            <td lang="de">Ergebnis eines Async-Uploads abholen bzw. löschen.</td>
+            <td lang="en">Fetch or delete the result of an async upload.</td>
           </tr>
           <tr><td><code>GET /s/:id</code></td>
             <td lang="de">Share-Link, aktualisiert sich selbst. Siehe <a href="#share">Share-Links</a>.</td>
@@ -835,8 +839,8 @@ Then: claude mcp list to verify.</pre>
     <!-- ===================================================== -->
     <section id="files">
       <h2><span lang="de">Dateien konvertieren</span><span lang="en">Converting files</span><span class="kicker">POST /api/html · /api/file</span></h2>
-      <p lang="de">Nicht alles steht als abrufbare URL im Netz. Zwei Upload-Wege decken den Rest ab. Beide landen aus Datenschutzgründen <strong>nicht</strong> im Cache - kein History-Eintrag, kein Share-Link, keine <code>X-Share-Id</code>.</p>
-      <p lang="en">Not everything lives at a fetchable URL. Two upload paths cover the rest. For privacy, neither is <strong>ever</strong> cached - no history entry, no share link, no <code>X-Share-Id</code>.</p>
+      <p lang="de">Nicht alles steht als abrufbare URL im Netz. Zwei Upload-Wege decken den Rest ab. Die hochgeladene Datei wird <strong>nie</strong> gespeichert; es gibt keinen History-Eintrag, keinen Share-Link und keine <code>X-Share-Id</code>.</p>
+      <p lang="en">Not everything lives at a fetchable URL. Two upload paths cover the rest. The uploaded file is <strong>never</strong> stored; there is no history entry, no share link and no <code>X-Share-Id</code>.</p>
 
       <h3 lang="de">Gespeicherte HTML-Seiten</h3>
       <h3 lang="en">Saved HTML pages</h3>
@@ -917,6 +921,8 @@ Then: claude mcp list to verify.</pre>
       </div>
       <p lang="de">Optionale Parameter: <code>format=json|text</code>, <code>frontmatter=true</code>, <code>pdf=ocr</code>. Die Dokument-Konvertierung braucht den markitdown-Sidecar; ist er nicht konfiguriert, antworten Dokument-URLs und <code>/api/file</code> mit <code>502</code>. Ob diese Instanz ihn hat, verrät <code>/api/config</code>.</p>
       <p lang="en">Optional parameters: <code>format=json|text</code>, <code>frontmatter=true</code>, <code>pdf=ocr</code>. Document conversion needs the markitdown sidecar; without it, document URLs and <code>/api/file</code> return <code>502</code>. Whether this instance has it is reported by <code>/api/config</code>.</p>
+      <p lang="de">Mit <code>?async=1</code> antwortet <code>/api/file</code> sofort mit <code>202</code> und einer Job-ID und konvertiert im Hintergrund; das Ergebnis (immer JSON) holst du mit <code>GET /api/file/jobs/:id</code> ab und löschst es mit <code>DELETE</code>. Es liegt bis dahin höchstens 60 Minuten (einstellbar) im Arbeitsspeicher und geht bei einem Neustart verloren. Kann der Server den Job nicht annehmen, antwortet er normal mit <code>200</code>; Skripte müssen beides behandeln. Die Web-Oberfläche nutzt das, damit du die App während einer langen Konvertierung verlassen kannst.</p>
+      <p lang="en">With <code>?async=1</code>, <code>/api/file</code> answers at once with <code>202</code> and a job id and converts in the background; you fetch the result (always JSON) with <code>GET /api/file/jobs/:id</code> and remove it with <code>DELETE</code>. Until then it is held in memory for up to 60 minutes (configurable) and is lost on a restart. If the server cannot queue the job, it answers normally with <code>200</code>; scripts have to handle both. The web UI uses this so you can leave the app during a long conversion.</p>
 
       <h3 lang="de">Bilder, Audio, YouTube</h3>
       <h3 lang="en">Images, audio, YouTube</h3>

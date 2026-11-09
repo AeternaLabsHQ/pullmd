@@ -41,9 +41,56 @@ Run through these steps before every release so nothing ships half-finished.
 - **`X-Filename`:** the file name, URI-encoded. PullMD uses it for the suggested download name, and as the title when the document has none. `?filename=` also works, but the header keeps the name out of proxy access logs.
 - **`Content-Type`:** the file's type. PullMD uses it, together with the file name, to pick the reader.
 - **`lang`:** `lang=en` sets English labels in e-mail, calendar, contact, OpenDocument, notebook and feed output. The default is German.
-- **Privacy:** uploads are never cached. They create no history entry or share link, and the stats record the conversion as `local-file`, not the file name.
+- **Privacy:** PullMD never stores the uploaded file. The conversion creates no history entry or share link, and the stats record it as `local-file`, not the file name. With `async=1`, PullMD holds the converted result in memory for a limited time; see [below](#leave-the-app-during-a-long-conversion).
 
 In the web app, drag a file onto the page or use the file picker.
+
+## Leave the app during a long conversion
+
+Audio transcription, OCR and image descriptions can take longer than a browser or a proxy keeps a request open. With `async=1`, PullMD takes the upload, answers at once with a job id, and converts the file in the background. You collect the result with a second request, so the connection doesn't have to stay open while the conversion runs.
+
+In the web app, a document upload uses this by default. After the upload finishes, you can switch to another app and come back: the page checks the job every 2 seconds while it is open and shows the result when the job is done. Keep the app open while the file uploads. If the upload is cut off, the app shows `Upload interrupted. Keep the app open during the upload and try again.`
+
+### Use the async API in a script
+
+<Steps>
+  <Step title="Upload with async=1">
+    ```bash
+    curl -X POST "http://localhost:3000/api/file?async=1" \
+      -H "Content-Type: audio/mp4" \
+      -H "X-Filename: memo.m4a" \
+      --data-binary @memo.m4a
+    ```
+
+    ```json
+    { "jobId": "2f2f4a7b37f071b7e3137d42eb9dbec3", "status": "pending" }
+    ```
+  </Step>
+  <Step title="Poll until the job is done">
+    ```bash
+    curl "http://localhost:3000/api/file/jobs/2f2f4a7b37f071b7e3137d42eb9dbec3"
+    ```
+
+    The answer is `{ "status": "pending" }` while the file converts. When it is `done`, the body holds `markdown`, `metadata`, `source`, `shareId` (always `null`) and `suggestedFilename`. When it is `error`, the body holds `error` and `httpStatus`, the status the same conversion would have returned without `async`: `422` or `502`.
+  </Step>
+  <Step title="Delete the job">
+    ```bash
+    curl -X DELETE "http://localhost:3000/api/file/jobs/2f2f4a7b37f071b7e3137d42eb9dbec3"
+    ```
+
+    The answer is `204`. Fetching a result doesn't remove it, so you can fetch it again until you delete it.
+  </Step>
+</Steps>
+
+- **Both answers:** the server can't always queue a job. When async jobs are off, 100 jobs are already held, or your user or address already holds 3, it converts the file in the same request and answers `200` with the normal result, as it does without `async`. A script has to handle `202` and `200`.
+- **Result format:** an async result is always JSON. `format` is ignored for async jobs, and `frontmatter`, `pdf` and `lang` work as they do for a synchronous upload.
+- **Retention:** a finished result stays in memory until you delete it or 60 minutes pass (`PULLMD_FILE_JOB_TTL_MINUTES`). It is never written to disk, and a restart loses it.
+- **Size limit:** all held results together may use 64 MB of memory (`PULLMD_FILE_JOB_MAX_MB`). A result that doesn't fit becomes an `error` with `httpStatus` `507`: `Result too large to hold for pickup, upload again. / Ergebnis zu groß zum Bereithalten, bitte erneut hochladen.`
+- **Stuck jobs:** a job that is still pending after 15 minutes becomes an `error` with `httpStatus` `504`: `Conversion timed out. / Konvertierung abgebrochen (Zeitlimit).`
+- **Access:** with sign-in enabled, send the same API key on all three requests. Only the account that started a job can fetch or delete it, and any other account gets `404`. Without sign-in, the job id is the only credential, so treat it like a share link.
+- **Unknown ids:** an unknown, expired, deleted or foreign id gives `404` with `Job not found or expired. / Auftrag nicht gefunden oder abgelaufen.` More than 120 unknown ids a minute from one address give `429` with a `Retry-After` header.
+
+See [`GET /api/file/jobs/{id}`](/reference/api/convert/get-an-async-file-result) and [`DELETE /api/file/jobs/{id}`](/reference/api/convert/delete-an-async-file-result) in the API reference. Set the retention and the memory limit in [Configuration](/reference/configuration#async-file-conversions).
 
 ## Upload formats PullMD reads itself
 
