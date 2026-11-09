@@ -26,18 +26,9 @@ const config: Config = {
   onBrokenLinks: 'throw',
   markdown: { mermaid: false, hooks: { onBrokenMarkdownLinks: 'throw' } },
   customFields: { site },
+  clientModules: ['./src/fonts.js'],
   headTags: [
     { tagName: 'style', attributes: { id: 'ds-code-colours' }, innerHTML: codeTheme.css },
-    { tagName: 'link', attributes: { rel: 'preconnect', href: 'https://fonts.googleapis.com' } },
-    { tagName: 'link', attributes: { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: 'anonymous' } },
-    {
-      tagName: 'link',
-      attributes: {
-        rel: 'stylesheet',
-        href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap',
-      },
-    },
-    ...(site.fontsUrl ? [{ tagName: 'link', attributes: { rel: 'stylesheet', href: site.fontsUrl } }] : []),
   ],
 
   presets: [

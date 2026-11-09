@@ -20,11 +20,9 @@ export type SiteConfig = {
     wordmark: { text: string; accent?: boolean }[];
     /** Label after the wordmark, e.g. 'Docs'. Omit for none. */
     suffix?: string;
-    /** Font for the wordmark (load it with fontsUrl); defaults to the body font. */
+    /** Font for the wordmark (bundle it in src/fonts.js); defaults to the body font. */
     font?: string;
   };
-  /** Google Fonts css2 URL for extra fonts (e.g. the wordmark font). */
-  fontsUrl?: string;
   theme: {
     primary: string;        // brand colour, light mode
     primaryDark: string;    // brand colour, dark mode
@@ -58,7 +56,6 @@ const site: SiteConfig = {
     suffix: 'Docs',
     font: "'Geist', var(--ds-font)",
   },
-  fontsUrl: 'https://fonts.googleapis.com/css2?family=Geist:wght@700&display=swap',
   theme: {
     primary: '#d84315',
     primaryDark: '#ff5722',
@@ -69,6 +66,8 @@ const site: SiteConfig = {
   footerLinks: [
     { label: 'Docker Hub', href: 'https://hub.docker.com/r/aeternalabshq/pullmd' },
     { label: 'Report an issue', href: 'https://github.com/AeternaLabsHQ/pullmd/issues' },
+    { label: 'Legal notice', href: 'https://aeternalabs.io/en/impressum' },
+    { label: 'Privacy', href: 'https://aeternalabs.io/en/datenschutz' },
   ],
   sidebarLinks: [{ label: 'GitHub', href: 'https://github.com/AeternaLabsHQ/pullmd', icon: 'github' }],
   footerSocials: [{ icon: 'github', href: 'https://github.com/AeternaLabsHQ/pullmd', label: 'GitHub' }],
