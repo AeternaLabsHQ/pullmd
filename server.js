@@ -912,7 +912,7 @@ export function createApp(overrides = {}) {
   const jobOwner = (req) => req.user?.id ?? null;
   const jobClientKey = (req) => (req.user?.id != null ? `user:${req.user.id}` : `ip:${jobMissLimiter.keyFor(req)}`);
 
-  app.post('/api/file',gate, express.raw({ type: () => true, limit: MAX_FILE_BYTES }), async (req, res) => {
+  app.post('/api/file', gate, express.raw({ type: () => true, limit: MAX_FILE_BYTES }), async (req, res) => {
     const { format, frontmatter, pdf, lang } = req.query;
     let filename = req.query.filename;
     const filenameHeader = req.headers['x-filename'];

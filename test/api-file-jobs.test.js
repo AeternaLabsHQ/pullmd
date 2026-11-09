@@ -33,7 +33,7 @@ async function withServer(app, fn) {
     return await fn(base);
   } finally {
     server.closeAllConnections?.();
-    server.close();
+    await new Promise((resolve) => server.close(resolve));
   }
 }
 
@@ -323,6 +323,45 @@ describe('POST /api/file?async=1 and job pickup', () => {
       assert.equal(fourth.headers['x-source'], 'markitdown');
       assert.ok(fourth.body.includes('# Report'));
       d.resolve(FAKE);
+    });
+  });
+
+  it('DELETE on a pending job answers 204 but holds the slot until the extractor settles', async () => {
+    const ds = [deferred(), deferred(), deferred()];
+    let n = 0;
+    const store = newStore();
+    const app = createApp({
+      fileJobs: store,
+      extractFile: () => (n < 3 ? ds[n++].promise : Promise.resolve(FAKE)),
+    });
+    await withServer(app, async (base) => {
+      const ids = [];
+      for (let i = 0; i < 3; i++) {
+        const r = await submit(base);
+        assert.equal(r.status, 202);
+        ids.push(r.json.jobId);
+      }
+      const del = await call(base, `/api/file/jobs/${ids[1]}`, { method: 'DELETE' });
+      assert.equal(del.status, 204);
+      const gone = await call(base, `/api/file/jobs/${ids[1]}`);
+      assert.equal(gone.status, 404);
+      assert.deepEqual(gone.json, NOT_FOUND);
+
+      const fourth = await submit(base);
+      assert.equal(fourth.status, 200);
+      assert.ok(fourth.body.includes('# Report'));
+
+      ds[1].resolve(FAKE);
+      for (let i = 0; i < 50 && store.stats().jobs !== 2; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
+      assert.deepEqual(store.stats(), { jobs: 2, bytes: 0 });
+
+      const fifth = await submit(base);
+      assert.equal(fifth.status, 202);
+      assert.match(fifth.json.jobId, /^[0-9a-f]{32}$/);
+      ds[0].resolve(FAKE);
+      ds[2].resolve(FAKE);
     });
   });
 
