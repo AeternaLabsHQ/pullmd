@@ -11,6 +11,11 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Fixed
+
+- **MCP `get_share` refreshes a Hacker News share through the Hacker News extractor.** A share row older than one hour was refreshed through the web pipeline, so the share lost its comments and came back as `source: web`. `GET /s/:id` already did this right; both now use the same refresh logic for Reddit, Hacker News and web pages.
+- **`npm start` passes `--max-http-header-size=65536`.** The Docker image starts the server with this flag since 3.18.2 so YouTube URLs do not fail on large response headers, but `npm start` did not, so an install without Docker still failed with `fetch failed` on YouTube URLs.
+
 ## [3.18.2] - 2026-11-08
 
 ### Fixed
