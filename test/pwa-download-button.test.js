@@ -84,7 +84,8 @@ describe('PWA index.html: download button', () => {
     assert.match(html, /currentSuggestedName = suggestedName \|\| '';/);
     // Plain /api + the two upload routes read the header; the SSE path has no
     // headers by then and carries the name in the result event payload.
-    const headerReads = html.match(/res\.headers\.get\('X-Suggested-Filename'\)/g) || [];
+    // /api/file goes out via XHR (upload progress), hence getResponseHeader.
+    const headerReads = html.match(/(?:res\.headers\.get|xhr\.getResponseHeader)\('X-Suggested-Filename'\)/g) || [];
     assert.equal(headerReads.length, 3, 'the /api, /api/html and /api/file fetches must read the header');
     assert.match(html, /d\.suggestedFilename \|\| ''/);
   });
