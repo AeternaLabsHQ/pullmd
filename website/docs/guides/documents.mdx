@@ -5,7 +5,7 @@ description: Convert PDF, Office, EPUB, e-mail, OpenDocument, data and other fil
 
 # Documents
 
-PullMD converts documents and uploaded files to Markdown. The MarkItDown sidecar, which the default compose file runs, handles PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX, XLS), EPUB, and ZIP (converts each file inside), plus every document fetched by URL, including CSV, JSON, XML, and plain text. PullMD reads e-mail, OpenDocument, RTF, and the other [upload formats below](#upload-formats-pullmd-reads-itself) without the sidecar.
+PullMD converts documents and uploaded files to Markdown. The MarkItDown sidecar, which the default compose file runs, handles PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX, XLS), EPUB, and ZIP (converts each file inside), plus documents fetched by URL, including CSV, JSON and XML. PullMD reads e-mail, OpenDocument, RTF, and the other [upload formats below](#upload-formats-pullmd-reads-itself) without the sidecar.
 
 ## Convert a document by URL
 
@@ -39,8 +39,8 @@ Run through these steps before every release so nothing ships half-finished.
 
 - **Maximum size:** 25 MB.
 - **`X-Filename`:** the file name, URI-encoded. PullMD uses it for the suggested download name, and as the title when the document has none. `?filename=` also works, but the header keeps the name out of proxy access logs.
-- **`Content-Type`:** the file's type. A type that doesn't match the file, such as `text/plain` on a PDF, returns a result without the document's text.
-- **`lang`:** `lang=en` sets English labels in e-mail, calendar and contact output. The default is German.
+- **`Content-Type`:** the file's type. PullMD uses it, together with the file name, to pick the reader.
+- **`lang`:** `lang=en` sets English labels in e-mail, calendar, contact, OpenDocument, notebook and feed output. The default is German.
 - **Privacy:** uploads are never cached. They create no history entry or share link, and the stats record the conversion as `local-file`, not the file name.
 
 In the web app, drag a file onto the page or use the file picker.
@@ -53,12 +53,12 @@ These uploaded formats work without the MarkItDown sidecar. PullMD picks the rea
 | --- | --- | --- |
 | E-mail: `.eml`, `.msg` | The subject as title, then From, To, Cc, Date and the message text. Attachments are listed by name. | `email` |
 | Saved pages: `.mhtml`, `.mht` | Extracted like [`POST /api/html`](/guides/local-html). The original URL in the file appears as the frontmatter `url`, and site recipes apply. | The extractor that ran |
-| Text: `.txt`, `.md`, `.rst`, `.adoc`, `.org` | The text, with a title line added when it has none. A note's own YAML frontmatter becomes a fenced `yaml` block. | `text` or `markdown` |
+| Text: `.txt`, `.md`, `.markdown`, `.rst`, `.adoc`, `.asciidoc`, `.org`, `.textile`, `.wiki`, `.nfo` | The text, with a title line added when it has none. A note's own YAML frontmatter becomes a fenced `yaml` block. | `text` or `markdown` |
 | Subtitles: `.srt`, `.vtt` | Readable paragraphs without cue numbers, timestamps or styling. | `subtitles` |
 | OpenDocument: `.odt`, `.ods`, `.odp` | Headings, links, lists, tables and footnotes. Spreadsheets give one table per sheet, and presentations give one section per slide with speaker notes. | `opendocument` |
 | RTF: `.rtf` | Paragraphs, headings, links, lists and tables. | `rtf` |
-| Calendar: `.ics` | One section per event with start, end, location, organizer, attendees, recurrence and description. Times use the server's time zone. | `calendar` |
-| Contacts: `.vcf` | One section per card. | `contact` |
+| Calendar: `.ics`, `.ical` | One section per event with start, end, location, organizer, attendees, recurrence and description. Times use the server's time zone. | `calendar` |
+| Contacts: `.vcf`, `.vcard` | One section per card. | `contact` |
 | Data: `.csv`, `.tsv`, `.json`, `.jsonl`, `.xml` | CSV and TSV as a Markdown table, JSON and XML in a code block. | `data` |
 | Feeds: `.rss`, `.atom`, or `.xml` with an RSS or Atom root | The feed title, then one section per entry. | `feed` |
 | Notebooks: `.ipynb` | Markdown cells as they are, code cells and text outputs in code blocks. | `notebook` |
@@ -78,7 +78,7 @@ MarkItDown reads the text layer of a PDF, which works for prose but loses the st
     PULLMD_PDF_OCR_API_KEY=your-key
     ```
 
-    The default provider is Mistral OCR (`mistral-ocr-latest`, about $0.002 per page). To use another endpoint that speaks the Mistral OCR API (`POST /ocr`), set `PULLMD_PDF_OCR_BASE_URL` and `PULLMD_PDF_OCR_MODEL`.
+    The default provider is Mistral OCR (`mistral-ocr-latest`). To use another endpoint that speaks the Mistral OCR API (`POST /ocr`), set `PULLMD_PDF_OCR_BASE_URL` and `PULLMD_PDF_OCR_MODEL`.
   </Step>
   <Step title="Ask for OCR per request">
     ```bash

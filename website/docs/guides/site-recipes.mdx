@@ -95,21 +95,22 @@ Every matching recipe applies. PullMD combines lists such as `select.remove` and
 
 | Field | Purpose |
 | --- | --- |
-| `name` | Required. Unique id shown in logs and the status endpoint. |
+| `name` | Required. Id shown in the logs. If two recipes in one file share a name, the later one replaces the earlier one and the log warns. |
 | `host` | Required. Host pattern or list of patterns. |
 | `path` | Path pattern. Default `/**`. |
 | `fetch` | `render` (`force` or `skip`), `wait_for` (CSS selector to wait for), `wait_timeout_ms` (up to `15000`), `mobile_ua` (render as a phone), `pdf` (`ocr`). |
 | `select.remove` | CSS selectors to delete before extraction. |
 | `select.content` | CSS selectors that are the article body. Replaces the extractor's own guess. |
-| `preprocess` | HTML edits that run in order before extraction: `remove-attr`, `remove-class`, `remove-element`, `unwrap`, `replace-with-text`, `prepend-text`, `grid-to-table`. |
+| `preprocess` | HTML edits that run in order before extraction: `remove-attr`, `remove-class`, `remove-element`, `unwrap`, `replace-with-text`, `prepend-text`, `grid-to-table` (with an optional `columns` count, `1` to `100`). |
 | `extractor` | Force `readability`, `trafilatura` or `playwright`. |
-| `frontmatter` | Extra frontmatter fields from the page's JSON-LD or from CSS selectors. |
+| `frontmatter` | Extra frontmatter fields from the page's JSON-LD or from CSS selectors. `frontmatter.jsonld.type` names the schema.org type the JSON-LD fields read from, and is required when a field uses `jsonld`. |
+| `append` | Blocks that read JSON from an embedded `<script>` and add it to the end of the result as a fenced JSON block under a `## <title>` heading. Each block has `title`, `script` (a CSS selector), `path` (a list of keys and array indexes), and optionally `fields` and `limit` (rows, default `200`, up to `1000`). |
 
 A recipe with an unknown field is rejected.
 
 ## When a recipe does nothing
 
-Recipes apply to web pages, and to HTML you send to `POST /api/html` with `url` set. Check the `X-Source` header of the result: a recipe runs only when it's `readability`, `readability-fallback`, `trafilatura`, `playwright`, `coverage-guard` or `recipe-content`. Results from `cloudflare`, `reddit`, `hackernews`, `youtube`, `markitdown`, `pdf-ocr`, `image-caption` or `audio-transcript` never reach the recipe step.
+Recipes apply to web pages, and to HTML you send to `POST /api/html` with `url` set. Check the `X-Source` header of the result: a recipe runs only when it's `readability`, `readability-fallback`, `trafilatura`, `playwright`, `coverage-guard`, `article-series` or `recipe-content`. Results from `cloudflare`, `reddit`, `hackernews`, `youtube`, `markitdown`, `pdf-ocr`, `image-caption` or `audio-transcript` never reach the recipe step.
 
 When you force a render, write selectors against the rendered page in your browser's inspector. The page source can differ.
 

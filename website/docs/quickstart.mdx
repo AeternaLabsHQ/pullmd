@@ -20,7 +20,7 @@ Run PullMD on your machine with Docker and convert a page. You need Docker with 
     docker compose up -d
     ```
 
-    This starts PullMD and its three helper containers (Trafilatura, Playwright and MarkItDown). The first start downloads about 1.4 GB of images and uses about 5 GB of disk, most of it the headless browser.
+    This starts PullMD and its three helper containers (Trafilatura, Playwright and MarkItDown). The Playwright container alone adds about 3.7 GB of browser binaries.
 
     <Tip title="Port 3000 in use">If port 3000 is taken, create a `.env` file next to the compose file with `PORT=3080` (or any free port) and run the command again.</Tip>
   </Step>

@@ -9,7 +9,7 @@ A PullMD conversion returns a Markdown body, optional frontmatter, response head
 
 ## The body
 
-Every result starts with the title as a level-1 heading, followed by the content. With the `trafilatura` extractor, the heading appears twice when the page has its own matching `<h1>`. The source URL, date and metadata are in the [frontmatter](#frontmatter), which you request separately. A short result:
+Every result starts with the title as a level-1 heading, followed by the content. The source URL, date and metadata are in the [frontmatter](#frontmatter), which you request separately. A short result:
 
 ```markdown
 # Release checklist
@@ -28,7 +28,7 @@ Tables come out without padding spaces, which saves tokens. Reddit and Hacker Ne
 | `format` | `Content-Type` | Body |
 | --- | --- | --- |
 | `md` (default) | `text/markdown` | Markdown |
-| `text` | `text/plain` | The same content with headings, emphasis, quote markers and list bullets simplified. Links become `text (url)` and images become their URL. Tables, code blocks, ordered lists and horizontal rules keep their Markdown. |
+| `text` | `text/plain` | The same content with heading markers, emphasis and quote markers removed. Links become `text (url)`, images become their URL, and unindented `*`, `+` and `-` bullets become `- `. Backslash escapes resolve to the bare character. Tables, ordered lists and horizontal rules keep their Markdown. Code blocks aren't protected: the same rules apply inside them, except that their backslash escapes stay. |
 | `json` | `application/json` | The Markdown and its metadata in one object |
 
 ### JSON
@@ -82,13 +82,13 @@ A field appears only when it has a value.
 
 | Field | Present for | Value |
 | --- | --- | --- |
-| `title` | Results with a title (uploaded files have none) | Page title |
-| `url` | Results with a source URL | Source URL. Uploaded files and `POST /api/html` without `url` have none. |
+| `title` | Results with a title. Results from MarkItDown, PDF OCR, a vision or speech model, or YouTube have none, except a URL result served from the cache. | Page or document title |
+| `url` | Results with a source URL | Source URL. Most uploaded files and `POST /api/html` without `url` have none; saved pages (`.mhtml`) and feeds carry the URL stated in the file. |
 | `source` | All | Which extractor produced the result. See [`X-Source` values](#x-source-values). |
 | `fetched` | All | When this response was built (ISO 8601) |
 | `quality` | All | Extraction confidence, `0` to `1` |
-| `author` | Pages, Reddit, Hacker News, YouTube | Author or poster. Reddit values start with `u/`. |
-| `published` | Pages, Reddit, Hacker News, YouTube | Publication date. ISO 8601 for Reddit and Hacker News; pages and YouTube give the string the page states. |
+| `author` | Pages, Reddit, Hacker News, YouTube, and uploads of e-mail, OpenDocument, RTF and feeds | Author, poster or sender. Reddit values start with `u/`. |
+| `published` | Pages, Reddit, Hacker News, YouTube, and uploads of e-mail, OpenDocument and RTF | Publication date. ISO 8601 for Reddit, Hacker News and e-mail; other sources give the date as the source states it. |
 | `modified` | Pages | Last-modified date from the page |
 | `description` | Pages | Meta or Open Graph description |
 | `language` | Pages | Page language |
@@ -103,6 +103,7 @@ A field appears only when it has a value.
 | `llm_model`, `llm_tokens` | Captions, transcripts and PDF OCR | Model and total tokens, when the provider reports usage |
 | `llm_prompt_tokens`, `llm_completion_tokens` | Captions, transcripts and PDF OCR | Token split, when the provider reports it |
 | `pdf_pages` | PDF OCR | Pages processed |
+| `images_transcribed` | Reddit posts with images | Transcribed images as `<done>/<total>`. See [Reddit and Hacker News](/guides/reddit-and-hacker-news#describe-images-in-reddit-posts). |
 | `extracted`, `extract_confidence`, `sections_selected`, `original_tokens`, `returned_tokens` | Requests with `query` | See [Query-scoped extraction](/guides/query-scoped-extraction) |
 
 MCP `read_url` results always include a frontmatter block, even with `frontmatter=false`, with `source`, `share_id`, `share_url`, `quality` and `cached`. `get_share` results carry `url`, `source`, `share_id`, `share_url`, `refreshed` and `age_ms`. See [MCP tools](/reference/mcp-tools).
@@ -165,6 +166,8 @@ Errors are JSON with an `error` message for every `format`:
 { "error": "Missing required parameter: url" }
 ```
 
+`/api/stream` is the exception: once the event stream has started, an error arrives as an `error` event whose data holds a `message`.
+
 | Status | When |
 | --- | --- |
 | `400` | Missing or invalid parameter, empty upload, or a Reddit page that isn't a post or subreddit |
@@ -175,4 +178,4 @@ Errors are JSON with an `error` message for every `format`:
 | `422` | Uploaded HTML has almost no content, or an uploaded file doesn't match its format |
 | `429` | Rate limit reached. Share-link lookups send a `Retry-After` header. |
 | `500` | Unexpected Reddit error, or extraction failed on `POST /api/html` |
-| `502` | The source or a sidecar failed |
+| `502` | The source or a sidecar failed. On `GET /api`, a site behind a bot-protection challenge adds `"code": "bot_challenge"` and the challenge's `vendor` to the body. |

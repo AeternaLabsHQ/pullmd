@@ -34,6 +34,8 @@ Card icons: rocket, book, code, terminal, plug, gear, bolt, shield, search, info
 
 Product name, URLs, colours and logo live in `site.config.ts`. Colours for light and dark mode are the first lines of `src/css/theme.css`.
 
+Fonts are bundled with the site from `@fontsource` packages and imported in `src/fonts.js`. Don't load fonts or other assets from a third-party service: every visitor's browser would contact it.
+
 ## Custom domain
 
 Add a CNAME DNS record pointing to `<org>.github.io` and set the domain under the repo's Settings → Pages. The deploy workflow builds for whatever address Pages serves the site at, so nothing in the code has to change. Update `url` and `baseUrl` in `site.config.ts` too, so local builds match.

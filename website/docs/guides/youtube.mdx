@@ -52,7 +52,7 @@ With the tier off, a YouTube link goes through the normal web pipeline and retur
 curl "http://localhost:3000/api?url=https://www.youtube.com/watch?v=dQw4w9WgXcQ&yt_timecodes=plain&yt_chunk=60"
 ```
 
-To change the defaults for every request, set `MARKITDOWN_YT_TIMECODES` and `MARKITDOWN_YT_CHUNK` on the `markitdown` service. Requests with either parameter skip the cache.
+To change the defaults for every request, set `MARKITDOWN_YT_TIMECODES` and `MARKITDOWN_YT_CHUNK` on the `markitdown` service. Requests with a valid value for either parameter skip the cache: `links`, `plain` or `none` for `yt_timecodes`, and a whole number for `yt_chunk`.
 
 ## Transcript language
 

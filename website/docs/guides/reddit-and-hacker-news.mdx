@@ -37,16 +37,16 @@ A listing returns 30 stories from the Hacker News search API as a numbered list 
 
 | Parameter | Default | Effect |
 | --- | --- | --- |
-| `comments` | `true` | `false` returns the post without comments. A cached copy that includes comments is served unchanged, so add `nocache=true`. |
+| `comments` | `true` | `false` or `0` returns the post without comments. A cached copy that includes comments is served unchanged, so add `nocache=true`. |
 | `comment_depth` | `3` | How many levels of replies to include, or `all` for the whole thread. The MCP tool accepts `1` to `10` or `"all"`. |
 | `comment_limit` | no limit | Maximum number of top-level comments. The MCP tool accepts `1` to `500`. |
 | `lang` | `de` | Language of the comments heading: `## Kommentare` or `## Comments`. |
 
 On REST, `comment_depth` and `comment_limit` skip the cache, so they always take effect. On MCP they don't. `lang` doesn't skip it, so add `nocache=true` when you change `lang` for a thread fetched in the last hour.
 
-With `comment_depth=all`, PullMD removes the depth limit and also loads the comments Reddit hides behind "load more comments" and "continue this thread". This takes extra requests to Reddit, at most 20 per conversion with credentials and 5 without. Set `PULLMD_REDDIT_MORE_REQUESTS` to change the limit, or `0` to turn the loading off. On Hacker News, `all` removes the depth limit.
+With `comment_depth=all`, PullMD removes the depth limit and also loads the comments Reddit hides behind "load more comments" and "continue this thread". This takes extra requests to Reddit, at most 20 per conversion with credentials and 5 without. Set `PULLMD_REDDIT_MORE_REQUESTS` to change the limit (up to `200`), or `0` to turn the loading off. On Hacker News, `all` removes the depth limit.
 
-Comments still missing within the requested depth are noted below the comment tree, for example `Not loaded: 3 more comments`.
+On Reddit, comments still missing within the requested depth are noted below the comment tree, for example `Nicht geladen: 3 weitere Kommentare`, or `Not loaded: 3 more comments` with `lang=en`.
 
 <Tip title="Comments heading language">The comments heading defaults to German. For an English-language agent, pass `lang=en` on every request.</Tip>
 
@@ -58,7 +58,7 @@ With `frontmatter=true`, posts include `author`, `published` and `upvotes`, plus
 
 With a [vision provider](/guides/images-and-audio) configured, PullMD can add a short description and a transcript of the legible text under each image of a Reddit post: single images, galleries and images inside a text post. Comment images stay as they are.
 
-To transcribe the images of one post, pass `images=on` (MCP: `images: "on"`). `PULLMD_EMBEDDED_IMAGES` sets the instance behavior:
+To transcribe the images of one post, pass `images=on` (MCP: `images: "on"`). On REST, `true` and `1` work like `on`, and `false` and `0` like `off`. `PULLMD_EMBEDDED_IMAGES` sets the instance behavior:
 
 | Value | Effect |
 | --- | --- |
@@ -66,7 +66,7 @@ To transcribe the images of one post, pass `images=on` (MCP: `images: "on"`). `P
 | `always` | Images are transcribed unless a request passes `images=off`. |
 | `off` | Images are never transcribed, and a request can't turn it on. |
 
-With a provider and a mode other than `off`, an image without a transcript carries a one-line `Image not transcribed` marker, so an agent reading the result knows to ask for it. With `frontmatter=true`, `images_transcribed` reports the count as `<done>/<total>`.
+With a provider and a mode other than `off`, an image without a transcript carries a one-line `Bild nicht transkribiert` marker (`Image not transcribed` with `lang=en`), so an agent reading the result knows to ask for it. With `frontmatter=true`, `images_transcribed` reports the count as `<done>/<total>`.
 
 PullMD transcribes up to `PULLMD_EMBEDDED_IMAGES_MAX` images per post (default `4`, range `1` to `20`). Each new image costs one unit of `PULLMD_LLM_RATE_LIMIT` and one vision call. Transcripts are stored per image and reused for as long as cache retention keeps them.
 

@@ -5,7 +5,7 @@ description: How PullMD caches conversions, how share links stay fresh, and how 
 
 # Share links and cache
 
-Every conversion of a URL is cached and gets a share link. The link works without sign-in and refreshes when it's opened after an hour, so a teammate or an agent can use it as a current Markdown version of the page.
+A conversion of a URL is cached and gets a share link. Some results are served without being cached, so they get no share link: a stand-in result served because the hourly [provider budget](/guides/images-and-audio#hourly-budget) ran out, a YouTube result whose transcript was blocked or failed, and a Reddit post where an image transcript failed for a transient reason. A later request can then get the full result. The link works without sign-in and refreshes when it's opened after an hour, so a teammate or an agent can use it as a current Markdown version of the page.
 
 ## Get a share link
 
@@ -37,7 +37,7 @@ Uploads (`POST /api/file` and `POST /api/html`) are never cached and have no sha
 
 Parameters that change the output also skip the cache: `render` (when `force` or `skip`), `extractor` (when valid), `comment_depth`, `comment_limit`, `pdf=ocr`, `yt_timecodes` and `yt_chunk`. The fresh result then replaces the cached copy. `nocache=1` works like `nocache=true`.
 
-A `/s/<id>` refresh extracts the page with default options, so `render`, `extractor`, `pdf=ocr` and the YouTube parameters don't carry over.
+A `/s/<id>` refresh extracts the page with default options, so `render`, `extractor`, `pdf=ocr` and the YouTube parameters don't carry over. A Reddit or Hacker News refresh uses comment depth `3` and no `comment_limit`. It includes comments only if the cached copy has them, with the same heading language.
 
 The cache is keyed by URL, so everyone who converts the same URL shares one cached copy and one share id.
 
@@ -50,11 +50,11 @@ PULLMD_CACHE_RETENTION_DAYS=0     # keep everything forever
 PULLMD_CACHE_RETENTION_DAYS=30    # keep a month
 ```
 
-Allowed values are `0` to `36500`. Lowering the value on a running instance removes older entries at the next conversion.
+Allowed values are `0` to `36500`. PullMD reads the value at startup, so restart after changing it. Share-link lookups then apply the new limit right away, and older entries are deleted at the next conversion.
 
 ## Who can see what
 
-Share ids are 128 random bits, so a link can't be guessed. PullMD also limits lookups of unknown ids to 120 a minute per address, and valid links have no limit. An unknown or expired id returns `404` with `Share link not found or expired`, and a lookup over the limit returns `429` with `rate_limited`.
+Share ids are 128 random bits, so a link can't be guessed. PullMD also limits `/s/<id>` lookups of unknown ids to 120 a minute per address, and valid links have no limit. The MCP `get_share` tool doesn't have this limit. An unknown or expired id returns `404` with `Share link not found or expired`, and a lookup over the limit returns `429` with `rate_limited`.
 
 The recent-conversions list and archive show what other people converted, unless you hide them. What each setup returns:
 
@@ -70,7 +70,7 @@ Share links work in every setup.
 
 To delete one entry, call [`DELETE /api/cache/{id}`](/reference/api/history-and-cache/delete-a-conversion) with the numeric `id` from the history. To delete everything, call [`DELETE /api/cache`](/reference/api/history-and-cache/delete-all-conversions).
 
-With sign-in on, a regular user's delete removes the entry from their own history, and the shared copy and its share link stay. An admin's delete (or anyone's, with sign-in off) removes the shared copy for everyone. The response's `scope` says which happened: `user` or `global`.
+With sign-in on, a regular user's delete removes the entry from their own history, and the shared copy and its share link stay. An admin's delete (or anyone's, with sign-in off) removes the shared copy for everyone. The response's `scope` says which happened: `user` or `global`. With sign-in off and `DISABLE_PUBLIC_HISTORY=true`, both delete calls return `403`.
 
 ## Where the cache lives
 

@@ -31,7 +31,7 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     Sign-in is on and the request had no valid credentials. Send an API key as `Authorization: Bearer pmd_…` (create one under **Settings** in the web app). A key from another instance, or one that was revoked, gives the same error. See [Authentication](/self-hosting/authentication#api-keys).
   </Accordion>
   <Accordion title="A setting in .env has no effect">
-    The compose files (`docker-compose.yml` and `docker-compose.traefik.yml`) pass variables to the container one by one. As of v3.18.2, `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_COVERAGE_GUARD` and `PULLMD_FILENAME_DATE_PREFIX` aren't in the list. Add a line such as `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service.
+    The compose files (`docker-compose.yml` and `docker-compose.traefik.yml`) pass variables to the container one by one. As of v3.18.2, `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` aren't in the list. Add a line such as `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service.
 
     Check what the container received:
 
@@ -66,7 +66,7 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     Behind a proxy without `PULLMD_TRUST_PROXY`, every visitor looks like the proxy and shares one limit. The log says `Requests arrive through a proxy but PULLMD_TRUST_PROXY is not set`. See [Reverse proxy](/self-hosting/reverse-proxy).
   </Accordion>
   <Accordion title="Image or audio returns no caption or transcript">
-    No vision or speech-to-text provider is configured, or the hourly budget (`PULLMD_LLM_RATE_LIMIT`) is used up, so PullMD treats the URL as a web page. An image URL then returns a heading with the image link, and an audio URL returns an empty body. Check `/api/config`: `vision` and `stt` show whether a provider is set. See [Images and audio](/guides/images-and-audio).
+    No vision or speech-to-text provider is configured, or the hourly budget (`PULLMD_LLM_RATE_LIMIT`) is used up, so PullMD passes the URL to its regular web page extraction. An uploaded image or audio file goes to the MarkItDown sidecar instead. Check `/api/config`: `vision` and `stt` show whether a provider is set. See [Images and audio](/guides/images-and-audio).
   </Accordion>
   <Accordion title="claude.ai says it couldn't reach the MCP server">
     Check that the instance is reachable from the internet on HTTPS, that `OAUTH_JWT_SECRET` and `PUBLIC_URL` are set, and that sign-in is enabled. A firewall or web-application-firewall rule that blocks some countries or networks can stop claude.ai before the request reaches PullMD, so check your proxy's logs too.

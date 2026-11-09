@@ -13,10 +13,11 @@ PullMD is configured with environment variables. With Docker Compose, put them i
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PORT` | `3000` | Host port the default compose file publishes. |
-| `PUBLIC_URL` | `http://localhost:${PORT}` (Traefik file: `https://${HOST_DOMAIN}`) | Public address of the instance. Used on `/help`, in the skill bundle and MCP share links, for OAuth, and to accept login forms. An `https://` value marks the session cookie `Secure`. |
+| `PORT` | `3000` | Host port the default compose file publishes. The container listens on `3000`. Outside Docker, the port the server listens on. |
+| `PUBLIC_URL` | `http://localhost:${PORT}` (Traefik file: `https://${HOST_DOMAIN}`) | Public address of the instance. Used on `/help`, in the skill bundle and MCP share links, for OAuth, and to accept login forms. An `https://` value marks the session cookie `Secure`. Unset (outside Docker), `/help`, the skill bundle and MCP share links use the protocol and host of each request. |
 | `HOST_DOMAIN` | | Traefik compose file only. Host name without scheme, used for routing. |
 | `PULLMD_TRUST_PROXY` | off (Traefik file: `1`) | When to believe `X-Forwarded-*` headers: a hop count, `true`, or a list of proxy addresses. See [Reverse proxy](/self-hosting/reverse-proxy). |
+| `TZ` | unset | Time zone, such as `Europe/Berlin`. Used for the `PULLMD_FILENAME_DATE_PREFIX` date, and for dates and times in uploaded e-mails (`.eml`, `.msg`), calendars (`.ics`) and feeds, which use `Europe/Berlin` when `TZ` is unset. The compose files don't set it; add `- TZ=Europe/Berlin` to the `pullmd` service's `environment:` list. |
 | `CACHE_DB` | `/data/cache.db` | Path of the SQLite database (cache, history, accounts). `./data/cache.db` when run without Docker. |
 
 ## Sidecars
@@ -25,7 +26,7 @@ PullMD is configured with environment variables. With Docker Compose, put them i
 | --- | --- | --- |
 | `TRAFILATURA_URL` | `http://trafilatura:8001/extract` | Trafilatura sidecar. Unset: Readability only. |
 | `PLAYWRIGHT_URL` | `http://playwright:8002/render` | Headless browser sidecar. Unset: no rendering of JavaScript pages. |
-| `MARKITDOWN_URL` | `http://markitdown:8003/convert` | Document sidecar. Unset: documents return `502` and YouTube transcripts are off. |
+| `MARKITDOWN_URL` | `http://markitdown:8003/convert` | Document sidecar. Unset: document links, uploaded PDF, Office, EPUB and ZIP files, and uploaded images and audio without a provider return `502`, and YouTube transcripts are off. The [upload formats PullMD reads itself](/guides/documents#upload-formats-pullmd-reads-itself) keep working. See [Without MarkItDown](/guides/documents#without-markitdown). |
 
 ## Output
 
@@ -60,9 +61,9 @@ PullMD is configured with environment variables. With Docker Compose, put them i
 | --- | --- | --- |
 | `PULLMD_AUTH_MODE` | `disabled` | `disabled`, `single-admin` or `multi-user`. See [Authentication](/self-hosting/authentication). |
 | `PULLMD_ADMIN_EMAIL` | | Required on the first start with sign-in on. The first admin's email. |
-| `PULLMD_ADMIN_PASSWORD` | | Required on the first start with sign-in on. At least 8 characters. Changing it later has no effect. |
+| `PULLMD_ADMIN_PASSWORD` | | Required on the first start with sign-in on. Any non-empty value is accepted; the admin commands and the sign-up form require at least 8 characters. Changing it later has no effect. |
 | `PULLMD_ALLOW_SIGNUP` † | on | `false`, `0`, `no` or `off` closes `/signup` in `multi-user` mode. Any other value keeps it open. |
-| `OAUTH_JWT_SECRET` | | At least 32 characters. Turns on OAuth for [claude.ai and Claude Desktop](/agents/claude-ai-connector). |
+| `OAUTH_JWT_SECRET` | | At least 32 characters. Turns on OAuth for [claude.ai and Claude Desktop](/agents/claude-ai-connector). With a shorter value or without `PUBLIC_URL`, PullMD logs `OAuth setup failed:` and exits at startup. |
 | `PULLMD_AUTH_TOKEN` | | Deprecated shared bearer token, `single-admin` mode only. |
 
 ## Images, audio and OCR
@@ -80,9 +81,11 @@ PullMD is configured with environment variables. With Docker Compose, put them i
 | `PULLMD_PDF_OCR_API_KEY` | | Turns on [PDF optical character recognition (OCR)](/guides/documents#tables-in-pdfs-use-ocr). Doesn't fall back to the shared key. |
 | `PULLMD_PDF_OCR_BASE_URL` | `https://api.mistral.ai/v1` | OCR API. The endpoint must speak the Mistral OCR API (`POST /ocr`). |
 | `PULLMD_PDF_OCR_MODEL` | `mistral-ocr-latest` | OCR model. |
-| `PULLMD_LLM_RATE_LIMIT` | `30` | Requests per hour for captions, transcripts and OCR together, per user or address. `0` turns the limit off, and a non-numeric value uses `30`. Over the limit, PullMD falls back to the regular conversion (metadata only for images and audio) and doesn't cache that result. |
+| `PULLMD_LLM_RATE_LIMIT` | `30` | Requests per hour for captions, transcripts and OCR together, per user or address. `0` turns the limit off, and a non-numeric value uses `30`. Over the limit, PullMD falls back to the regular conversion and doesn't cache that result. Uploaded images and audio go to the MarkItDown sidecar, and image and audio URLs go through web page extraction. |
 | `PULLMD_EMBEDDED_IMAGES` † | `on-request` | Describe images in Reddit posts: `off`, `on-request` or `always`. An invalid value logs a warning and uses `on-request`. See [Describe images in Reddit posts](/guides/reddit-and-hacker-news#describe-images-in-reddit-posts). |
 | `PULLMD_EMBEDDED_IMAGES_MAX` † | `4` | Maximum images transcribed per post, `1` to `20`. |
+
+There is no `PULLMD_LLM_MODEL`: the shared `PULLMD_LLM_*` settings cover the key and base URL only. If `PULLMD_LLM_MODEL` is set, PullMD logs a warning at startup and ignores it. Set `PULLMD_VISION_MODEL`, `PULLMD_STT_MODEL` or `PULLMD_PDF_OCR_MODEL` instead.
 
 ## YouTube
 
@@ -125,4 +128,7 @@ PullMD enforces these limits, and none has a setting:
 | Login attempts | 10 per minute per address |
 | Signups | 5 per hour per address |
 | Unknown share-link lookups | 120 per minute per address |
+| OAuth authorization (`/oauth/authorize`, `/oauth/consent`) | 60 per minute per address |
+| OAuth token requests (`/oauth/token`, `/oauth/revoke`) | 60 per minute per address |
+| OAuth client registrations (`/oauth/register`) | 10 per hour per address |
 | Cache freshness | 1 hour |

@@ -17,6 +17,8 @@ November 8, 2026 · <Badge tone="brand">Latest</Badge>
 
 November 7, 2026
 
+Not released on its own: these fixes ship in 3.18.2.
+
 - YouTube URLs failed with `fetch failed` when the response headers exceeded 16 KB. These URLs convert again.
 - Pages that split one piece of writing across several `<article>` blocks keep all of them. `X-Source` is `article-series`, and `PULLMD_ARTICLE_SERIES=off` turns it off.
 - The docs state how [Reddit access](/guides/reddit-and-hacker-news#reddit-credentials) works: without credentials Reddit blocks the requests, and Reddit no longer accepts new API access requests.
@@ -36,7 +38,7 @@ November 4, 2026
 
 November 2, 2026 · <Badge tone="warning">Action required for old sidecars</Badge>
 
-- `/api/status` reports a Playwright sidecar older than 3.15.2 as `degraded` and returns `503`. See [Upgrading](/self-hosting/upgrading#to-317-or-later-status-check-and-anonymous-deletes).
+- `/api/status` reports a Playwright sidecar older than 3.17.0 as `degraded` and returns `503`. See [Upgrading](/self-hosting/upgrading#to-317-or-later-status-check-and-anonymous-deletes).
 - Reddit pages that aren't posts or subreddits crashed the extractor. They return `400` with `"code": "reddit_unsupported_page"`.
 - A blocked Reddit request stored an empty post. It returns `502`, and nothing is cached.
 - With `DISABLE_PUBLIC_HISTORY=true` and sign-in off, anonymous deletes return `403`.
