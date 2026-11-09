@@ -617,7 +617,7 @@ paths:
       operationId: getFileJob
       summary: Get an async file result
       description: |
-        Returns the state of a job started with `POST /api/file?async=1`. Poll until `status` is `done` or `error`. Fetching a finished result doesn't remove it: it stays until you call `DELETE /api/file/jobs/{id}` or the retention time passes (`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default), except that when your share of the result memory (a quarter of `PULLMD_FILE_JOB_MAX_MB`, 16 MB by default) is used up, your older finished results are dropped first to make room for a new one. A job that is still `pending` after 15 minutes becomes an `error` with `httpStatus` `504`.
+        Returns the state of a job started with `POST /api/file?async=1`. Poll until `status` is `done` or `error`. Fetching a finished result doesn't remove it: it stays until you call `DELETE /api/file/jobs/{id}` or the retention time passes (`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default), except that when your share of the result memory (a quarter of `PULLMD_FILE_JOB_MAX_MB`, 16 MB by default) or the total result memory is used up, your older finished results are dropped first to make room for a new one. A job that is still `pending` after 15 minutes becomes an `error` with `httpStatus` `504`.
 
         With sign-in enabled, a job belongs to the account that started it, and any other account gets `404`. Without sign-in, the job id is the only credential. Every response carries `Cache-Control: no-store`.
       security: [{}, { bearerAuth: [] }]

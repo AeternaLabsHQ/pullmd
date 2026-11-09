@@ -117,7 +117,7 @@ Set on the `pullmd` service. These control the results that `POST /api/file?asyn
 
 A client holds at most 3 jobs at once, counted per signed-in user or, without sign-in, per client address. Behind a reverse proxy without [`PULLMD_TRUST_PROXY`](/self-hosting/reverse-proxy), all anonymous clients share one address and so one limit, and the extra uploads are converted in the request.
 
-With the default of 64 MB, one user or address holds at most 16 MB of results. When a new result would go over that share, that client's older finished results are dropped first, oldest first; results of other clients are never dropped. Once 32 MB of results are held, `POST /api/file?async=1` converts in the request and answers `200`.
+With the default of 64 MB, one user or address holds at most 16 MB of results. When a new result would go over that share or over the total, that client's older finished results are dropped first, oldest first; results of other clients are never dropped. Once 32 MB of results are held, `POST /api/file?async=1` converts in the request and answers `200`.
 
 ## Document sidecar limits
 
