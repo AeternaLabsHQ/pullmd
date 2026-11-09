@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: PullMD API
-  version: 3.15.2
+  version: 3.18.2
   license:
     name: AGPL-3.0-or-later
     url: https://github.com/AeternaLabsHQ/pullmd/blob/main/LICENSE
@@ -9,6 +9,8 @@ info:
     PullMD is self-hosted, so every request goes to your own instance. Replace `http://localhost:3000` with your `PUBLIC_URL`.
 
     Conversion endpoints return Markdown (`text/markdown`) by default. Add `format=json` for a JSON envelope or `format=text` for plain text.
+
+    The MCP server is at `/mcp`. Its tools are described on [MCP tools](/reference/mcp-tools).
 servers:
   - url: http://localhost:3000
 tags:
@@ -54,7 +56,7 @@ components:
     comment_limit:
       name: comment_limit
       in: query
-      description: Maximum number of top-level comments. Uncapped by default, and `0` or a value that isn't an integer also means no cap. Setting it bypasses the cache.
+      description: 'Maximum number of top-level comments. PullMD reads the value as an integer up to its first non-digit, so `2.5` gives `2`. Uncapped by default, and `0` or a value that doesn''t start with a number also means no cap. Setting it bypasses the cache.'
       schema: { type: integer }
     frontmatter:
       name: frontmatter
@@ -89,18 +91,28 @@ components:
     yt_timecodes:
       name: yt_timecodes
       in: query
-      description: 'YouTube transcript timecodes: `links` (clickable timestamp links), `plain` (`[MM:SS]` labels) or `none`. An unrecognized value is ignored. Setting it bypasses the cache.'
+      description: 'YouTube transcript timecodes: `links` (clickable timestamp links), `plain` (`[MM:SS]` labels) or `none`. An unrecognized value is ignored. Setting it bypasses the cache. Without a valid value, the MarkItDown sidecar uses `MARKITDOWN_YT_TIMECODES`, which defaults to `links`.'
       schema: { type: string, enum: [links, plain, none], default: links }
     yt_chunk:
       name: yt_chunk
       in: query
-      description: Group the YouTube transcript into blocks of this many seconds. `0` keeps each original snippet. A value that isn't a whole number is ignored. Setting it bypasses the cache.
+      description: Group the YouTube transcript into blocks of this many seconds. `0` keeps each original snippet. A value that isn't a whole number is ignored. Setting it bypasses the cache. Without a valid value, the MarkItDown sidecar uses `MARKITDOWN_YT_CHUNK`, which defaults to `30`.
       schema: { type: integer, minimum: 0, default: 30 }
     lang:
       name: lang
       in: query
       description: Language of the comments section heading. `en` gives `## Comments`, and any other value gives `## Kommentare`.
       schema: { type: string, enum: [de, en], default: de }
+    client_mode:
+      name: client_mode
+      in: query
+      description: 'Which client to record for the request, in the history entry when the result is cached, and in the stats log. `pwa` records `pwa`. Any other value, or none, records the client detected from the `User-Agent` header (`claude`, `browser` or `api`). The `X-Client-Mode` header takes precedence over this parameter.'
+      schema: { type: string, enum: [pwa] }
+    xClientMode:
+      name: X-Client-Mode
+      in: header
+      description: Same as `client_mode`. Takes precedence over the query parameter.
+      schema: { type: string, enum: [pwa] }
     filename:
       name: filename
       in: query
@@ -143,6 +155,9 @@ components:
     X-Extract-Returned-Tokens:
       description: Estimated tokens in the returned Markdown.
       schema: { type: integer }
+    WWW-Authenticate:
+      description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`. When `PUBLIC_URL` is set, it adds `resource_metadata="<PUBLIC_URL>/.well-known/oauth-protected-resource"` for OAuth clients such as MCP connectors. That metadata URL exists only when `OAUTH_JWT_SECRET` is set.'
+      schema: { type: string }
   schemas:
     Error:
       type: object
@@ -158,7 +173,7 @@ components:
         metadata:
           type: object
           nullable: true
-          description: 'Page metadata found during extraction. A field the source doesn''t have is `null`. `contentLength` and `extractorReason` appear for pages extracted by Readability, Trafilatura or Playwright and for `POST /api/html`. Uploads have `contentLength` without `extractorReason`, and Reddit, Hacker News and Cloudflare Markdown results have neither. A cached Reddit or Hacker News result has a shorter object with the fields it stores.'
+          description: 'Page metadata found during extraction. A field the source doesn''t have is `null`. `contentLength` and `extractorReason` appear for pages extracted by Readability, Trafilatura or Playwright and for `POST /api/html`. Uploads and YouTube, image, audio, PDF OCR and MarkItDown results have `contentLength` without `extractorReason`, and Reddit, Hacker News and Cloudflare Markdown results have neither. A cached Reddit or Hacker News result has a shorter object with the fields it stores.'
           properties:
             title: { type: string, nullable: true, description: 'Page title, from `<title>`, `og:title` or the first heading.' }
             description: { type: string, nullable: true, description: 'Page description, from the `description` or `og:description` meta tag.' }
@@ -178,9 +193,18 @@ components:
             twitterImage: { type: string, nullable: true, description: 'Image URL from the `twitter:image` meta tag.' }
             sourceUrl: { type: string, nullable: true, description: 'The URL that was converted. For `POST /api/html`, the `url` you passed; `null` for uploaded files.' }
             statusCode: { type: integer, nullable: true, description: 'HTTP status of the fetched page. `null` for HTML and file uploads.' }
-            published: { type: string, description: 'Publication time as an ISO 8601 string. Present on cached Reddit and Hacker News results.' }
-            upvotes: { type: integer, description: 'Post score. Present on cached Reddit and Hacker News results.' }
+            published: { type: string, nullable: true, description: 'Publication time as an ISO 8601 string, or `null` when the post has none. Present on cached Reddit and Hacker News results.' }
+            upvotes: { type: integer, nullable: true, description: 'Post score, or `null` when the source has none. Present on cached Reddit and Hacker News results.' }
             contentLength: { type: integer, description: 'Length of the Markdown, in characters. Absent for Reddit, Hacker News and Cloudflare Markdown results.' }
+            ytDuration: { type: string, nullable: true, description: 'YouTube only. Video length, such as `12:34` or `1:02:03`.' }
+            ytViews: { type: string, nullable: true, description: 'YouTube only. View count as the page states it.' }
+            llmModel: { type: string, nullable: true, description: 'Model that described the image, transcribed the audio or ran PDF OCR. Present on `image-caption`, `audio-transcript` and `pdf-ocr` results, and on cached Reddit results with transcribed images.' }
+            llmTokens: { type: integer, description: 'Total tokens the provider reported. Present with `llmModel` when the provider sends it.' }
+            llmPromptTokens: { type: integer, description: 'Input tokens the provider reported. Present with `llmModel` when the provider sends it.' }
+            llmCompletionTokens: { type: integer, description: 'Output tokens the provider reported. Present with `llmModel` when the provider sends it.' }
+            audioSeconds: { type: number, description: '`audio-transcript` only. Length of the audio in seconds, when the speech-to-text provider reports it.' }
+            imageSize: { type: string, description: '`image-caption` only. Width and height in pixels, such as `1920x1080`, when PullMD can read them from the file.' }
+            pdfPages: { type: integer, description: '`pdf-ocr` only. Number of pages the OCR provider processed.' }
             quality: { type: number, description: 'Extraction confidence from 0 to 1. On a cache hit it is recomputed from the cached Markdown, so it can differ from the fresh value.' }
             extractorReason: { type: string, nullable: true, description: 'Why this extractor was chosen. Absent for uploads and for Reddit, Hacker News and Cloudflare Markdown results.' }
         source: { type: string, description: Which extractor produced the result. Same values as the `X-Source` header. }
@@ -208,7 +232,7 @@ components:
         latencyMs: { type: integer, description: 'Health-check round trip, in milliseconds. Present when the sidecar answered, including `unhealthy` and `http <status>`. Absent when it is unreachable, timed out or not configured.' }
         error:
           type: string
-          description: 'Why it is down: `timeout`, `unreachable`, `misconfigured` (the URL can''t be parsed), `unhealthy` (it reported itself unhealthy), `http <status>`, or `policy-missing` (`status: degraded`: a Playwright sidecar older than 3.15.2).'
+          description: 'Why it is down: `timeout`, `unreachable`, `misconfigured` (the URL can''t be parsed), `unhealthy` (it reported itself unhealthy), `http <status>`, or `policy-missing` (`status: degraded`: a Playwright sidecar older than 3.17.0, which doesn''t report its SSRF policy).'
     Status:
       type: object
       properties:
@@ -299,6 +323,8 @@ paths:
         - $ref: '#/components/parameters/pdf'
         - $ref: '#/components/parameters/yt_timecodes'
         - $ref: '#/components/parameters/yt_chunk'
+        - $ref: '#/components/parameters/client_mode'
+        - $ref: '#/components/parameters/xClientMode'
       responses:
         '200':
           description: The page as Markdown.
@@ -337,15 +363,13 @@ paths:
         '401':
           description: Sign-in is enabled and no valid API key or session was sent.
           headers:
-            WWW-Authenticate:
-              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
-              schema: { type: string }
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Authentication required }
         '403':
-          description: The URL resolves to a private, loopback, link-local or cloud-metadata address, its host name doesn't resolve, it can't be parsed, or its scheme isn't `http` or `https`. With `render=force` or `extractor=playwright`, also when the page navigates the browser to such an address. See [SSRF protection](/self-hosting/ssrf-protection).
+          description: 'The URL resolves to a private, loopback, link-local or cloud-metadata address, its host name doesn''t resolve, it can''t be parsed, or its scheme isn''t `http` or `https`. Also when the page redirects more than 5 times (`URL not allowed: too many redirects (>5)`). With `render=force` or `extractor=playwright`, also when the page navigates the browser to such an address. See [SSRF protection](/self-hosting/ssrf-protection).'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -397,6 +421,8 @@ paths:
         - $ref: '#/components/parameters/frontmatter'
         - $ref: '#/components/parameters/filename'
         - $ref: '#/components/parameters/xFilename'
+        - $ref: '#/components/parameters/client_mode'
+        - $ref: '#/components/parameters/xClientMode'
       requestBody:
         required: true
         description: The raw HTML, up to 10 MB. Send it with `Content-Type` set to `text/html` or `application/xhtml+xml`.
@@ -404,6 +430,8 @@ paths:
           text/html:
             schema: { type: string }
             example: '<!doctype html><html><head><title>Saved page</title></head><body><article><h1>Saved page</h1><p>The article text.</p></article></body></html>'
+          application/xhtml+xml:
+            schema: { type: string }
       responses:
         '200':
           description: The document as Markdown.
@@ -431,15 +459,13 @@ paths:
         '401':
           description: Sign-in is enabled and no valid API key or session was sent.
           headers:
-            WWW-Authenticate:
-              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
-              schema: { type: string }
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Authentication required }
         '400':
-          description: The body is empty or not sent as `text/html`, or `url` is not a valid URL.
+          description: The body is empty or not sent as `text/html` or `application/xhtml+xml`, or `url` is not a valid URL.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -469,7 +495,7 @@ paths:
       description: |
         Converts an uploaded file. Send the raw bytes as the request body with `Content-Type` set to the file's type. PullMD reads the raw body and doesn't decode multipart forms.
 
-        PDF, Word, PowerPoint, Excel, EPUB and ZIP files need the MarkItDown sidecar. PullMD reads e-mail, saved pages, text, subtitles, OpenDocument, RTF, calendars, contacts, data files, feeds, notebooks and source code itself; see [Documents](/guides/documents#upload-formats-pullmd-reads-itself). Images and audio need a vision or speech-to-text provider; without one, PullMD returns their metadata only. Nothing is cached: no history entry and no share link.
+        PDF, Word, PowerPoint, Excel, EPUB and ZIP files need the MarkItDown sidecar. PullMD reads e-mail, saved pages, text, subtitles, OpenDocument, RTF, calendars, contacts, data files, feeds, notebooks and source code itself; see [Documents](/guides/documents#upload-formats-pullmd-reads-itself). Images and audio go to a vision or speech-to-text provider when one is configured, and to the MarkItDown sidecar otherwise. Without `MARKITDOWN_URL`, that request fails with `502`. Nothing is cached: no history entry and no share link.
       security: [{}, { bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/xFilename'
@@ -477,7 +503,12 @@ paths:
         - $ref: '#/components/parameters/format'
         - $ref: '#/components/parameters/frontmatter'
         - $ref: '#/components/parameters/pdf'
-        - $ref: '#/components/parameters/lang'
+        - name: lang
+          in: query
+          description: Language of the labels PullMD writes into e-mail, calendar, contact, notebook, data file and OpenDocument output. `en` gives English, and any other value gives German.
+          schema: { type: string, enum: [de, en], default: de }
+        - $ref: '#/components/parameters/client_mode'
+        - $ref: '#/components/parameters/xClientMode'
       requestBody:
         required: true
         description: The file's raw bytes, up to 25 MB. PullMD accepts any `Content-Type`, and `X-Filename` or `filename` helps it detect the file type.
@@ -512,9 +543,7 @@ paths:
         '401':
           description: Sign-in is enabled and no valid API key or session was sent.
           headers:
-            WWW-Authenticate:
-              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
-              schema: { type: string }
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -567,6 +596,8 @@ paths:
         - $ref: '#/components/parameters/pdf'
         - $ref: '#/components/parameters/yt_timecodes'
         - $ref: '#/components/parameters/yt_chunk'
+        - $ref: '#/components/parameters/client_mode'
+        - $ref: '#/components/parameters/xClientMode'
       responses:
         '200':
           description: An event stream of progress updates, ending with the result or an error.
@@ -591,19 +622,56 @@ paths:
         '401':
           description: Sign-in is enabled and no valid API key or session was sent.
           headers:
-            WWW-Authenticate:
-              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
-              schema: { type: string }
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Authentication required }
         '400':
-          description: '`url` is missing.'
+          description: '`url` is missing, or `images` is invalid for a Reddit link.'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: 'Missing required parameter: url' }
+  /share:
+    get:
+      tags: [Convert]
+      operationId: openShareTarget
+      summary: Open a link in the web app
+      description: |
+        The share target of the installed web app: its manifest names this endpoint, so a device that supports sharing to installed web apps sends shared links here. PullMD redirects to the web app with the link filled in, and the web app converts it. This endpoint converts nothing itself.
+
+        PullMD takes the link from `link`, then `url`. If both are empty, it takes the first `http://` or `https://` URL in `text`. With sign-in enabled, a browser that isn't signed in is redirected to `/login` first.
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - name: link
+          in: query
+          description: The shared link.
+          schema: { type: string }
+        - name: url
+          in: query
+          description: The shared link, used when `link` is empty.
+          schema: { type: string }
+        - name: text
+          in: query
+          description: Shared text. Used when `link` and `url` are empty. PullMD takes the first `http://` or `https://` URL in it.
+          schema: { type: string }
+      responses:
+        '302':
+          description: Redirect to the web app with the link filled in.
+          headers:
+            Location:
+              description: '`/#url=` followed by the URI-encoded link. Empty after `=` when no link was found.'
+              schema: { type: string }
+              example: /#url=https%3A%2F%2Fexample.com
+        '401':
+          description: 'Sign-in is enabled, no valid API key or session was sent, and the `Accept` header doesn''t include `text/html` or does include `application/json`.'
+          headers:
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
   /s/{id}:
     get:
       tags: [Share links]
@@ -612,7 +680,7 @@ paths:
       description: |
         Returns a cached conversion by its share id. If the copy is more than an hour old, PullMD fetches the source again first. If the source is gone, you get the last good copy, so share links keep working after the original page disappears.
 
-        Share links never need sign-in. They expire with their cache row (`PULLMD_CACHE_RETENTION_DAYS`, 90 days by default), and stop working at once when the admin (or anyone, with sign-in off) deletes the conversion.
+        Share links never need sign-in. They expire with their cache row (`PULLMD_CACHE_RETENTION_DAYS`, 90 days by default), and stop working at once when the conversion is deleted from the cache for everyone. See `DELETE /api/cache/{id}` for who can do that.
       security: []
       parameters:
         - name: id
@@ -642,7 +710,7 @@ paths:
             text/plain:
               schema: { type: string, description: 'With `format=text`: the content with the Markdown syntax removed.' }
         '404':
-          description: No conversion has this id, or it has expired.
+          description: No conversion has this id, or it has expired (`Share link not found or expired`). `Cache not available` when the instance runs without a cache.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -683,9 +751,7 @@ paths:
         '401':
           description: Sign-in is enabled and no valid API key or session was sent.
           headers:
-            WWW-Authenticate:
-              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
-              schema: { type: string }
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -732,9 +798,7 @@ paths:
         '401':
           description: Sign-in is enabled and no valid API key or session was sent.
           headers:
-            WWW-Authenticate:
-              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
-              schema: { type: string }
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -755,6 +819,8 @@ paths:
 
         - **Admin, or anyone when sign-in is off**: the shared cache row, for every user, along with its share link (`scope: global`).
         - **Regular user**: only the entry in your own history. The shared row and its share link keep working (`scope: user`).
+
+        With `DISABLE_PUBLIC_HISTORY` on, a caller who isn't signed in gets `403`. With sign-in off, that means nobody can delete.
       security: [{}, { bearerAuth: [] }]
       parameters:
         - name: id
@@ -781,9 +847,7 @@ paths:
         '401':
           description: Sign-in is enabled and no valid API key or session was sent.
           headers:
-            WWW-Authenticate:
-              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
-              schema: { type: string }
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -794,6 +858,12 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Invalid ID }
+        '403':
+          description: '`DISABLE_PUBLIC_HISTORY` is on and you are not signed in.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Public history is disabled on this instance. }
         '404':
           description: No entry with this id (in your history, when signed in), or the instance runs without a cache.
           content:
@@ -809,7 +879,7 @@ paths:
       tags: [History and cache]
       operationId: clearCache
       summary: Delete all conversions
-      description: Clears the whole cache (admin, or anyone when sign-in is off) or, for a regular user, their own history only.
+      description: Clears the whole cache (admin, or anyone when sign-in is off) or, for a regular user, their own history only. With `DISABLE_PUBLIC_HISTORY` on, a caller who isn't signed in gets `403`. With sign-in off, that means nobody can clear the cache.
       security: [{}, { bearerAuth: [] }]
       responses:
         '200':
@@ -829,13 +899,23 @@ paths:
         '401':
           description: Sign-in is enabled and no valid API key or session was sent.
           headers:
-            WWW-Authenticate:
-              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
-              schema: { type: string }
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Authentication required }
+        '403':
+          description: '`DISABLE_PUBLIC_HISTORY` is on and you are not signed in.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Public history is disabled on this instance. }
+        '404':
+          description: The instance runs without a cache.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Cache not available }
   /api/status:
     get:
       tags: [Instance]
@@ -854,7 +934,7 @@ paths:
               schema: { $ref: '#/components/schemas/Status' }
               example: 
                 ok: true
-                version: 3.15.2
+                version: 3.18.2
                 services:
                   trafilatura: { status: ok, latencyMs: 7 }
                   playwright: { status: ok, latencyMs: 67 }
@@ -866,7 +946,7 @@ paths:
               schema: { $ref: '#/components/schemas/Status' }
               example: 
                 ok: false
-                version: 3.15.2
+                version: 3.18.2
                 services:
                   trafilatura: { status: ok, latencyMs: 7 }
                   playwright: { status: down, error: unreachable }
@@ -984,7 +1064,7 @@ paths:
                         avgQuality: { type: number, description: Their average quality score. }
                   fallbackByDomain:
                     type: array
-                    description: 'Up to 20 domains where extraction fell back to plain Readability, most frequent first. Same visibility as `lowQualityDomains`. Absent when `total` is `0`.'
+                    description: 'Up to 20 domains where extraction fell back, most frequent first. Counts results from `readability-fallback` and results whose extractor reason contains `fell back` or `readability thin`. Same visibility as `lowQualityDomains`. Absent when `total` is `0`.'
                     items:
                       type: object
                       properties:
@@ -1044,9 +1124,7 @@ paths:
         '401':
           description: Not signed in.
           headers:
-            WWW-Authenticate:
-              description: 'Tells clients how to authenticate: `Bearer realm="pullmd"`, plus a `resource_metadata` URL for OAuth clients such as MCP connectors.'
-              schema: { type: string }
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -1065,5 +1143,126 @@ paths:
                 </head>
                 <body>
                 <pre>Cannot GET /api/me</pre>
+                </body>
+                </html>
+  /api/keys:
+    post:
+      tags: [Account]
+      operationId: createApiKey
+      summary: Create an API key
+      description: |
+        Creates an API key for the signed-in user. The response is the only time you see the full key, so store it.
+
+        Send `Accept: application/json` to get the key as JSON. Without it, a request with a session cookie is redirected to `/settings`, which shows the key once. A request without a session cookie always gets JSON. Available only when sign-in is enabled.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: false
+        description: Form-encoded. Without a body, the key has no label.
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                label: { type: string, maxLength: 100, description: 'A name for the key, shown at `/settings`. Longer values are cut to 100 characters.' }
+      responses:
+        '200':
+          description: The new key.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key: { type: string, description: 'The full API key: `pmd_` followed by 32 letters and digits. Send it as `Authorization: Bearer <key>`.' }
+        '302':
+          description: 'The request has a session cookie and doesn''t accept `application/json`. Redirect to `/settings`, which shows the new key once.'
+          headers:
+            Location:
+              description: '`/settings`.'
+              schema: { type: string }
+        '401':
+          description: Not signed in.
+          headers:
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '404':
+          description: 'Sign-in is off (`PULLMD_AUTH_MODE=disabled`), so the endpoint doesn''t exist. The body is the web server''s default HTML page, not JSON.'
+          content:
+            text/html:
+              schema: { type: string }
+              example: |
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                <meta charset="utf-8">
+                <title>Error</title>
+                </head>
+                <body>
+                <pre>Cannot POST /api/keys</pre>
+                </body>
+                </html>
+  /api/keys/{id}/revoke:
+    post:
+      tags: [Account]
+      operationId: revokeApiKey
+      summary: Revoke an API key
+      description: |
+        Deletes one of your API keys. Clients that use it get `401` from then on.
+
+        Send `Accept: application/json` to get a JSON answer; otherwise you are redirected to `/settings`. The answer is the same whether or not the id belongs to one of your keys, and keys of other users are never touched. Available only when sign-in is enabled.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 'The numeric key id. The `/settings` page uses it in each key''s revoke form; no API endpoint lists keys.'
+          schema: { type: integer }
+          example: 3
+      responses:
+        '200':
+          description: 'With `Accept: application/json`.'
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, description: Always `true`. }
+              example: { ok: true }
+        '302':
+          description: 'Without `Accept: application/json`. Redirect to `/settings`.'
+          headers:
+            Location:
+              description: '`/settings`.'
+              schema: { type: string }
+        '400':
+          description: '`id` is not a number, or is `0`.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Invalid id }
+        '401':
+          description: Not signed in.
+          headers:
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '404':
+          description: 'Sign-in is off (`PULLMD_AUTH_MODE=disabled`), so the endpoint doesn''t exist. The body is the web server''s default HTML page, not JSON.'
+          content:
+            text/html:
+              schema: { type: string }
+              example: |
+                <!DOCTYPE html>
+                <html lang="en">
+                <head>
+                <meta charset="utf-8">
+                <title>Error</title>
+                </head>
+                <body>
+                <pre>Cannot POST /api/keys/3/revoke</pre>
                 </body>
                 </html>

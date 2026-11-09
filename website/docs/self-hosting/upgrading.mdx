@@ -20,7 +20,7 @@ Uploaded `.csv`, `.json` and `.xml` files are read by PullMD itself, so the outp
 
 ## To 3.17 or later: status check and anonymous deletes
 
-- An instance that updates `pullmd` but keeps a `pullmd-playwright` image older than 3.15.2 gets `503` from `/api/status`, with `"error": "policy-missing"`, until the sidecar is updated. See [Health check](/self-hosting/monitoring#health-check).
+- An instance that updates `pullmd` but keeps a `pullmd-playwright` image older than 3.17.0 gets `503` from `/api/status`, with `"error": "policy-missing"`, until the sidecar is updated. See [Health check](/self-hosting/monitoring#health-check).
 - With `DISABLE_PUBLIC_HISTORY=true` and sign-in off, `DELETE /api/cache` and `DELETE /api/cache/:id` return `403` to anonymous callers.
 
 ## To 3.16 or later: markers under Reddit images
@@ -72,6 +72,6 @@ Pin an exact version on every image to control when you upgrade:
 image: aeternalabshq/pullmd:3.18.2
 ```
 
-Before a big upgrade, copy the `./data` folder. To roll back, pin the previous version and run `docker compose up -d`. Neither 3.0 nor 3.13 changed the database schema, so rolling back across them needs no restore. For other versions, check the changelog for schema changes first. To stay on the 2.x output format, use `aeternalabshq/pullmd:2`.
+Before a big upgrade, copy the `./data` folder. To roll back, pin the previous version and run `docker compose up -d`. 3.13 doesn't change the database schema, and 3.0 only adds a `metadata` column to the `conversions` table, which older versions ignore. Rolling back across them needs no restore. For other versions, check the changelog for schema changes first. To stay on the 2.x output format, use `aeternalabshq/pullmd:2`.
 
 For the full history, including upgrades from 1.x and 2.x, see [MIGRATION.md](https://github.com/AeternaLabsHQ/pullmd/blob/main/MIGRATION.md).

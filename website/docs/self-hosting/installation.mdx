@@ -12,7 +12,7 @@ PullMD runs as four containers: the PullMD server and three optional helpers ("s
 | `pullmd` | `aeternalabshq/pullmd` | API, web app, MCP server, cache | Required |
 | `trafilatura` | `aeternalabshq/pullmd-trafilatura` | Second HTML extractor | Readability is the only extractor |
 | `playwright` | `aeternalabshq/pullmd-playwright` | Headless browser for JavaScript-heavy pages (about 3.7 GB) | JavaScript-heavy pages may come back thin |
-| `markitdown` | `aeternalabshq/pullmd-markitdown` | Documents, and YouTube transcripts when `MARKITDOWN_YOUTUBE=true` is set on `pullmd` | Document links and uploads return `502`; no YouTube transcripts |
+| `markitdown` | `aeternalabshq/pullmd-markitdown` | Documents, and YouTube transcripts when `MARKITDOWN_YOUTUBE=true` is set on `pullmd` | Document links, and uploads in the formats MarkItDown handles, return `502`; no YouTube transcripts. [Upload formats PullMD reads itself](/guides/documents#upload-formats-pullmd-reads-itself) keep working. |
 
 Images are published for `amd64` and `arm64` on Docker Hub, and mirrored on GitHub's registry as `ghcr.io/aeternalabshq/pullmd`, `pullmd-trafilatura`, `pullmd-playwright` and `pullmd-markitdown`.
 
@@ -40,8 +40,8 @@ PUBLIC_URL=https://pullmd.example.com
 
 The compose file passes each variable to the container through its own line. Use the downloaded compose file. The shorter version in the README doesn't pass settings beyond the basics to PullMD.
 
-<Warning title="Four settings need an extra line">
-  `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_COVERAGE_GUARD` and `PULLMD_FILENAME_DATE_PREFIX` are not in the compose file's list as of v3.18.2, so setting them in `.env` alone has no effect. Add the ones you use to the `environment:` list of the `pullmd` service:
+<Warning title="Seven settings need an extra line">
+  `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` are not in the compose file's list as of v3.18.2, so setting them in `.env` alone has no effect. Add the ones you use to the `environment:` list of the `pullmd` service:
 
   ```yaml
   services:
@@ -82,7 +82,7 @@ image: aeternalabshq/pullmd:3.18.2
 
 ## Run without Docker
 
-To develop PullMD, run the server with Node.js 22 (the version the Docker image uses). Without the sidecars, Readability is the only HTML extractor, and document links and uploads return `502`.
+To develop PullMD, run the server with Node.js 22 (the version the Docker image uses). Without the sidecars, Readability is the only HTML extractor, and document links and uploads in the formats MarkItDown handles return `502`.
 
 ```bash
 git clone https://github.com/AeternaLabsHQ/pullmd.git
@@ -93,6 +93,8 @@ npm test       # node --test
 ```
 
 The cache is created at `./data/cache.db`. Set `TRAFILATURA_URL`, `PLAYWRIGHT_URL` and `MARKITDOWN_URL` to use sidecar containers you run separately. Here `PORT` sets the port the server listens on.
+
+`npm start` and the Docker image start the server with `--max-http-header-size=65536`, because YouTube's response headers can exceed Node's 16 KB default. If you run `node server.js` directly, add that flag, or YouTube URLs fail with `fetch failed`.
 
 ## Next steps
 

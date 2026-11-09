@@ -32,7 +32,7 @@ This response shows the Playwright sidecar down:
 - The endpoint returns HTTP `200` when every configured sidecar answers and `503` when at least one is down or degraded, so a plain HTTP status check is enough.
 - Each sidecar's `status` is `ok`, `down`, `degraded` or `not-configured`. A sidecar you didn't configure counts as healthy.
 - `error` is one of `unreachable`, `timeout`, `unhealthy`, `http <code>`, `misconfigured` or `policy-missing`. It never includes internal host names, because the endpoint is public.
-- `degraded` with `policy-missing` means the `pullmd-playwright` image is older than 3.15.2 and doesn't enforce [SSRF protection](/self-hosting/ssrf-protection). Renders keep working. To clear it, update that image.
+- `degraded` with `policy-missing` means the `pullmd-playwright` image is older than 3.17.0 and doesn't report that it enforces [SSRF protection](/self-hosting/ssrf-protection). Images older than 3.15.2 don't enforce it. Renders keep working. To clear it, update that image.
 - If the check itself fails, the endpoint returns `503` with `"error": "check-failed"`.
 - The endpoint needs no sign-in, so a monitor can poll it without credentials.
 - PullMD caches results for 5 seconds, and simultaneous requests share one check, so polling can't flood your sidecars.

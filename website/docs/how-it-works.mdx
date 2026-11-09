@@ -41,7 +41,7 @@ If an image or audio provider isn't configured, PullMD treats the URL as a web p
 The static result is sent to the Playwright sidecar when any of these is true:
 
 - The extractor reason contains `fell back` and the output is under 500 characters.
-- The output has the shape of a JavaScript app with no content: at least five headings, more than three headings per paragraph (a paragraph is a line of at least 40 characters, and at least one must exist), and under 5,000 characters.
+- The output has the shape of a JavaScript app with no content: at least five headings, more than three headings per paragraph (a paragraph is a line of more than 40 characters that starts with a letter or digit and follows a blank line or starts the text, and at least one must exist), and under 5,000 characters.
 - The quality score is below `0.5`.
 
 Override the decision per request with `render=force` or `render=skip`.

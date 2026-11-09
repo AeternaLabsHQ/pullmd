@@ -9,7 +9,7 @@ The Model Context Protocol (MCP) server at `/mcp` provides `read_url`, `get_shar
 
 ## read_url
 
-Converts a URL to Markdown with the same extraction and cache as `GET /api`. Hacker News URLs use the general web extraction, so `read_url` returns no Hacker News comment tree. For Hacker News URLs, call `GET /api`.
+Converts a URL to Markdown with the same extraction and cache as `GET /api`. On a cache miss, Hacker News URLs use the general web extraction, so `read_url` returns no Hacker News comment tree. A cached Hacker News conversion, such as one made by `GET /api`, comes back as it is stored, including any comments it has. To get the comment tree reliably, call `GET /api`.
 
 <ParamField name="url" type="string" required>
   The URL to convert.
@@ -45,10 +45,10 @@ Converts a URL to Markdown with the same extraction and cache as `GET /api`. Hac
   `readability`, `trafilatura` or `playwright`.
 </ParamField>
 <ParamField name="yt_timecodes" type="string" default="links">
-  `links`, `plain` or `none`.
+  `links`, `plain` or `none`. Without it, the MarkItDown sidecar uses `MARKITDOWN_YT_TIMECODES`, which defaults to `links`.
 </ParamField>
 <ParamField name="yt_chunk" type="integer" default="30">
-  Transcript block length in seconds. `0` keeps each caption line.
+  Transcript block length in seconds. `0` keeps each caption line. Without it, the MarkItDown sidecar uses `MARKITDOWN_YT_CHUNK`, which defaults to `30`.
 </ParamField>
 <ParamField name="pdf_ocr" type="boolean" default="false">
   Use the OCR provider for PDFs. The REST equivalent is `pdf=ocr`. Requires `PULLMD_PDF_OCR_API_KEY`; without it, PDFs use the default text extraction and no error is returned.
@@ -56,7 +56,7 @@ Converts a URL to Markdown with the same extraction and cache as `GET /api`. Hac
 
 `read_url` has no `format` or `render` parameter. To force a browser render, set `extractor` to `playwright`. A call that sets `nocache`, `extractor`, `yt_timecodes`, `yt_chunk` or `pdf_ocr` skips the cache.
 
-**Output:** Markdown text that starts with a short YAML block, whether or not `frontmatter` is on:
+**Output:** Markdown text that starts with a short YAML block, whether or not `frontmatter` is on. Fields without a value are left out, and when `PULLMD_FRONTMATTER_FIELDS` names at least one known field, only the fields it lists appear, so the block can be shorter or missing:
 
 ```yaml
 ---
@@ -87,7 +87,7 @@ Returns a cached conversion by share id. If it's more than an hour old, PullMD f
   The 32-character hex share id from a `read_url` result.
 </ParamField>
 
-**Output:** Markdown with a YAML block that includes `refreshed` (whether it was fetched again) and `age_ms` (age of the copy in milliseconds). An unknown, expired or malformed id returns an error result: `Share id not found or expired`.
+**Output:** Markdown with a YAML block that includes `refreshed` (whether it was fetched again) and `age_ms` (age of the copy in milliseconds). An unknown, expired or malformed id returns an error result: `Share id not found or expired`. On an instance without a cache, every call returns `Cache not available`.
 
 ## list_recent
 
@@ -114,4 +114,10 @@ Lists recent conversions, newest first. With sign-in enabled, you see only your 
 
 ## Authentication
 
-With [sign-in](/self-hosting/authentication) enabled, `/mcp` needs an API key (`Authorization: Bearer pmd_…`) or an OAuth access token. A request without one gets HTTP `401` with a `WWW-Authenticate` header that points MCP clients to the OAuth metadata, which is how claude.ai starts its sign-in. Without sign-in, `/mcp` is open.
+With [sign-in](/self-hosting/authentication) enabled, `/mcp` needs one of these as `Authorization: Bearer …`:
+
+- An API key (`pmd_…`).
+- An OAuth access token. PullMD issues these only when `OAUTH_JWT_SECRET` is set.
+- In `single-admin` mode, the legacy `PULLMD_AUTH_TOKEN`.
+
+A request without valid credentials gets HTTP `401` with a `WWW-Authenticate` header. When `PUBLIC_URL` is set, the header carries a `resource_metadata` URL that points MCP clients to the OAuth metadata, which is how claude.ai starts its sign-in. That metadata exists only when `OAUTH_JWT_SECRET` is set. Without `PUBLIC_URL`, the header is `Bearer realm="pullmd"`. Without sign-in, `/mcp` is open.
