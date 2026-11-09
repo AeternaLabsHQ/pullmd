@@ -10,6 +10,7 @@ import { buildFrontmatter, mergeMediaFrontmatter, mergeFrontmatter, validateFron
 import { queryExtract } from './lib/query-extract.js';
 import { suggestFilename } from './lib/filename.js';
 import { mcpHandler } from './lib/mcp.js';
+import { refreshShareEntry as refreshShare } from './lib/share-refresh.js';
 import { recentHistory, PUBLIC_HISTORY_DISABLED } from './lib/history.js';
 import { renderHelp, renderIndex, getSkillZip, publicUrlFor, PULLMD_VERSION } from './lib/distrib.js';
 import { getRecipeStatus, loadRecipes, applyRecipesInvalidation, computeRecipesHash } from './lib/recipes.js';
@@ -267,11 +268,13 @@ export function createApp(overrides = {}) {
   // Each request gets a fresh MCP server + transport bound to the same deps.
   const mcp = mcpHandler({
     extract,
+    extractHn: extractHnFn,
     extractWeb: extractWebFn,
     cache,
     qualityScore,
     buildFrontmatter,
     isRedditUrl,
+    isHnUrl,
     llmBudget,
     disablePublicHistory,
   });
@@ -290,84 +293,22 @@ export function createApp(overrides = {}) {
     res.redirect(302, `/#url=${encodeURIComponent(link)}`);
   });
 
-  // Refresh a stale share-cache entry by re-extracting from its source URL.
-  // Best-effort: infers comments/lang from the cached markdown; falls back
-  // to the existing markdown on extraction failure (e.g. dead source).
+  // Refresh a stale share-cache entry by re-extracting from its source URL
+  // (lib/share-refresh.js, shared with the MCP get_share tool). Errors
+  // propagate; the caller serves the stale snapshot then.
   async function refreshShareEntry(entry, client, llmAllowed) {
-    const md = entry.markdown || '';
-    const hadComments = md.includes('\n## Kommentare') || md.includes('\n## Comments');
-    const inferredLang = md.includes('\n## Comments') ? 'en' : 'de';
-    if (isRedditUrl(entry.url)) {
-      const r = await extract(entry.url, {
-        comments: hadComments,
-        commentDepth: 3,
-        lang: inferredLang,
-        withMeta: true,
-        ...redditImageOptions(resolveEmbeddedImages(undefined), llmAllowed, imageStoreFrom(cache)),
-      });
-      // An image missed for a transient reason: keep the existing snapshot,
-      // like the web path below. Always restart the refresh clock: the paid
-      // transcripts are already in the image store, and without the touch
-      // every later view would fetch Reddit and spend budget again.
-      if (typeof r !== 'string' && r.noStore) {
-        cache.touch(entry.url);
-        return entry.markdown;
-      }
-      // Test doubles may return a bare string; production returns { markdown, meta }.
-      const baseMd = typeof r === 'string' ? r : r.markdown;
-      const redditMeta = typeof r === 'string' ? null : r.meta;
-      const titleMatch = baseMd.match(/^#\s+(.+)$/m);
-      cache.put({
-        url: entry.url,
-        title: titleMatch?.[1] || entry.title || 'Reddit Post',
-        markdown: baseMd,
-        source: 'reddit',
-        client,
-        user_id: null,
-        metadata: redditMeta,
-      });
-      return baseMd;
-    }
-    if (isHnUrl(entry.url)) {
-      const r = await extractHnFn(entry.url, {
-        comments: hadComments,
-        commentDepth: 3,
-        lang: inferredLang,
-        withMeta: true,
-      });
-      const baseMd = typeof r === 'string' ? r : r.markdown;
-      const hnMeta = typeof r === 'string' ? null : r.meta;
-      const titleMatch = baseMd.match(/^#\s+(.+)$/m);
-      cache.put({
-        url: entry.url,
-        title: titleMatch?.[1] || entry.title || 'Hacker News',
-        markdown: baseMd,
-        source: 'hackernews',
-        client,
-        user_id: null,
-        metadata: hnMeta,
-      });
-      return baseMd;
-    }
-    const result = await extractWebFn(entry.url, { comments: false, llmAllowed });
-    // Transient failure (e.g. YouTube 429): keep the existing good snapshot
-    // instead of overwriting it with a "couldn't retrieve" placeholder.
-    // A paid-tier budget deferral also restarts the refresh clock, so the
-    // source is not fetched again on every hit until the budget recovers.
-    if (result.noStore) {
-      if (result.budgetDeferred) cache.touch(entry.url);
-      return entry.markdown;
-    }
-    cache.put({
-      url: entry.url,
-      title: result.title,
-      markdown: result.markdown,
-      source: result.source,
+    const r = await refreshShare(entry, {
+      cache,
+      extract,
+      extractHn: extractHnFn,
+      extractWeb: extractWebFn,
+      isRedditUrl,
+      isHnUrl,
       client,
-      user_id: null,
-      metadata: result.metadata,
+      userId: null,
+      llmAllowed,
     });
-    return result.markdown;
+    return r.markdown;
   }
 
   // Share endpoint: return cached markdown by share ID, refreshing if stale.

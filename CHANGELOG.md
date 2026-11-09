@@ -11,6 +11,11 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Fixed
+
+- **MCP `get_share` refreshes a Hacker News share through the Hacker News extractor.** A share row older than one hour was refreshed through the web pipeline, so the share lost its comments and came back as `source: web`. `GET /s/:id` already did this right; both now use the same refresh logic for Reddit, Hacker News and web pages.
+- **`npm start` passes `--max-http-header-size=65536`.** The Docker image starts the server with this flag since 3.18.2 so YouTube URLs do not fail on large response headers, but `npm start` did not, so an install without Docker still failed with `fetch failed` on YouTube URLs.
+
 ## [3.18.2] - 2026-11-08
 
 ### Fixed
@@ -19,12 +24,11 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [3.18.1] - 2026-11-07
 
+Not released on its own: these fixes ship in 3.18.2.
+
 ### Fixed
 
 - YouTube URLs failed with `fetch failed` because the response headers exceeded the default limit of 16 KB. The server now starts with `--max-http-header-size=65536`.
-
-### Fixed
-
 - **Pages that split one piece of writing across several `<article>` blocks now keep all of them.** Readability commits to one candidate, so a series of short posts by the same author came back as a single post, and the coverage guard does not reach pages this short. Blocks that open with the same link now count as a series, unless they carry headings, are mostly links, or hold too little of the page. That leaves teaser lists and discussions alone. Each block is converted on its own and joined, without duplicates, stray blocks by others, or trailing counters. Reported as `source: article-series`, with the numbers in `metadata.extractorReason`; `PULLMD_ARTICLE_SERIES=off` turns it off.
 
 ### Changed
@@ -52,7 +56,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ### Added
 
-- **`/api/status` flags a Playwright sidecar that predates the SSRF fix.** The fix for [GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77) (v3.15.2) lives in the sidecar, and an older `pullmd-playwright` image silently ignores the `allowedHosts` field pullmd sends, so a new `pullmd` next to an old sidecar stayed vulnerable with nothing to show for it. The sidecar's `/health` now reports `"policy": {"ssrf": 1}`, and `/api/status` reports a Playwright sidecar without it (or with an older revision) as `{"status": "degraded", "error": "policy-missing"}` and answers `503`, so the documented plain-HTTP Uptime Kuma monitor catches it. Renders are not blocked; the check only reports. **Behaviour change on upgrade:** an instance that updates `pullmd` but keeps a `pullmd-playwright` image older than 3.15.2 now gets `503` from `/api/status` until the sidecar is updated too.
+- **`/api/status` flags a Playwright sidecar that predates the SSRF fix.** The fix for [GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77) (v3.15.2) lives in the sidecar, and an older `pullmd-playwright` image silently ignores the `allowedHosts` field pullmd sends, so a new `pullmd` next to an old sidecar stayed vulnerable with nothing to show for it. The sidecar's `/health` now reports `"policy": {"ssrf": 1}`, and `/api/status` reports a Playwright sidecar without it (or with an older revision) as `{"status": "degraded", "error": "policy-missing"}` and answers `503`, so the documented plain-HTTP Uptime Kuma monitor catches it. Renders are not blocked; the check only reports. **Behaviour change on upgrade:** an instance that updates `pullmd` but keeps a `pullmd-playwright` image older than 3.17.0 now gets `503` from `/api/status` until the sidecar is updated too.
 
 ### Fixed
 
