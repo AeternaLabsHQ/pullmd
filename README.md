@@ -58,7 +58,7 @@ sections relevant to a question.
 
 - **Web pages** through a fallback chain: Cloudflare's native Markdown, then Readability + Trafilatura (best result wins), then headless Chromium for JavaScript-heavy sites
 - **Reddit and Hacker News** threads with their comment trees (depth and count configurable; Reddit needs [API credentials](#reddit-access))
-- **Documents**: PDF, Word, PowerPoint, Excel, EPUB, by URL or upload, plus an optional OCR tier for table-grade PDFs. A long upload can run in the background (`POST /api/file?async=1`), so the web app can be left and the result picked up later. The uploaded file is never stored; the result is held in memory until you delete it or 60 minutes pass
+- **Documents**: PDF, Word, PowerPoint, Excel, EPUB, by URL or upload, plus an optional OCR tier for table-grade PDFs. A long upload can run in the background (`POST /api/file?async=1`), so the web app can be left and the result picked up later. The uploaded file is never stored; the result is held in memory for up to 60 minutes, until you delete it
 - **YouTube** title, description and transcript with clickable timecodes, no API key needed
 - **Images and audio** via any OpenAI-compatible or local model (captions, transcripts)
 

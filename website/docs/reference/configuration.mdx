@@ -113,9 +113,11 @@ Set on the `pullmd` service. These control the results that `POST /api/file?asyn
 | Variable | Default | Description |
 | --- | --- | --- |
 | `PULLMD_FILE_JOB_TTL_MINUTES` | `60` | Minutes a finished result waits for pickup before PullMD drops it. `0` turns async jobs off, and every upload is then converted in the request. A non-numeric value uses `60`. |
-| `PULLMD_FILE_JOB_MAX_MB` | `64` | Memory in MB that all held results may use together. `0` or a non-numeric value uses `64`. |
+| `PULLMD_FILE_JOB_MAX_MB` | `64` | Memory in MB that all held results may use together. One user or address may hold at most a quarter of it, and while half of it is in use, uploads are converted in the request. `0` or a non-numeric value uses `64`. |
 
 A client holds at most 3 jobs at once, counted per signed-in user or, without sign-in, per client address. Behind a reverse proxy without [`PULLMD_TRUST_PROXY`](/self-hosting/reverse-proxy), all anonymous clients share one address and so one limit, and the extra uploads are converted in the request.
+
+With the default of 64 MB, one user or address holds at most 16 MB of results. When a new result would go over that share, that client's older finished results are dropped first, oldest first; results of other clients are never dropped. Once 32 MB of results are held, `POST /api/file?async=1` converts in the request and answers `200`.
 
 ## Document sidecar limits
 

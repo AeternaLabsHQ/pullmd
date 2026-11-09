@@ -520,7 +520,7 @@ paths:
 
         PDF, Word, PowerPoint, Excel, EPUB and ZIP files need the MarkItDown sidecar. PullMD reads e-mail, saved pages, text, subtitles, OpenDocument, RTF, calendars, contacts, data files, feeds, notebooks and source code itself; see [Documents](/guides/documents#upload-formats-pullmd-reads-itself). Images and audio go to a vision or speech-to-text provider when one is configured, and to the MarkItDown sidecar otherwise. Without `MARKITDOWN_URL`, that request fails with `502`. The uploaded file is never stored, and nothing is cached: no history entry and no share link.
 
-        Add `async=1` to leave the conversion running on the server and fetch the result later. The server answers `202` with a job id, and you collect the result from [`GET /api/file/jobs/{id}`](/reference/api/convert/get-an-async-file-result). The result is held in memory for up to 60 minutes by default (`PULLMD_FILE_JOB_TTL_MINUTES`) or until you delete it, and a restart loses it. The server cannot always queue a job: when async jobs are off (`PULLMD_FILE_JOB_TTL_MINUTES=0`), 100 jobs are already held, or your user or address already holds 3, it converts the file in the same request and answers `200` as it does without `async`. Handle both `202` and `200`.
+        Add `async=1` to leave the conversion running on the server and fetch the result later. The server answers `202` with a job id, and you collect the result from [`GET /api/file/jobs/{id}`](/reference/api/convert/get-an-async-file-result). The result is held in memory for up to 60 minutes by default (`PULLMD_FILE_JOB_TTL_MINUTES`) or until you delete it, and a restart loses it. The server cannot always queue a job: when async jobs are off (`PULLMD_FILE_JOB_TTL_MINUTES=0`), 100 jobs are already held, your user or address already holds 3, or half of the result memory (`PULLMD_FILE_JOB_MAX_MB`, 32 MB of 64 MB by default) is in use, it converts the file in the same request and answers `200` as it does without `async`. Handle both `202` and `200`.
       security: [{}, { bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/xFilename'
@@ -534,8 +534,8 @@ paths:
           schema: { type: string, enum: [de, en], default: de }
         - name: async
           in: query
-          description: '`1` or `true` converts in the background and answers `202` with a job id, when the server can queue the job. Any other value converts in the request. The result is JSON whatever `format` says; `format` is ignored for async jobs.'
-          schema: { type: string, enum: ['1', 'true'] }
+          description: 'Only `1` and `true` request a job: the file converts in the background and the server answers `202` with a job id, when it can queue the job. Any other value converts in the request. The result is JSON whatever `format` says; `format` is ignored for async jobs.'
+          schema: { type: string }
         - $ref: '#/components/parameters/client_mode'
         - $ref: '#/components/parameters/xClientMode'
       requestBody:
@@ -617,7 +617,7 @@ paths:
       operationId: getFileJob
       summary: Get an async file result
       description: |
-        Returns the state of a job started with `POST /api/file?async=1`. Poll until `status` is `done` or `error`. Fetching a finished result doesn't remove it: it stays until you call `DELETE /api/file/jobs/{id}` or the retention time passes (`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default). A job that is still `pending` after 15 minutes becomes an `error` with `httpStatus` `504`.
+        Returns the state of a job started with `POST /api/file?async=1`. Poll until `status` is `done` or `error`. Fetching a finished result doesn't remove it: it stays until you call `DELETE /api/file/jobs/{id}` or the retention time passes (`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default), except that when your share of the result memory (a quarter of `PULLMD_FILE_JOB_MAX_MB`, 16 MB by default) is used up, your older finished results are dropped first to make room for a new one. A job that is still `pending` after 15 minutes becomes an `error` with `httpStatus` `504`.
 
         With sign-in enabled, a job belongs to the account that started it, and any other account gets `404`. Without sign-in, the job id is the only credential. Every response carries `Cache-Control: no-store`.
       security: [{}, { bearerAuth: [] }]
@@ -671,7 +671,7 @@ paths:
       tags: [Convert]
       operationId: deleteFileJob
       summary: Delete an async file result
-      description: 'Removes a job and its result from memory. Call it after you have the result. Every response carries `Cache-Control: no-store`.'
+      description: 'Removes a job and its result from memory. Call it after you have the result. A job that is still converting is gone for `GET` and `DELETE` at once and its result is discarded, but it counts toward the 3 jobs of your user or address until the conversion ends. Every response carries `Cache-Control: no-store`.'
       security: [{}, { bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/fileJobId'
