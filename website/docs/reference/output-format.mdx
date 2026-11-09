@@ -9,7 +9,7 @@ A PullMD conversion returns a Markdown body, optional frontmatter, response head
 
 ## The body
 
-Every result starts with the title as a level-1 heading, followed by the content. The source URL, date and metadata are in the [frontmatter](#frontmatter), which you request separately. A short result:
+Every result starts with the title as a level-1 heading, followed by the content. With the `trafilatura` extractor, the page's own `<h1>` appears as a second heading when it differs from the page title (for example `Markdown - Wikipedia` and `Markdown`). The source URL, date and metadata are in the [frontmatter](#frontmatter), which you request separately. A short result:
 
 ```markdown
 # Release checklist

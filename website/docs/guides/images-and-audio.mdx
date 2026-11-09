@@ -7,12 +7,12 @@ description: Caption images and transcribe audio through any OpenAI-compatible m
 
 PullMD describes images and transcribes audio files, by URL or upload, using any OpenAI-compatible API. Without a configured model, it makes no outside calls and returns no caption or transcript.
 
-| Input | With a model | Upload without a model |
+| Input | With a model | Without |
 | --- | --- | --- |
-| Image (PNG, JPEG, GIF, WebP, BMP, TIFF) | A text caption | No caption |
-| Audio (MP3, WAV, M4A, OGG, FLAC, AAC, WebM) | A transcript | No transcript |
+| Image (PNG, JPEG, GIF, WebP, BMP, TIFF) | A text caption | Upload: the file name as a heading, no caption |
+| Audio (MP3, WAV, M4A, OGG, FLAC, AAC, WebM) | A transcript | Upload: the file name as a heading, no transcript |
 
-With a model, both run inside PullMD, without the MarkItDown sidecar. Without one, PullMD hands an uploaded file to the MarkItDown sidecar, and a URL goes through the normal web extraction.
+With a model, both run inside PullMD, without the MarkItDown sidecar. Without one, an upload of PNG, JPEG, MP3, WAV, or M4A goes through the MarkItDown sidecar and returns only the heading, and other formats return `502`. An image or audio URL without a model returns the file's raw bytes as text below a heading with the host name.
 
 PullMD recognizes a file by its content type, or by its extension when the content type is empty or `application/octet-stream` (WebM is recognized by content type only). Images over 20 MB and audio over 25 MB skip the model and get the no-model result.
 
