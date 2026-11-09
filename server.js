@@ -23,6 +23,7 @@ import { parseImagesParam, resolveEmbeddedImages, cachedImagesIncomplete, embedd
 import { createStatusChecker } from './lib/status.js';
 import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
+import { createFileJobStore } from './lib/file-jobs.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -175,6 +176,10 @@ export function createApp(overrides = {}) {
   // PDF OCR), per user or client address. Over budget the request falls back
   // to the non-provider path instead of failing (PULLMD_LLM_RATE_LIMIT).
   const llmBudget = overrides.llmBudget ?? createLlmBudget();
+  // Results of `POST /api/file?async=1`, held in memory until picked up
+  // (lib/file-jobs.js). Misses on the pickup routes are throttled like /s/:id.
+  const fileJobs = overrides.fileJobs ?? createFileJobStore();
+  const jobMissLimiter = overrides.jobMissLimiter ?? createRateLimiter({ windowMs: 60_000, max: 120 });
 
   // Embedded image transcripts (Reddit only for now). The `images` param is
   // validated for Reddit URLs only; other URLs ignore it, even when invalid.
@@ -824,7 +829,90 @@ export function createApp(overrides = {}) {
   // markitdown sidecar. Same privacy model as /api/html: no cache.put (no
   // history, no share link), telemetry logs a constant placeholder.
   const MAX_FILE_BYTES = '25mb';
-  app.post('/api/file', gate, express.raw({ type: () => true, limit: MAX_FILE_BYTES }), async (req, res) => {
+
+  // Shared by the synchronous answer and the async job: extract, shape the
+  // markdown the JSON format returns, log telemetry. Throws on failure.
+  // Uses only the plain values in `job`, never req or res.
+  async function convertFile(job) {
+    const t0 = Date.now();
+    const result = await extractFileFn(job.body, {
+      filename: job.filename,
+      contentType: job.contentType,
+      pdfOcr: job.pdfOcr,
+      llmAllowed: job.llmAllowed,
+      lang: job.lang,
+    });
+
+    const fm = job.wantFrontmatter
+      ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId: null })
+      : '';
+    const finalMd = fm + result.markdown;
+
+    const outMd = job.wantFrontmatter
+      ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
+      : finalMd;
+
+    // Uploaded documents are exactly the case the file-source rule exists for:
+    // the original file name beats a title guessed out of the document.
+    const suggestedFilename = filenameFor({
+      source: result.source,
+      title: result.metadata?.title || result.title,
+      url: job.filename,
+      shareId: null,
+    });
+    if (cache) cache.logExtraction({
+      url: 'local-file',
+      source: result.source,
+      quality: result.metadata?.quality,
+      markdownLen: result.markdown.length,
+      extractorReason: null,
+      durationMs: Date.now() - t0,
+      client: job.client, cached: false,
+    });
+    return { result, outMd, suggestedFilename };
+  }
+
+  // The store does not bound error strings; an upstream message could be huge.
+  const MAX_JOB_ERROR_CHARS = 500;
+  const capJobError = (s) => String(s).slice(0, MAX_JOB_ERROR_CHARS);
+
+  // Background half of `POST /api/file?async=1`. Settles the job on every
+  // path (finish or fail), so it never holds a slot until the pending
+  // timeout, and never rejects: the returned promise is not awaited.
+  function runFileJob(id, job) {
+    (async () => {
+      try {
+        const { result, outMd, suggestedFilename } = await convertFile(job);
+        // finish() throws on a result JSON.stringify cannot handle; the catch
+        // below fails the job then.
+        fileJobs.finish(id, {
+          markdown: outMd,
+          metadata: result.metadata || null,
+          source: result.source,
+          shareId: null,
+          suggestedFilename,
+        });
+      } catch (err) {
+        if (err?.status === 422) {
+          fileJobs.fail(id, { error: capJobError(err.message), httpStatus: 422 });
+          return;
+        }
+        console.error('File conversion error:', err);
+        fileJobs.fail(id, { error: capJobError(`Failed to convert file: ${err?.message}`), httpStatus: 502 });
+      }
+    })().catch((err) => {
+      // Only reachable if fail() itself threw; the pending timeout settles the job.
+      console.error('File job bookkeeping error:', err);
+    });
+  }
+
+  // Job owner: the user id, or null when auth is off. The client key counts
+  // jobs per user or per client address, like lib/llm/budget.js; req.ip
+  // honours the trust proxy setting, a raw header never counts.
+  const jobOwner = (req) => req.user?.id ?? null;
+  const jobClientKey = (req) => (req.user?.id != null ? `user:${req.user.id}` : `ip:${jobMissLimiter.keyFor(req)}`);
+
+  app.post('/api/file',gate, express.raw({ type: () => true, limit: MAX_FILE_BYTES }), async (req, res) => {
     const { format, frontmatter, pdf, lang } = req.query;
     let filename = req.query.filename;
     const filenameHeader = req.headers['x-filename'];
@@ -838,42 +926,36 @@ export function createApp(overrides = {}) {
       return res.status(400).json({ error: 'Send the raw file bytes in the request body. / Sende die rohen Datei-Bytes im Request-Body.' });
     }
 
-    const client = detectClient(req.headers['user-agent'], req.headers['x-client-mode'] || req.query.client_mode);
-    const t0 = Date.now();
+    // Everything taken from `req` is read here, before a 202 could be sent:
+    // the background conversion must not touch req or res afterwards.
+    const job = {
+      body: req.body,
+      filename,
+      contentType,
+      wantFrontmatter,
+      pdfOcr: pdf === 'ocr',
+      lang: lang === 'en' ? 'en' : 'de',
+      client: detectClient(req.headers['user-agent'], req.headers['x-client-mode'] || req.query.client_mode),
+      llmAllowed: llmBudget.forRequest(req),
+    };
+
+    const wantAsync = req.query.async === '1' || req.query.async === 'true';
+    const jobId = wantAsync ? fileJobs.create({ owner: jobOwner(req), clientKey: jobClientKey(req) }) : null;
+    if (jobId) {
+      res.set('Cache-Control', 'no-store');
+      res.status(202).json({ jobId, status: 'pending' });
+      runFileJob(jobId, job);
+      return;
+    }
 
     try {
-      const result = await extractFileFn(req.body, { filename, contentType, pdfOcr: pdf === 'ocr', llmAllowed: llmBudget.forRequest(req), lang: lang === 'en' ? 'en' : 'de' });
-
-      const fm = wantFrontmatter
-        ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId: null })
-        : '';
-      const finalMd = fm + result.markdown;
-
-      const outMd = wantFrontmatter
-        ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
-        : finalMd;
+      const { result, outMd, suggestedFilename } = await convertFile(job);
 
       res.set('X-Source', result.source);
-      // Uploaded documents are exactly the case the file-source rule exists for:
-      // the original file name beats a title guessed out of the document.
-      setFilenameHeader(res, {
-        source: result.source,
-        title: result.metadata?.title || result.title,
-        url: filename,
-        shareId: null,
-      });
+      if (suggestedFilename) res.set('X-Suggested-Filename', suggestedFilename);
       if (result.metadata?.quality !== undefined) {
         res.set('X-Quality', String(result.metadata.quality));
       }
-      if (cache) cache.logExtraction({
-        url: 'local-file',
-        source: result.source,
-        quality: result.metadata?.quality,
-        markdownLen: result.markdown.length,
-        extractorReason: null,
-        durationMs: Date.now() - t0,
-        client, cached: false,
-      });
       if (format === 'json') {
         return res.json({ markdown: outMd, metadata: result.metadata || null, source: result.source, shareId: null });
       }
@@ -891,6 +973,38 @@ export function createApp(overrides = {}) {
       // 502: the markitdown sidecar is an upstream dependency (same as the web /api path).
       return res.status(502).json({ error: `Failed to convert file: ${err.message}` });
     }
+  });
+
+  // Pickup for async file jobs. Unknown, expired, deleted and foreign jobs
+  // all get the same 404, and only misses count against the limiter (like
+  // /s/:id), so polling one's own job is never throttled.
+  const JOB_ID_RE = /^[0-9a-f]{32}$/;
+  const JOB_NOT_FOUND = 'Job not found or expired. / Auftrag nicht gefunden oder abgelaufen.';
+  // Before `gate`, so even a 401 is not cached.
+  const noStore = (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); };
+
+  function jobMiss(req, res) {
+    const key = jobMissLimiter.keyFor(req);
+    if (!jobMissLimiter.check(key)) {
+      res.set('Retry-After', String(jobMissLimiter.retryAfterSeconds(key)));
+      return res.status(429).json({ error: 'rate_limited' });
+    }
+    return res.status(404).json({ error: JOB_NOT_FOUND });
+  }
+
+  app.get('/api/file/jobs/:id', noStore, gate, (req, res) => {
+    const id = req.params.id;
+    const job = JOB_ID_RE.test(id) ? fileJobs.get(id, jobOwner(req)) : null;
+    if (!job) return jobMiss(req, res);
+    if (job.status === 'done') return res.json({ status: 'done', ...job.result });
+    if (job.status === 'error') return res.json({ status: 'error', error: job.error, httpStatus: job.httpStatus });
+    return res.json({ status: 'pending' });
+  });
+
+  app.delete('/api/file/jobs/:id', noStore, gate, (req, res) => {
+    const id = req.params.id;
+    if (!JOB_ID_RE.test(id) || !fileJobs.delete(id, jobOwner(req))) return jobMiss(req, res);
+    return res.status(204).end();
   });
 
   app.get('/api/stream', gate, async (req, res) => {
