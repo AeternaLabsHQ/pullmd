@@ -2389,9 +2389,13 @@
       // authoritative, localStorage only carries it across reloads.
       var FILE_JOB_KEY = 'pullmd-file-job';
       var FILE_JOB_POLL_MS = 2000;
+      // A status request frozen by the OS while the app was in the background
+      // must not block the next check for long.
+      var FILE_JOB_FETCH_TIMEOUT_MS = 10000;
       var uploadXhr = null;        // upload in flight, so a newer conversion can drop it
       var fileJobTimer = null;
       var fileJobChecking = false;
+      var fileJobCheckCtrl = null;   // AbortController of the status request in flight
       var fileJob = readStoredFileJob();
 
       function readStoredFileJob() {
@@ -2423,20 +2427,34 @@
       // still in flight.
       function abandonFileJob() {
         stopFileJobPolling();
+        abortFileJobCheck();
         if (uploadXhr) { var xhr = uploadXhr; uploadXhr = null; xhr.abort(); }
         if (fileJob) { deleteFileJob(fileJob.id); forgetFileJob(); }
+      }
+
+      // Drops the status request in flight; its result is then ignored.
+      function abortFileJobCheck() {
+        if (!fileJobCheckCtrl) return;
+        var stale = fileJobCheckCtrl;
+        fileJobCheckCtrl = null;
+        fileJobChecking = false;
+        stale.abort();
       }
 
       async function checkFileJob() {
         if (!fileJob) { stopFileJobPolling(); return; }
         if (fileJobChecking || document.visibilityState !== 'visible') return;
         var job = fileJob;
+        var ctrl = new AbortController();
+        var timeout = setTimeout(function () { ctrl.abort(); }, FILE_JOB_FETCH_TIMEOUT_MS);
+        fileJobCheckCtrl = ctrl;
         fileJobChecking = true;
         try {
-          var res = await fetch('/api/file/jobs/' + encodeURIComponent(job.id), { cache: 'no-store' });
+          var res = await fetch('/api/file/jobs/' + encodeURIComponent(job.id), { cache: 'no-store', signal: ctrl.signal });
           var d = res.ok ? await res.json() : null;
-          // Dropped or replaced meanwhile by another conversion: not ours to show.
-          if (fileJob !== job) return;
+          // Superseded by a fresh check, or the job was dropped or replaced
+          // meanwhile by another conversion: not ours to show.
+          if (fileJobCheckCtrl !== ctrl || fileJob !== job) return;
           if (res.status === 401) {
             // Keep the job: it is picked up again after login.
             stopFileJobPolling();
@@ -2446,32 +2464,40 @@
           if (res.status === 404) {
             stopFileJobPolling();
             forgetFileJob();
+            // The result may arrive after the user went back: open a history
+            // entry again, so Back leaves the result instead of the app.
+            pushOpenState();
             showError(t('err.jobGone'));
             return;
           }
           if (!d) return;   // 429 or any other status: try again on the next tick
+          if (d.status !== 'done' && d.status !== 'error') return;   // pending: the loading view and its label stay as they are
+          pushOpenState();
           if (d.status === 'done') {
             if (!d.markdown || !d.markdown.trim()) showError(t('err.empty'));
             else showResult(d.markdown, d.source || '', '', d.suggestedFilename || '');
-          } else if (d.status === 'error') {
-            showError(d.error || t('err.unknown', { code: d.httpStatus }));
           } else {
-            return;         // pending: the loading view and its label stay as they are
+            showError(d.error || t('err.unknown', { code: d.httpStatus }));
           }
           stopFileJobPolling();
           deleteFileJob(job.id);
           forgetFileJob();
         } catch (err) {
-          // Network failure: stay quiet, the next tick tries again.
+          // Network failure, timeout or abort: stay quiet, the next tick tries again.
         } finally {
-          fileJobChecking = false;
+          clearTimeout(timeout);
+          // A superseded check leaves the flag to the check that replaced it.
+          if (fileJobCheckCtrl === ctrl) { fileJobCheckCtrl = null; fileJobChecking = false; }
         }
       }
 
       // Timers are throttled or frozen while the app is in the background,
-      // so check at once when it comes back.
+      // so check at once when it comes back. A request still in flight may be
+      // one the OS froze: abort it and start a fresh one.
       function recheckFileJob() {
-        if (fileJobTimer) checkFileJob();
+        if (!fileJobTimer || document.visibilityState !== 'visible') return;
+        abortFileJobCheck();
+        checkFileJob();
       }
       document.addEventListener('visibilitychange', recheckFileJob);
       window.addEventListener('pageshow', recheckFileJob);
@@ -2507,24 +2533,28 @@
           var d = null;
           try { d = JSON.parse(xhr.responseText); } catch (_) {}
           if (xhr.status === 202) {
-            if (!d || typeof d.jobId !== 'string') { showError(t('err.unknown', { code: xhr.status })); return; }
+            if (!d || typeof d.jobId !== 'string') { pushOpenState(); showError(t('err.unknown', { code: xhr.status })); return; }
             trackFileJob({ id: d.jobId, name: file.name || '' });
             setLoadingLabel('upload.processing');
             startFileJobPolling();
             return;
           }
+          if (xhr.status === 401) { location.href = '/login?next=' + encodeURIComponent('/'); return; }
+          // The answer may arrive after the user went back: open a history
+          // entry again, so Back leaves the result instead of the app.
+          pushOpenState();
           if (xhr.status >= 200 && xhr.status < 300) {
             if (!d) { showError(t('err.network')); return; }
             if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
             showResult(d.markdown, d.source || '', '', xhr.getResponseHeader('X-Suggested-Filename') || '');
             return;
           }
-          if (xhr.status === 401) { location.href = '/login?next=' + encodeURIComponent('/'); return; }
           showError((d && d.error) || t('err.unknown', { code: xhr.status }));
         };
         xhr.onerror = xhr.onabort = function () {
           if (uploadXhr !== xhr) return;
           uploadXhr = null;
+          pushOpenState();
           showError(t('err.uploadInterrupted'));
         };
         xhr.send(file);

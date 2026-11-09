@@ -82,9 +82,36 @@ describe('PWA index.html: async file jobs', () => {
     assert.match(html, /pageshow/);
   });
 
+  function checkFnBody() {
+    const start = html.indexOf('async function checkFileJob(');
+    assert.ok(start >= 0, 'checkFileJob must exist');
+    const end = html.indexOf('\n      }\n', start);
+    assert.ok(end > start, 'checkFileJob must end');
+    return html.slice(start, end);
+  }
+
+  it('times out the job status request and aborts a stale one on return', () => {
+    assert.match(html, /var FILE_JOB_FETCH_TIMEOUT_MS = 10000;/);
+    const body = checkFnBody();
+    assert.match(body, /new AbortController\(\)/);
+    assert.match(body, /setTimeout\(function \(\) \{ ctrl\.abort\(\); \}, FILE_JOB_FETCH_TIMEOUT_MS\)/);
+    assert.match(body, /signal: ctrl\.signal/);
+    const recheck = html.slice(html.indexOf('function recheckFileJob('), html.indexOf("document.addEventListener('visibilitychange', recheckFileJob)"));
+    assert.match(recheck, /abortFileJobCheck\(\);\s*checkFileJob\(\);/);
+  });
+
+  it('opens a history entry before showing a late job result', () => {
+    const body = checkFnBody();
+    assert.match(body, /pushOpenState\(\);\s*showError\(t\('err\.jobGone'\)\)/);
+    assert.match(body, /pushOpenState\(\);\s*if \(d\.status === 'done'\)/);
+    assert.match(binaryFnBody(), /pushOpenState\(\);\s*showError\(t\('err\.uploadInterrupted'\)\)/);
+  });
+
   it('contains no em-dash in the new copy', () => {
-    for (const { de, en } of Object.values(COPY)) {
-      assert.ok(!de.includes('—') && !en.includes('—'));
+    for (const key of Object.keys(COPY)) {
+      const lines = html.split('\n').filter((l) => l.trimStart().startsWith(`'${key}':`));
+      assert.equal(lines.length, 2, `${key}: one line per dictionary`);
+      for (const line of lines) assert.ok(!line.includes('\u2014'), `${key}: ${line.trim()}`);
     }
   });
 });
