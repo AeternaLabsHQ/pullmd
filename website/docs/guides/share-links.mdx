@@ -1,0 +1,77 @@
+---
+title: Share links and cache
+description: How PullMD caches conversions, how share links stay fresh, and how long anything is kept.
+---
+
+# Share links and cache
+
+Every conversion of a URL is cached and gets a share link. The link works without sign-in and refreshes when it's opened after an hour, so a teammate or an agent can use it as a current Markdown version of the page.
+
+## Get a share link
+
+The share id is in the `X-Share-Id` header (or `shareId` with `format=json`):
+
+```http
+X-Share-Id: 2f2f4a7b37f071b7e3137d42eb9dbec3
+```
+
+To open the share link, request `/s/<id>`:
+
+```bash
+curl http://localhost:3000/s/2f2f4a7b37f071b7e3137d42eb9dbec3
+```
+
+Add `?format=text` for plain text. `?format=json` isn't supported on share links. For a URL conversion, the web app shows a **Share** bar with the link and a copy button.
+
+Uploads (`POST /api/file` and `POST /api/html`) are never cached and have no share link.
+
+## How the cache works
+
+| Request | Behavior |
+| --- | --- |
+| `GET /api` with the same URL within an hour | Served from the cache |
+| `GET /api` after an hour | Fetched again and the cache updated |
+| `/s/<id>` older than an hour | Fetched again before it's served |
+| `/s/<id>`, source gone when refreshing | The last good copy is served |
+| `nocache=true` | Always fetched again |
+
+Parameters that change the output also skip the cache: `render` (when `force` or `skip`), `extractor` (when valid), `comment_depth`, `comment_limit`, `pdf=ocr`, `yt_timecodes` and `yt_chunk`. The fresh result then replaces the cached copy. `nocache=1` works like `nocache=true`.
+
+A `/s/<id>` refresh extracts the page with default options, so `render`, `extractor`, `pdf=ocr` and the YouTube parameters don't carry over.
+
+The cache is keyed by URL, so everyone who converts the same URL shares one cached copy and one share id.
+
+## How long things are kept
+
+A cached conversion is deleted `PULLMD_CACHE_RETENTION_DAYS` days after it was last fetched (default `90`). Its share link stops working at the same time. Opening a share link that refreshes the copy counts as a fetch and resets the clock. Reading a fresh copy doesn't.
+
+```bash
+PULLMD_CACHE_RETENTION_DAYS=0     # keep everything forever
+PULLMD_CACHE_RETENTION_DAYS=30    # keep a month
+```
+
+Allowed values are `0` to `36500`. Lowering the value on a running instance removes older entries at the next conversion.
+
+## Who can see what
+
+Share ids are 128 random bits, so a link can't be guessed. PullMD also limits lookups of unknown ids to 120 a minute per address, and valid links have no limit. An unknown or expired id returns `404` with `Share link not found or expired`, and a lookup over the limit returns `429` with `rate_limited`.
+
+The recent-conversions list and archive show what other people converted, unless you hide them. What each setup returns:
+
+| Setup | `/api/history`, `/api/archive`, MCP `list_recent` |
+| --- | --- |
+| Sign-in off | Everyone's conversions |
+| Sign-in off, `DISABLE_PUBLIC_HISTORY=true` | Refused (`403`) |
+| Sign-in on | Your own conversions only |
+
+Share links work in every setup.
+
+## Delete conversions
+
+To delete one entry, call [`DELETE /api/cache/{id}`](/reference/api/history-and-cache/delete-a-conversion) with the numeric `id` from the history. To delete everything, call [`DELETE /api/cache`](/reference/api/history-and-cache/delete-all-conversions).
+
+With sign-in on, a regular user's delete removes the entry from their own history, and the shared copy and its share link stay. An admin's delete (or anyone's, with sign-in off) removes the shared copy for everyone. The response's `scope` says which happened: `user` or `global`.
+
+## Where the cache lives
+
+The cache is a SQLite file at `/data/cache.db` inside the container, which the compose file maps to `./data` next to it. To keep your history and accounts, back up that folder. `GET /api/storage` reports its size, entry counts, and cache hits and requests over the last 7 days.

@@ -4,7 +4,9 @@ data/
 
 # Internal / dev-only — never publish
 CLAUDE.md
+!website/CLAUDE.md
 docs/
+!website/docs/
 skill/web-reader-workspace/
 .claude/
 _archive/

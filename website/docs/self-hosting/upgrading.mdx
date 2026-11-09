@@ -1,0 +1,77 @@
+---
+title: Upgrading
+description: Update PullMD, what to check when upgrading across 3.18, 3.17, 3.16, 3.15.2, 3.13 and 3.0, and how to roll back.
+---
+
+# Upgrading
+
+To upgrade, pull the new images and restart:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+This updates all four containers to the version your compose file names (`:latest` by default). The database upgrades itself on start. Read the [changelog](/changelog) first, and the notes below if you're crossing one of these versions.
+
+## To 3.18 or later: CSV, JSON and XML uploads
+
+Uploaded `.csv`, `.json` and `.xml` files are read by PullMD itself, so the output differs from the MarkItDown output: JSON and XML arrive in a code block. Documents fetched by URL go through MarkItDown as before. See [Upload formats PullMD reads itself](/guides/documents#upload-formats-pullmd-reads-itself).
+
+## To 3.17 or later: status check and anonymous deletes
+
+- An instance that updates `pullmd` but keeps a `pullmd-playwright` image older than 3.15.2 gets `503` from `/api/status`, with `"error": "policy-missing"`, until the sidecar is updated. See [Health check](/self-hosting/monitoring#health-check).
+- With `DISABLE_PUBLIC_HISTORY=true` and sign-in off, `DELETE /api/cache` and `DELETE /api/cache/:id` return `403` to anonymous callers.
+
+## To 3.16 or later: markers under Reddit images
+
+On an instance with a vision provider and the default `PULLMD_EMBEDDED_IMAGES=on-request`, image posts carry an `Image not transcribed` marker under each image without a transcript. See [Describe images in Reddit posts](/guides/reddit-and-hacker-news#describe-images-in-reddit-posts).
+
+## To 3.15.2 or later: update the browser sidecar too
+
+3.15.2 fixes a security issue in the Playwright sidecar ([GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77)). The fix spans the `pullmd` and `pullmd-playwright` images: the sidecar enforces the policy and `pullmd` sends the allowed hosts and handles the refusal. `docker compose pull` does both. If you pin versions, change the tag on both images.
+
+## To 3.13 or later: reverse proxy settings
+
+3.13 has no breaking API change, but it stops trusting forwarding headers by default. If PullMD runs behind a reverse proxy other than the bundled Traefik file:
+
+1. Set [`PULLMD_TRUST_PROXY`](/self-hosting/reverse-proxy#choose-a-pullmd_trust_proxy-value). Without it, all visitors share one set of rate limits.
+2. Set `PUBLIC_URL` to the public `https://` address, so the session cookie stays `Secure` and links point to the right place.
+3. If you use sign-in, check that the proxy passes the original `Host` header and doesn't send `Referrer-Policy: no-referrer`. See [Sign-in behind a proxy](/self-hosting/reverse-proxy#sign-in-behind-a-proxy).
+
+Also changed in 3.13:
+
+- OAuth access tokens work only on `/mcp`. Scripts calling `/api` need an API key.
+- MCP `list_recent` shows signed-in users their own conversions only.
+- `/api/stats` shows per-domain lists only to the admin, or to everyone when sign-in is off and public history is on.
+- Image captions, audio transcripts and PDF OCR share an hourly budget, `PULLMD_LLM_RATE_LIMIT` (default 30).
+- Fetched pages and documents are limited to `PULLMD_MAX_FETCH_BYTES` (default 50 MB), and a page fetch has a 60-second timeout.
+- New accounts need an email address with a dotted domain.
+
+If you keep your own compose file, add `- PULLMD_TRUST_PROXY=${PULLMD_TRUST_PROXY:-}` to the `pullmd` service.
+
+## To 3.0 or later: clean body
+
+3.0 changed the Markdown body. It now starts with `# Title` and goes straight into the content. The source line that used to follow the title (domain, date and URL, or the subreddit line for Reddit) is gone; the same information is in the frontmatter (`url`, `fetched`, `subreddit`, `author`, `upvotes`, `published`).
+
+To get the old body back:
+
+```bash
+PULLMD_SOURCE_HEADER=true
+```
+
+If you used `format=text` and relied on the URL in the body, request `frontmatter=true` or set `PULLMD_SOURCE_HEADER=true`.
+
+The Claude Code skill was renamed from `web-reader` to `pullmd` in 3.0. Remove the old one before installing the new one: see [Claude Code skill](/agents/claude-code-skill#update).
+
+## Pin and roll back
+
+Pin an exact version on every image to control when you upgrade:
+
+```yaml
+image: aeternalabshq/pullmd:3.18.2
+```
+
+Before a big upgrade, copy the `./data` folder. To roll back, pin the previous version and run `docker compose up -d`. Neither 3.0 nor 3.13 changed the database schema, so rolling back across them needs no restore. For other versions, check the changelog for schema changes first. To stay on the 2.x output format, use `aeternalabshq/pullmd:2`.
+
+For the full history, including upgrades from 1.x and 2.x, see [MIGRATION.md](https://github.com/AeternaLabsHQ/pullmd/blob/main/MIGRATION.md).

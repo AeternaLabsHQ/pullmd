@@ -1,0 +1,65 @@
+---
+title: Quickstart
+description: Run PullMD with Docker Compose and convert your first page.
+sidebar_position: 2
+---
+
+# Quickstart
+
+Run PullMD on your machine with Docker and convert a page. You need Docker with the Compose plugin. Nothing else to configure: every setting has a working default.
+
+<Steps>
+  <Step title="Download the compose file">
+    ```bash
+    mkdir pullmd && cd pullmd
+    curl -O https://raw.githubusercontent.com/AeternaLabsHQ/pullmd/main/docker-compose.yml
+    ```
+  </Step>
+  <Step title="Start PullMD">
+    ```bash
+    docker compose up -d
+    ```
+
+    This starts PullMD and its three helper containers (Trafilatura, Playwright and MarkItDown). The first start downloads about 1.4 GB of images and uses about 5 GB of disk, most of it the headless browser.
+
+    <Tip title="Port 3000 in use">If port 3000 is taken, create a `.env` file next to the compose file with `PORT=3080` (or any free port) and run the command again.</Tip>
+  </Step>
+  <Step title="Check that it's healthy">
+    ```bash
+    curl http://localhost:3000/api/status
+    ```
+
+    <Check title="Healthy response">You should get `"ok": true` and each sidecar listed as `"status": "ok"`. If a sidecar is `down`, the request returns HTTP `503`; a sidecar that isn't set up shows `not-configured`.</Check>
+  </Step>
+  <Step title="Convert a page">
+    ```bash
+    curl "http://localhost:3000/api?url=https://en.wikipedia.org/wiki/Markdown"
+    ```
+
+    You get the article as Markdown: a `# Title` line, then the content. No navigation, no scripts.
+  </Step>
+  <Step title="Ask a question">
+    To get only the sections that answer a question, add `query`:
+
+    ```bash
+    curl "http://localhost:3000/api?url=https://en.wikipedia.org/wiki/Markdown&query=who+created+markdown"
+    ```
+
+    The response headers say how much was cut: `X-Extract-Original-Tokens` and `X-Extract-Returned-Tokens`. Both are estimates of about four characters per token.
+  </Step>
+</Steps>
+
+## Use the web app
+
+Open [http://localhost:3000](http://localhost:3000) to paste a URL or drop a file. The file picker takes HTML files, e-mail, text and the other [formats PullMD reads](/guides/documents), and PDF and Office files when the MarkItDown sidecar is running. The result shows the Markdown, the extractor that produced it, and buttons to copy, download or share it. On a phone, install it as an app and share links to it straight from your browser.
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Connect an AI agent" icon="plug" href="/agents/overview">
+    Add PullMD to Claude Code, Cursor, Claude Desktop or claude.ai.
+  </Card>
+  <Card title="Put it on a server" icon="shield" href="/self-hosting/installation">
+    Public URL, reverse proxy, sign-in and monitoring.
+  </Card>
+</CardGroup>

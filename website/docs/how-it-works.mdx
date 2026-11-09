@@ -1,0 +1,75 @@
+---
+title: How extraction works
+description: The order PullMD tries extractors in, how it picks the best result, and when it falls back to a headless browser.
+sidebar_position: 3
+---
+
+# How extraction works
+
+PullMD picks a path for each URL based on what it is, checks the result, and tries harder when the result looks wrong. The order helps when a page comes back thin and you want to steer it.
+
+## The order
+
+<Steps>
+  <Step title="Reddit and Hacker News">
+    Reddit and Hacker News links are detected from the URL and read through their APIs, with the comment tree. See [Reddit and Hacker News](/guides/reddit-and-hacker-news).
+  </Step>
+  <Step title="Images and audio">
+    If the response is an image or audio file (detected from its `Content-Type`, with the path extension as a fallback) and a vision or speech-to-text provider is configured, PullMD sends it to that model for a caption or transcript. See [Images and audio](/guides/images-and-audio).
+  </Step>
+  <Step title="Documents">
+    PDFs with `pdf=ocr` go to the OCR provider when one is set. Other documents (PDF, Office, EPUB, ZIP, CSV, JSON, XML) go to the MarkItDown sidecar. See [Documents](/guides/documents).
+  </Step>
+  <Step title="Native Markdown">
+    PullMD asks every site for `text/markdown`. A site that answers with Markdown directly is used without further extraction, and `X-Source` is `cloudflare` whichever site it was.
+  </Step>
+  <Step title="YouTube">
+    With `MARKITDOWN_YOUTUBE=true`, YouTube links return the title, description and transcript. See [YouTube transcripts](/guides/youtube).
+  </Step>
+  <Step title="Static HTML extraction">
+    Everything else is a web page. PullMD runs Readability and Trafilatura on the HTML and picks one result by comparing them: Trafilatura wins when Readability fell back or returned much less text, Readability wins when Trafilatura loses table rows, and Readability wins ties. `X-Source` and `extractor_reason` show which was chosen and why.
+  </Step>
+  <Step title="Browser render, if needed">
+    If the static result looks wrong, PullMD renders the page in headless Chromium and extracts again from the rendered HTML.
+  </Step>
+</Steps>
+
+If an image or audio provider isn't configured, PullMD treats the URL as a web page. If OCR isn't configured or fails, PDFs go to MarkItDown. If the MarkItDown sidecar is down when a YouTube link arrives, PullMD falls through to static HTML extraction. If Trafilatura is down, Readability alone is used. If the browser render fails, PullMD keeps the static result. Document conversion has no fallback: with MarkItDown down or not configured, PullMD returns `502`.
+
+## When PullMD renders in a browser
+
+The static result is sent to the Playwright sidecar when any of these is true:
+
+- The extractor reason contains `fell back` and the output is under 500 characters.
+- The output has the shape of a JavaScript app with no content: at least five headings, more than three headings per paragraph (a paragraph is a line of at least 40 characters, and at least one must exist), and under 5,000 characters.
+- The quality score is below `0.5`.
+
+Override the decision per request with `render=force` or `render=skip`.
+
+If the site answers with a bot-protection challenge (Cloudflare or Bunny Shield), PullMD stops and returns `502` with `"code": "bot_challenge"`; the browser would be blocked too. If only the browser render is challenged or refused, PullMD keeps the static result and says why in `extractorReason`.
+
+## Quality score
+
+Every result gets a quality score from `0.0` to `1.0`, returned in the `X-Quality` header. It is built from the output length, its share of the raw HTML, an `<article>` or `<main>` tag, headings and paragraphs, and PullMD uses it to decide whether to render. Readability and Trafilatura are compared by separate rules (see [The order](#the-order)). Low scores usually mean a cookie wall, a login page or a JavaScript app shell.
+
+## The coverage guard
+
+Some page builders put each section of a one-page site in its own sibling container. Readability then keeps only one section. The coverage guard notices when the result covers only a sliver of the page's text and one container holds nearly all of it, and converts that container instead. When it fires, `X-Source` is `coverage-guard`. Turn it off with `PULLMD_COVERAGE_GUARD=off`.
+
+## Site recipes
+
+For sites that need special handling (strip a banner, force a browser render, rebuild a table drawn with CSS), PullMD applies [site recipes](/guides/site-recipes): small JSON rules matched by host and path. A few ship built in.
+
+## Which extractor ran
+
+The `X-Source` response header (or `source` in JSON) names the path that produced the result. The full list is in [Output format](/reference/output-format#x-source-values).
+
+## Steer a page that comes out wrong
+
+| Problem | Try |
+| --- | --- |
+| Content missing, page is JavaScript-heavy | `render=force` |
+| Wrong part of the page kept | `extractor=trafilatura` or `extractor=readability` |
+| Render in the browser and extract from that | `extractor=playwright` |
+| Stale result (results are cached for one hour) | `nocache=true` |
+| Same problem every time on one site | Write a [site recipe](/guides/site-recipes) |

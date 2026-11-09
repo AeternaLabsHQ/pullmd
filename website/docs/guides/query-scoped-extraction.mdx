@@ -1,0 +1,85 @@
+---
+title: Query-scoped extraction
+description: Pass a question with query= and get back only the sections of a page that answer it, with the token counts for the full page and the result.
+---
+
+# Query-scoped extraction
+
+When an agent needs one fact from a long page, the rest of the page is wasted context. To get only the matching sections, pass the question as `query`.
+
+```bash
+curl -i "http://localhost:3000/api?url=https://en.wikipedia.org/wiki/Markdown&query=who+created+markdown"
+```
+
+```http
+X-Extracted: true
+X-Extract-Confidence: high
+X-Extract-Sections: 2
+X-Extract-Original-Tokens: 10015
+X-Extract-Returned-Tokens: 502
+```
+
+The Markdown body, shortened:
+
+```markdown
+# Markdown
+
+<!-- … -->
+
+## History
+
+Markdown was inspired by pre-existing [conventions](<https://en.wikipedia.org/wiki/Convention_(norm)>) for marking up [plain text](https://en.wikipedia.org/wiki/Plain_text) in [email](https://en.wikipedia.org/wiki/Email) …
+
+In 2002, [Aaron Swartz](https://en.wikipedia.org/wiki/Aaron_Swartz) created [atx](<https://en.wikipedia.org/wiki/Atx_(markup_language)>) and referred to it as "the true structured text format". Gruber created the Markdown language in 2004 with Swartz as his "sounding board". …
+```
+
+The full article is about 10,000 tokens, and the result is about 500. The response is captured from a live Wikipedia page, so the counts change as the article is edited.
+
+On the MCP server, pass `query` and `max_tokens` to the `read_url` tool.
+
+## How it works
+
+PullMD splits the converted Markdown into sections at its headings and ranks them against your question with BM25, a standard keyword-ranking method. It then returns the best sections in their original order until the token budget is used. Ranking runs on your server with no model.
+
+- Pages with fewer than two headings are split into paragraphs instead.
+- Code blocks, tables, lists, and quotes are never split. If any part of one is relevant, the whole block is included.
+- Gaps between returned sections are marked with `<!-- … -->`.
+- Each returned section keeps its parent headings, including the page title, so you can see where it came from.
+- Words are lowercased and de-duplicated, up to 64 per question, with no stopword removal or stemming, so "who" counts as a word.
+- Confidence is `high` when the best-matching section contains at least half of the question's words, and `medium` when it contains fewer.
+
+## Set the budget
+
+`max_tokens` caps the result. The default is `600`, the range is `64` to `20000`, and tokens are estimated as characters divided by 4. A value outside the range returns `400` when `query` is set.
+
+For a question whose answer spans several sections ("compare the pricing tiers"), raise it. For a single fact ("what's the rate limit"), keep the default.
+
+## When you get the whole page back
+
+PullMD returns the full page, unchanged, in these cases:
+
+| Case | `X-Extracted` | `X-Extract-Confidence` |
+| --- | --- | --- |
+| The page is already small (estimated tokens at most `max(800, 1.25 × max_tokens)`) | `false` | not sent |
+| Nothing on the page matches the question's words | `false` | `low` |
+
+You can pass `query` on every request that has a question, because the worst case is the full page. On MCP, which has no headers, a no-match result carries `<!-- query-extract: no match; returning full page -->` on the first line after the YAML block that starts every MCP result.
+
+## Read the result
+
+| Header | Meaning |
+| --- | --- |
+| `X-Extracted` | `true` if sections were selected |
+| `X-Extract-Confidence` | `high`, `medium` or `low` |
+| `X-Extract-Sections` | Number of sections returned |
+| `X-Extract-Original-Tokens` | Estimated tokens in the full page |
+| `X-Extract-Returned-Tokens` | Estimated tokens returned |
+
+With `frontmatter=true`, the same values appear in the YAML block as `extracted`, `extract_confidence`, `sections_selected`, `original_tokens` and `returned_tokens`. With `format=json`, they're in an `extract` object.
+
+## Tips
+
+- The cache stores the full page, so several questions about the same URL within an hour cost one fetch. Each question is ranked against the cached copy.
+- Write the question in plain words. BM25 matches words, so "rate limit headers" works better than "how fast can I call it".
+- If the confidence is `low`, the page probably doesn't answer the question or uses different words for it. Rephrase the question, or drop `query` and read the page.
+- `/api/stream` ignores `query`.

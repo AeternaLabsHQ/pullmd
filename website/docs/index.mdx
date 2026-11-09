@@ -1,0 +1,91 @@
+---
+title: Overview
+description: PullMD turns web pages, documents, images, audio and YouTube videos into clean, token-lean Markdown, for you and for your AI agents.
+slug: /
+sidebar_position: 1
+---
+
+# Overview – What is PullMD?
+
+**Anything in, clean Markdown out.** PullMD is a self-hosted service that turns web pages, Reddit and Hacker News threads, PDFs and Office files, YouTube videos, images and audio into clean, token-lean Markdown, for you and for your AI agents.
+
+## Why use PullMD?
+
+Agents are bad at reading the web. Raw HTML spends context on navigation, cookie banners and scripts, and built-in fetch tools often fail on JavaScript-heavy pages, PDFs and comment threads. PullMD sits in between: one URL or file in, only the content out.
+
+Token counts from the PullMD README for three example pages (`cl100k_base` tokenizer, measured October 16, 2026):
+
+| Page | Plain `curl` | PullMD | PullMD with `?query=` |
+| --- | ---: | ---: | ---: |
+| Encyclopedia article | 99,458 | 12,549 | 662 |
+| Developer documentation page | 48,611 | 6,591 | 454 |
+| Reddit thread with comments | blocked by a bot check | 6,381 | 644 |
+
+The `curl` column is what a basic fetch tool hands an agent. The last column uses [query-scoped extraction](/guides/query-scoped-extraction): ask a question and get back only the sections that answer it.
+
+## What a request looks like
+
+PullMD runs on your own machine or server. After the [Quickstart](/quickstart) it listens at `http://localhost:3000`; on a server, use the address you gave it. To convert a page, pass its address as `url`:
+
+```bash
+curl "http://localhost:3000/api?url=https://docs.python.org/3/tutorial/venv.html&frontmatter=true"
+```
+
+PullMD fetches the page, drops everything that isn't content, and returns Markdown. `frontmatter=true` adds a YAML block with the source and how it was read; without it you get the body alone. The response, shortened:
+
+```markdown
+---
+title: 12. Virtual Environments and Packages — Python 3.15.1 documentation
+url: https://docs.python.org/3/tutorial/venv.html
+source: readability
+fetched: 2026-10-23T23:09:08.642Z
+language: en
+site: Python documentation
+---
+
+# 12. Virtual Environments and Packages — Python 3.15.1 documentation
+
+## 12.1\. Introduction[¶](#introduction "Link to this heading")
+
+Python applications will often use packages and modules …
+```
+
+Your agents make the same request through the [MCP server](/agents/mcp-server) or the [Claude Code skill](/agents/claude-code-skill), so you rarely type it yourself. Every field is described in [Output format](/reference/output-format).
+
+## Four ways in
+
+<CardGroup cols={2}>
+  <Card title="Web app" icon="search" href="/quickstart">
+    Paste a URL or drop a file at `http://localhost:3000`. Installable as a PWA.
+  </Card>
+  <Card title="REST API" icon="code" href="/reference/api">
+    `GET /api?url=…` returns Markdown, plain text or JSON.
+  </Card>
+  <Card title="MCP server" icon="plug" href="/agents/mcp-server">
+    Three tools for Claude Code, Cursor, Claude Desktop and claude.ai.
+  </Card>
+  <Card title="Claude Code skill" icon="terminal" href="/agents/claude-code-skill">
+    A skill bundle with your instance's address built in.
+  </Card>
+</CardGroup>
+
+## What it reads
+
+| Input | How |
+| --- | --- |
+| Web pages | Native Markdown when a site answers `text/markdown` (Cloudflare does), otherwise Readability and Trafilatura (the better result wins), then headless Chromium for JavaScript-heavy pages. See [How extraction works](/how-it-works). |
+| Reddit and Hacker News | Detected automatically, with the comment tree. See [Reddit and Hacker News](/guides/reddit-and-hacker-news). |
+| Documents | PDF, Word, PowerPoint, Excel, EPUB, ZIP, CSV, JSON and XML, by URL or upload. Optional OCR for table-heavy PDFs. See [Documents](/guides/documents). |
+| YouTube | Title, description and transcript with timecodes. No API key. See [YouTube transcripts](/guides/youtube). |
+| Images and audio | Captions and transcripts through any OpenAI-compatible model, including local ones. See [Images and audio](/guides/images-and-audio). |
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Run PullMD with Docker and convert your first page.
+  </Card>
+  <Card title="Connect an agent" icon="bolt" href="/agents/overview">
+    Pick the MCP server, the skill or a prompt.
+  </Card>
+</CardGroup>

@@ -1,0 +1,9 @@
+node_modules/
+build/
+.docusaurus/
+.cache-loader/
+docs/reference/api/
+.DS_Store
+src/generated/
+static/openapi.yaml
+static/openapi.json

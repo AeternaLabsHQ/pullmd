@@ -1,0 +1,116 @@
+---
+title: Documents
+description: Convert PDF, Office, EPUB, e-mail, OpenDocument, data and other files to Markdown, by URL or by upload, with optional OCR for table-heavy PDFs.
+---
+
+# Documents
+
+PullMD converts documents and uploaded files to Markdown. The MarkItDown sidecar, which the default compose file runs, handles PDF, Word (DOCX), PowerPoint (PPTX), Excel (XLSX, XLS), EPUB, and ZIP (converts each file inside), plus every document fetched by URL, including CSV, JSON, XML, and plain text. PullMD reads e-mail, OpenDocument, RTF, and the other [upload formats below](#upload-formats-pullmd-reads-itself) without the sidecar.
+
+## Convert a document by URL
+
+To convert a document by URL, pass a direct link to the file, as you do for a web page:
+
+```bash
+curl "http://localhost:3000/api?url=https://example.com/report.pdf"
+```
+
+PullMD recognizes the document from its content type, or from the file extension when the server sends no content type or `application/octet-stream`, and sends it to MarkItDown. The result is cached and gets a share link like any other conversion. The title is the host name (`# example.com`) unless the document has one.
+
+## Upload a file
+
+To convert a local file, send its raw bytes to [`POST /api/file`](/reference/api/convert/convert-a-file) with `Content-Type` set to the file's type. PullMD doesn't decode multipart forms, so send the file itself as the body.
+
+```bash
+curl -X POST "http://localhost:3000/api/file" \
+  -H "Content-Type: application/pdf" \
+  -H "X-Filename: report.pdf" \
+  --data-binary @report.pdf
+```
+
+```markdown
+# report.pdf
+
+Release checklist
+
+Run through these steps before every release so nothing ships half-finished.
+…
+```
+
+- **Maximum size:** 25 MB.
+- **`X-Filename`:** the file name, URI-encoded. PullMD uses it for the suggested download name, and as the title when the document has none. `?filename=` also works, but the header keeps the name out of proxy access logs.
+- **`Content-Type`:** the file's type. A type that doesn't match the file, such as `text/plain` on a PDF, returns a result without the document's text.
+- **`lang`:** `lang=en` sets English labels in e-mail, calendar and contact output. The default is German.
+- **Privacy:** uploads are never cached. They create no history entry or share link, and the stats record the conversion as `local-file`, not the file name.
+
+In the web app, drag a file onto the page or use the file picker.
+
+## Upload formats PullMD reads itself
+
+These uploaded formats work without the MarkItDown sidecar. PullMD picks the reader from the file name, so set `X-Filename`. The `X-Source` header names the reader that ran.
+
+| Format | Result | `X-Source` |
+| --- | --- | --- |
+| E-mail: `.eml`, `.msg` | The subject as title, then From, To, Cc, Date and the message text. Attachments are listed by name. | `email` |
+| Saved pages: `.mhtml`, `.mht` | Extracted like [`POST /api/html`](/guides/local-html). The original URL in the file appears as the frontmatter `url`, and site recipes apply. | The extractor that ran |
+| Text: `.txt`, `.md`, `.rst`, `.adoc`, `.org` | The text, with a title line added when it has none. A note's own YAML frontmatter becomes a fenced `yaml` block. | `text` or `markdown` |
+| Subtitles: `.srt`, `.vtt` | Readable paragraphs without cue numbers, timestamps or styling. | `subtitles` |
+| OpenDocument: `.odt`, `.ods`, `.odp` | Headings, links, lists, tables and footnotes. Spreadsheets give one table per sheet, and presentations give one section per slide with speaker notes. | `opendocument` |
+| RTF: `.rtf` | Paragraphs, headings, links, lists and tables. | `rtf` |
+| Calendar: `.ics` | One section per event with start, end, location, organizer, attendees, recurrence and description. Times use the server's time zone. | `calendar` |
+| Contacts: `.vcf` | One section per card. | `contact` |
+| Data: `.csv`, `.tsv`, `.json`, `.jsonl`, `.xml` | CSV and TSV as a Markdown table, JSON and XML in a code block. | `data` |
+| Feeds: `.rss`, `.atom`, or `.xml` with an RSS or Atom root | The feed title, then one section per entry. | `feed` |
+| Notebooks: `.ipynb` | Markdown cells as they are, code cells and text outputs in code blocks. | `notebook` |
+| Code, config and logs: `.py`, `.js`, `.yaml`, `.log`, `Dockerfile` and more | The file name as title and the content in a code block tagged with the language. | `code` |
+
+With `frontmatter=true`, e-mail results carry `title`, `author`, `published` and `source: email`.
+
+A file that doesn't match its format, such as an `.eml` file without mail headers, returns `422`.
+
+## Tables in PDFs: use OCR
+
+MarkItDown reads the text layer of a PDF, which works for prose but loses the structure of complex tables. To keep tables intact, turn on the OCR tier, which sends the PDF to an OCR provider that returns Markdown.
+
+<Steps>
+  <Step title="Add a provider key">
+    ```bash
+    PULLMD_PDF_OCR_API_KEY=your-key
+    ```
+
+    The default provider is Mistral OCR (`mistral-ocr-latest`, about $0.002 per page). To use another endpoint that speaks the Mistral OCR API (`POST /ocr`), set `PULLMD_PDF_OCR_BASE_URL` and `PULLMD_PDF_OCR_MODEL`.
+  </Step>
+  <Step title="Ask for OCR per request">
+    ```bash
+    curl "http://localhost:3000/api?url=https://example.com/report.pdf&pdf=ocr"
+    ```
+
+    `pdf=ocr` also works on `POST /api/file` and `/api/stream`. On the MCP server, pass `pdf_ocr: true`. For a site whose PDFs always need it, set `fetch.pdf: ocr` in a [site recipe](/guides/site-recipes).
+  </Step>
+</Steps>
+
+When OCR runs, `X-Source` is `pdf-ocr` and the frontmatter gains `pdf_pages`. If the provider fails, no key is set, or the PDF is over 50 MB, PullMD uses the standard conversion instead; the request doesn't fail.
+
+<Note title="OCR key">
+  OCR doesn't use the shared `PULLMD_LLM_API_KEY`, because OCR providers are usually different from chat-model providers. Set `PULLMD_PDF_OCR_API_KEY` explicitly.
+</Note>
+
+OCR requests count against the hourly provider budget, `PULLMD_LLM_RATE_LIMIT` (default 30 per user or address, shared with image captions and audio transcripts). Over budget, PullMD uses the standard conversion and doesn't cache that result.
+
+A local engine such as [Docling](https://github.com/DS4SD/docling) needs an adapter that translates the Mistral OCR request. The OCR tier handles PDFs only.
+
+## Resource limits
+
+Each conversion runs in a separate process inside the MarkItDown container, so a malformed or oversized file can't take the service down.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MARKITDOWN_CONVERT_TIMEOUT` | `60` | Seconds before the MarkItDown service stops a conversion. `0` turns the timeout off. PullMD waits 30 seconds for the service to respond, so a conversion that takes longer returns `502`. |
+| `MARKITDOWN_MEM_LIMIT` | `1g` | Memory limit for the whole container. |
+| `MARKITDOWN_MEM_LIMIT_MB` | `0` | Memory cap per conversion in MB. `0` relies on the container limit. |
+
+Documents fetched by URL are also limited by `PULLMD_MAX_FETCH_BYTES` (default 50 MB).
+
+## Without MarkItDown
+
+If you remove the `markitdown` service and remove the `MARKITDOWN_URL` line from the `pullmd` service, document links and uploads in the formats MarkItDown handles return `502`, and YouTube transcripts are off. Web pages and the [upload formats PullMD reads itself](#upload-formats-pullmd-reads-itself) are unaffected.

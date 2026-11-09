@@ -1,0 +1,130 @@
+---
+title: Changelog
+description: Highlights of recent PullMD releases. The full history is in CHANGELOG.md on GitHub.
+---
+
+# Changelog
+
+Highlights of recent releases. Every change, with issue links, is in [CHANGELOG.md](https://github.com/AeternaLabsHQ/pullmd/blob/main/CHANGELOG.md). Before upgrading across 3.0 or 3.13, read [Upgrading](/self-hosting/upgrading).
+
+## 3.18.2
+
+November 8, 2026 · <Badge tone="brand">Latest</Badge>
+
+- Static fetches connect to the address [SSRF protection](/self-hosting/ssrf-protection) checked, on every redirect hop. A hostname that changes its answer between the check and the connection can't reach an internal address on this path.
+
+## 3.18.1
+
+November 7, 2026
+
+- YouTube URLs failed with `fetch failed` when the response headers exceeded 16 KB. These URLs convert again.
+- Pages that split one piece of writing across several `<article>` blocks keep all of them. `X-Source` is `article-series`, and `PULLMD_ARTICLE_SERIES=off` turns it off.
+- The docs state how [Reddit access](/guides/reddit-and-hacker-news#reddit-credentials) works: without credentials Reddit blocks the requests, and Reddit no longer accepts new API access requests.
+
+## 3.18.0
+
+November 4, 2026
+
+- Upload e-mail (`.eml`, `.msg`), saved pages (`.mhtml`), text, subtitles, OpenDocument, RTF, calendars, contacts, data files, feeds, notebooks and source code. All are [read without the MarkItDown sidecar](/guides/documents#upload-formats-pullmd-reads-itself).
+- `comment_depth=all` returns [whole Reddit threads](/guides/reddit-and-hacker-news#shape-the-comments), including comments Reddit collapses. On Hacker News it removes the depth limit.
+- Comments Reddit left out are noted below the thread.
+- Replies to a deleted Reddit comment are kept, under `*[deleted]*` or `*[removed]*`.
+- Negative Reddit comment scores read `[-3]`; they showed as `[+-3]`.
+- Page titles no longer pick up the labels of inline SVG icons.
+
+## 3.17.0
+
+November 2, 2026 · <Badge tone="warning">Action required for old sidecars</Badge>
+
+- `/api/status` reports a Playwright sidecar older than 3.15.2 as `degraded` and returns `503`. See [Upgrading](/self-hosting/upgrading#to-317-or-later-status-check-and-anonymous-deletes).
+- Reddit pages that aren't posts or subreddits crashed the extractor. They return `400` with `"code": "reddit_unsupported_page"`.
+- A blocked Reddit request stored an empty post. It returns `502`, and nothing is cached.
+- With `DISABLE_PUBLIC_HISTORY=true` and sign-in off, anonymous deletes return `403`.
+
+## 3.16.0
+
+October 25, 2026
+
+- [Describe and transcribe images in Reddit posts](/guides/reddit-and-hacker-news#describe-images-in-reddit-posts) with a vision provider.
+- PullMD logs a startup warning when sign-in is off and a provider key is set.
+- Image captions were cut off mid-sentence with verbose models. Captions now finish.
+- Reddit text arrived HTML-escaped, so quotes showed as `&gt;quote`. Text arrives unescaped.
+
+## 3.15.2
+
+October 19, 2026
+
+- **Security fix ([GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77)).** A public page could steer the headless browser to an internal address with a redirect, a meta refresh, a script navigation, an iframe or a `fetch()`. The Playwright sidecar now applies the same [SSRF rules](/self-hosting/ssrf-protection) to every request the browser makes. **Update the `pullmd-playwright` image together with `pullmd`**; a new `pullmd` alone doesn't close the hole.
+
+## 3.15.1
+
+October 19, 2026
+
+- Bot-protection pages (Cloudflare and Bunny Shield challenges) now return `502` with `"code": "bot_challenge"` instead of a bare `403` or the challenge page converted to Markdown. Nothing is cached. See [Troubleshooting](/troubleshooting).
+- If only the browser render hits a challenge, PullMD keeps the static result and notes it in `extractorReason`.
+
+## 3.15.0
+
+October 14, 2026
+
+- New recipe action `prepend-text`: adds a fixed label to matched elements, for labels a page only shows with a CSS icon.
+
+## 3.14.0
+
+October 14, 2026
+
+- New recipe action `grid-to-table`: rebuilds comparison tables drawn with CSS grid as real tables.
+- New recipe action `replace-with-text`: turns icons and logos into words.
+- Markdown tables come out without padding spaces, which cuts their token count sharply (a wide comparison table shrinks to about a quarter).
+
+## 3.13.1
+
+October 14, 2026
+
+- Tables inside Webflow "HTML Embed" blocks are no longer dropped.
+
+## 3.13.0
+
+October 9, 2026 · <Badge tone="warning">Action required behind a proxy</Badge>
+
+- Forwarding headers are trusted only when `PULLMD_TRUST_PROXY` is set. See [Reverse proxy](/self-hosting/reverse-proxy).
+- Login and signup are rate-limited, and form posts must come from the instance's own host.
+- New hourly budget for image, audio and OCR providers: `PULLMD_LLM_RATE_LIMIT`.
+- New size limit for fetched pages and documents: `PULLMD_MAX_FETCH_BYTES`.
+- OAuth access tokens are accepted only on `/mcp`.
+
+## 3.12.0
+
+September 21, 2026
+
+- Share ids are 128 bits and unknown-id lookups are rate-limited, so share links can't be guessed.
+- Private vulnerability reporting through `SECURITY.md`.
+
+## 3.11.0
+
+September 3, 2026
+
+- Cache retention is configurable with `PULLMD_CACHE_RETENTION_DAYS`.
+
+## 3.10.0
+
+August 27, 2026
+
+- `GET /api/status` reports sidecar health for monitoring. See [Monitoring](/self-hosting/monitoring).
+- Site recipes can read structured data from embedded JSON state blocks.
+
+## 3.9.0
+
+August 1, 2026
+
+- Download button in the web app, next to Copy and Share.
+- `X-Suggested-Filename` header with a ready-made file name.
+- Image captions work with current OpenAI models, including reasoning models.
+
+## 3.0.0
+
+June 10, 2026 · <Badge tone="warning">Breaking</Badge>
+
+- The Markdown body is clean by default: title, then content. Source details moved to the frontmatter. `PULLMD_SOURCE_HEADER=true` restores the old format.
+- Documents and YouTube through the MarkItDown sidecar. Image captions, audio transcripts and PDF OCR through OpenAI-compatible providers configured in PullMD.
+- The Claude Code skill was renamed from `web-reader` to `pullmd`.

@@ -1,0 +1,45 @@
+---
+title: Pages behind a login
+description: Convert an HTML file you saved from your browser, for pages PullMD can't fetch itself.
+---
+
+# Pages behind a login
+
+To convert a page behind a login or a paywall that you can access, save it from your browser and send the HTML to [`POST /api/html`](/reference/api/convert/convert-html). PullMD can't sign in to sites itself.
+
+<Steps>
+  <Step title="Save the page">
+    In your browser, select **File → Save Page As**. PullMD accepts any HTML file up to 10 MB.
+  </Step>
+  <Step title="Send it to PullMD">
+    ```bash
+    curl -X POST "http://localhost:3000/api/html?url=https://example.com/release-checklist" \
+      -H "Content-Type: text/html" \
+      -H "X-Filename: release-checklist.html" \
+      --data-binary @release-checklist.html
+    ```
+
+    `url` is optional. To make relative links in the result point to the right place, pass the page's original address.
+  </Step>
+</Steps>
+
+```markdown
+# Release checklist
+
+Run through these steps before every release so nothing ships half-finished.
+
+## Before tagging
+
+- Update the changelog with every user-facing change.
+- Run the full test suite on a clean checkout.
+```
+
+In the web app, drag the `.html` file onto the page.
+
+## Differences from a URL conversion
+
+- **Never cached:** the conversion creates no history entry or share link, and the stats don't record the file name.
+- **No JavaScript:** PullMD never runs scripts from an uploaded file, so the headless browser is off. `extractor` accepts `readability` or `trafilatura`.
+- **App shells:** a file with under 200 characters of text after extraction returns `422`. That usually means the page builds its content with JavaScript. If the page is public, convert its URL, because PullMD renders JavaScript pages in a headless browser.
+
+Send the file as `Content-Type: text/html` or `application/xhtml+xml`. Any other type returns `400`.

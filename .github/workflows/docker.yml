@@ -4,8 +4,10 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+    paths-ignore: ['website/**', '.github/workflows/docs.yml']
   pull_request:
     branches: [main]
+    paths-ignore: ['website/**', '.github/workflows/docs.yml']
   workflow_dispatch:
 
 env:

@@ -1,0 +1,135 @@
+---
+title: Authentication
+description: Turn on sign-in with single-admin or multi-user mode, create API keys, and manage accounts from the command line.
+---
+
+# Authentication
+
+PullMD is open by default: anyone who can reach it can use it. Before you expose it beyond your own network, turn on sign-in. Set `PULLMD_AUTH_MODE` to one of these values:
+
+| `PULLMD_AUTH_MODE` | Who can use it |
+| --- | --- |
+| `disabled` (default) | Anyone. No accounts. |
+| `single-admin` | One account, created from environment variables. `/signup` is closed. For personal use. |
+| `multi-user` | Anyone can sign up at `/signup` (unless you close it). Each user sees only their own history. |
+
+## Turn on sign-in
+
+<Steps>
+  <Step title="Set the mode and the first admin">
+    ```bash
+    PULLMD_AUTH_MODE=single-admin
+    PULLMD_ADMIN_EMAIL=you@example.com
+    PULLMD_ADMIN_PASSWORD=<admin-password>
+    ```
+
+    The admin is created on the first start in this mode. Conversions already in the cache are assigned to the admin.
+  </Step>
+  <Step title="Restart">
+    ```bash
+    docker compose up -d
+    ```
+
+    If the email or password is missing on the first start, PullMD exits with this message in the log:
+
+    ```text
+    ERROR: PULLMD_AUTH_MODE=single-admin requires bootstrap credentials.
+    ```
+  </Step>
+  <Step title="Sign in">
+    Open `/login`. Sessions last 90 days and are extended while you use PullMD.
+  </Step>
+</Steps>
+
+After the admin exists, changing `PULLMD_ADMIN_PASSWORD` does nothing. Use the [admin commands](#admin-commands) to reset it.
+
+## API keys
+
+To authenticate scripts and agents, create an API key:
+
+1. Sign in and open `/settings`.
+2. Create a key and copy it. PullMD shows it once.
+3. Send it as a bearer token with every request. Replace `<api-key>` with your key:
+
+   ```bash
+   curl "https://pullmd.example.com/api?url=https://example.com" \
+     -H "Authorization: Bearer <api-key>"
+   ```
+
+Keys look like `pmd_` followed by 32 letters and digits. PullMD stores only a hash. To revoke a key, open `/settings`.
+
+claude.ai and Claude Desktop sign in with [OAuth](/agents/claude-ai-connector), because they can't send a header.
+
+## What needs sign-in
+
+| Needs sign-in | Always open |
+| --- | --- |
+| `/api`, `/api/stream`, `POST /api/html`, `POST /api/file` | `/`, `/help`, static files, `/pullmd.zip` |
+| `/mcp` | `/login`, `/signup` |
+| `/api/history`, `/api/archive` | Share links, `/s/:id` |
+| `DELETE /api/cache/:id`, `DELETE /api/cache` | `/api/status`, `/api/recipes/status` |
+| `/api/me`, `/settings`, `/share` | `/api/stats`, `/api/storage`, `/api/config` |
+| `POST /api/keys`, `POST /api/keys/:id/revoke` | OAuth endpoints, `/web-reader.zip`, `/sw.js` |
+
+Share links are always open, so anyone with a link can read the shared content. `/api/stats` hides its per-domain lists from everyone but the admin. `/api/me` answers `401` when you're not signed in, and doesn't exist (`404`) while sign-in is off.
+
+A request to `/api*` or `/mcp` without valid credentials gets `401` with `{"error": "Authentication required"}`. When `PUBLIC_URL` is set, the response carries a `WWW-Authenticate` header whose `resource_metadata` points to `/.well-known/oauth-protected-resource`, which exists only when OAuth is enabled. A browser request to a page such as `/settings` gets a `302` redirect to `/login`.
+
+## Multi-user mode
+
+To let several people sign in, set the mode and the first admin:
+
+```bash
+PULLMD_AUTH_MODE=multi-user
+PULLMD_ADMIN_EMAIL=you@example.com
+PULLMD_ADMIN_PASSWORD=<admin-password>
+```
+
+- Each user's history, archive and MCP `list_recent` show only their own conversions.
+- The cache itself is shared: if two users convert the same URL, they get the same cached copy and share id. Only the user whose request created the copy sees it in their history, archive and `list_recent`.
+- A user's delete removes the entry from their history only. The admin's delete removes the shared copy for everyone.
+
+### Close signup
+
+To stop strangers from registering on a public instance, set:
+
+```bash
+PULLMD_ALLOW_SIGNUP=false
+```
+
+`/signup` then returns `404` and the login page drops its "create an account" link. Create accounts with the [admin commands](#admin-commands).
+
+<Note title="Compose files omit this setting">As of v3.18.2, the compose files don't pass `PULLMD_ALLOW_SIGNUP` to the container. Add `- PULLMD_ALLOW_SIGNUP=${PULLMD_ALLOW_SIGNUP:-}` to the `pullmd` service's `environment:` list. See [Installation](/self-hosting/installation#configure).</Note>
+
+## Admin commands
+
+Run these inside the container. They read the password from standard input, so the command needs an interactive terminal (`docker compose exec`) or a pipe.
+
+| Command | Action |
+| --- | --- |
+| `node scripts/admin.js list-users` | List accounts |
+| `node scripts/admin.js create-user <email>` | Create an account |
+| `node scripts/admin.js reset-password <email>` | Set a new password |
+| `node scripts/admin.js make-admin <email>` | Make an account an admin |
+
+To reset a password from a terminal:
+
+```bash
+docker compose exec pullmd node scripts/admin.js reset-password you@example.com
+```
+
+To run a command from a script, pipe the password in:
+
+```bash
+echo "new-password" | docker exec -i pullmd node scripts/admin.js create-user someone@example.com
+```
+
+Without `-i`, the command prints a usage hint and exits with code 2. Passwords need at least 8 characters, `create-user` makes a non-admin account, and `reset-password` also ends that user's sessions. Emails need a dotted domain. The 8-character minimum also applies to signup, but PullMD doesn't check the first admin's `PULLMD_ADMIN_PASSWORD`.
+
+## Rate limits
+
+Login allows 10 attempts a minute and signup 5 an hour, per client address. Over the limit, PullMD answers `429` with a `Retry-After` header. Behind a reverse proxy, set [`PULLMD_TRUST_PROXY`](/self-hosting/reverse-proxy) or all visitors share these limits.
+
+## Legacy token
+
+`PULLMD_AUTH_TOKEN` is a single shared bearer token from v1. It works only in `single-admin` mode, maps to the admin, appears on `/settings` as an API key labeled `legacy PULLMD_AUTH_TOKEN`, and will be removed in a future major release. Use API keys. Setting it while auth is `disabled` does nothing, and `/api/config` reports `authMisconfigured: true`.

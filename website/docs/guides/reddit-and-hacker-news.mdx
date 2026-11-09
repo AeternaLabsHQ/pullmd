@@ -1,0 +1,110 @@
+---
+title: Reddit and Hacker News
+description: Read Reddit and Hacker News threads with their comment trees, and Hacker News listings as ranked lists.
+---
+
+# Reddit and Hacker News
+
+PullMD recognizes Reddit and Hacker News links and reads them through each site's API. The result is the post and a nested comment tree as Markdown. Reading Reddit needs [API credentials](#reddit-credentials). The MCP `read_url` tool handles Reddit this way and reads Hacker News links as web pages.
+
+```bash
+curl "http://localhost:3000/api?url=https://news.ycombinator.com/item?id=1&lang=en"
+```
+
+```markdown
+# Y Combinator
+
+http://ycombinator.com
+
+---
+
+## Comments (3 of 3)
+
+**sama** · 20y ago: "the rising star of venture capital" -unknown VC eating lunch on SHR
+…
+```
+
+## Supported links
+
+| Site | Links |
+| --- | --- |
+| Reddit | Post URLs, `redd.it` short links, `/s/` share links, galleries, and subreddit pages (`/r/<name>`, which return the Hot posts). Other Reddit pages, such as user profiles, wikis and sorted listings like `/r/<name>/top`, return `400`. |
+| Hacker News | Items, comment permalinks, and the front page (`/` or `/news`), `/newest`, `/ask`, `/show`, `/jobs` and `/best` listings |
+
+A listing returns 30 stories from the Hacker News search API as a numbered list with points, comment counts, and a discussion link for each. The order can differ from the site's own pages, and `/best` returns the front page.
+
+## Shape the comments
+
+| Parameter | Default | Effect |
+| --- | --- | --- |
+| `comments` | `true` | `false` returns the post without comments. A cached copy that includes comments is served unchanged, so add `nocache=true`. |
+| `comment_depth` | `3` | How many levels of replies to include, or `all` for the whole thread. The MCP tool accepts `1` to `10` or `"all"`. |
+| `comment_limit` | no limit | Maximum number of top-level comments. The MCP tool accepts `1` to `500`. |
+| `lang` | `de` | Language of the comments heading: `## Kommentare` or `## Comments`. |
+
+On REST, `comment_depth` and `comment_limit` skip the cache, so they always take effect. On MCP they don't. `lang` doesn't skip it, so add `nocache=true` when you change `lang` for a thread fetched in the last hour.
+
+With `comment_depth=all`, PullMD removes the depth limit and also loads the comments Reddit hides behind "load more comments" and "continue this thread". This takes extra requests to Reddit, at most 20 per conversion with credentials and 5 without. Set `PULLMD_REDDIT_MORE_REQUESTS` to change the limit, or `0` to turn the loading off. On Hacker News, `all` removes the depth limit.
+
+Comments still missing within the requested depth are noted below the comment tree, for example `Not loaded: 3 more comments`.
+
+<Tip title="Comments heading language">The comments heading defaults to German. For an English-language agent, pass `lang=en` on every request.</Tip>
+
+## Frontmatter
+
+With `frontmatter=true`, posts include `author`, `published` and `upvotes`, plus `subreddit` for Reddit. These fields appear only in the frontmatter.
+
+## Describe images in Reddit posts
+
+With a [vision provider](/guides/images-and-audio) configured, PullMD can add a short description and a transcript of the legible text under each image of a Reddit post: single images, galleries and images inside a text post. Comment images stay as they are.
+
+To transcribe the images of one post, pass `images=on` (MCP: `images: "on"`). `PULLMD_EMBEDDED_IMAGES` sets the instance behavior:
+
+| Value | Effect |
+| --- | --- |
+| `on-request` (default) | Images are transcribed when a request passes `images=on`. |
+| `always` | Images are transcribed unless a request passes `images=off`. |
+| `off` | Images are never transcribed, and a request can't turn it on. |
+
+With a provider and a mode other than `off`, an image without a transcript carries a one-line `Image not transcribed` marker, so an agent reading the result knows to ask for it. With `frontmatter=true`, `images_transcribed` reports the count as `<done>/<total>`.
+
+PullMD transcribes up to `PULLMD_EMBEDDED_IMAGES_MAX` images per post (default `4`, range `1` to `20`). Each new image costs one unit of `PULLMD_LLM_RATE_LIMIT` and one vision call. Transcripts are stored per image and reused for as long as cache retention keeps them.
+
+<Warning title="Transcribed text is third-party content">The text in an image can carry prompt injection. Treat a transcript like any other fetched page text.</Warning>
+
+## Reddit credentials
+
+PullMD reads Reddit through Reddit's Data API, with the credentials of an existing Reddit app. Without credentials, Reddit blocks the requests and PullMD returns `502` with `Reddit blocked the request.`
+
+<Warning title="Reddit is closing API access">Reddit stopped accepting new requests for API access on 2026-10-31, so a new app can't get credentials. Reddit says it starts removing access for unregistered apps and users on 2027-01-12 and closes public access for all remaining apps in March 2027 ([announcement](https://www.reddit.com/r/redditdev/comments/1wubcvf/)). PullMD's Reddit support ends with that access.</Warning>
+
+<Steps>
+  <Step title="Add the credentials to .env">
+    ```bash
+    REDDIT_CLIENT_ID=your-client-id
+    REDDIT_CLIENT_SECRET=your-client-secret
+    REDDIT_USER_AGENT=linux:pullmd:1.0 (by u/yourname)
+    ```
+
+    Reddit requires a unique user agent in this form: `platform:appname:version (by u/yourname)`
+  </Step>
+  <Step title="Restart">
+    ```bash
+    docker compose up -d
+    ```
+
+    PullMD then uses `oauth.reddit.com`.
+  </Step>
+</Steps>
+
+## Errors
+
+| Status | Message | Cause |
+| --- | --- | --- |
+| `400` | `Unsupported Reddit page: PullMD reads Reddit posts and subreddits, not …` | The link isn't a post, gallery or subreddit page. The JSON also has `"code": "reddit_unsupported_page"`. |
+| `404` | `Post not found` | The post was deleted or the link is wrong. |
+| `502` | `Reddit rate limit. Try again later.` | Too many requests. Slow down. |
+| `502` | `Reddit blocked the request.` | No credentials are set, or Reddit refused them. Nothing is cached. |
+| `500` | `Internal server error` | Reddit rejected the credentials or returned another unexpected status. |
+
+If the Hacker News API fails, PullMD reads the page as a normal web page, so a `502` from the page fetch can replace the API error.

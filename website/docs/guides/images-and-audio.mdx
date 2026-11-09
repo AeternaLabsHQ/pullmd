@@ -1,0 +1,90 @@
+---
+title: Images and audio
+description: Caption images and transcribe audio through any OpenAI-compatible model, cloud or local.
+---
+
+# Images and audio
+
+PullMD describes images and transcribes audio files, by URL or upload, using any OpenAI-compatible API. Without a configured model, it makes no outside calls and returns no caption or transcript.
+
+| Input | With a model | Without |
+| --- | --- | --- |
+| Image (PNG, JPEG, GIF, WebP, BMP, TIFF) | A text caption | Upload: the file name as a heading, no caption |
+| Audio (MP3, WAV, M4A, OGG, FLAC, AAC, WebM) | A transcript | Upload: the file name as a heading, no transcript |
+
+With a model, both run inside PullMD, without the MarkItDown sidecar. Without one, an upload of PNG, JPEG, MP3, WAV, or M4A goes through the MarkItDown sidecar and returns only the heading, and other formats return `502`.
+
+PullMD recognizes a file by its content type, or by its extension when the content type is empty or `application/octet-stream` (WebM is recognized by content type only). Images over 20 MB and audio over 25 MB skip the model and get the no-model result.
+
+## Configure a model
+
+To turn on captions or transcripts, set the key for that input.
+
+```bash
+# Image captions
+PULLMD_VISION_API_KEY=sk-...
+PULLMD_VISION_MODEL=gpt-4o-mini        # default
+
+# Audio transcripts
+PULLMD_STT_API_KEY=sk-...
+PULLMD_STT_MODEL=whisper-1             # default
+```
+
+Both use OpenAI's API unless you set a base URL. To use one key for both, set `PULLMD_LLM_API_KEY` (and `PULLMD_LLM_BASE_URL`). The per-input variables take precedence when both are set. Each input has its own model variable, because one model can't caption, transcribe, and run OCR.
+
+### Other providers
+
+To use another provider, point the base URL at it:
+
+| Provider | `…_BASE_URL` | Supports |
+| --- | --- | --- |
+| OpenAI | unset, or `https://api.openai.com/v1` | Images and audio |
+| Anthropic | `https://api.anthropic.com/v1` | Images |
+| Mistral | `https://api.mistral.ai/v1` | Images and audio |
+| Groq | `https://api.groq.com/openai/v1` | Images and audio |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | Images |
+| OpenRouter | `https://openrouter.ai/api/v1` | Images |
+| Ollama (local) | `http://localhost:11434/v1` | Images |
+
+Audio needs a provider that offers the `/audio/transcriptions` endpoint.
+
+<Warning title="Files sent to providers">Cloud providers receive the image or audio you convert. To keep files on your own hardware, use a local server such as Ollama or LM Studio. From inside Docker, `localhost` is the container itself, so use your host's address.</Warning>
+
+## Convert
+
+To convert by URL:
+
+```bash
+curl "http://localhost:3000/api?url=https://example.com/diagram.png"
+```
+
+To convert by upload:
+
+```bash
+curl -X POST "http://localhost:3000/api/file" \
+  -H "Content-Type: audio/mpeg" \
+  -H "X-Filename: standup.mp3" \
+  --data-binary @standup.mp3
+```
+
+When a model produces the result, `X-Source` is `image-caption` or `audio-transcript`.
+
+## Usage fields
+
+With `frontmatter=true`, results include the usage the provider reported, so you can track cost:
+
+| Field | When |
+| --- | --- |
+| `llm_model` | Caption, transcript, or [PDF OCR](/guides/documents#tables-in-pdfs-use-ocr) |
+| `llm_tokens` | Total tokens, when the provider reports them |
+| `llm_prompt_tokens`, `llm_completion_tokens` | Prompt and completion tokens, when the provider reports them |
+| `image_size` | Captions: `WIDTHxHEIGHT` in pixels, when PullMD can read it from the image header |
+| `audio_seconds` | Transcripts: length in seconds, when the provider reports a duration |
+
+PullMD doesn't calculate cost. Multiply the tokens by your provider's prices.
+
+## Hourly budget
+
+Captions, transcripts, and [PDF OCR](/guides/documents#tables-in-pdfs-use-ocr) share one budget: `PULLMD_LLM_RATE_LIMIT` requests per hour, default `30`, counted per signed-in user or, without sign-in, per client address. Over budget, the request gets the no-model result, which isn't cached, so a later request can still get the caption. Set `0` to turn the budget off.
+
+Behind a reverse proxy, set [`PULLMD_TRUST_PROXY`](/self-hosting/reverse-proxy). Without it, every visitor shares one budget.

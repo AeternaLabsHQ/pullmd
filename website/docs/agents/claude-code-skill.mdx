@@ -1,0 +1,59 @@
+---
+title: Claude Code skill
+description: Install the PullMD skill so Claude Code reads web pages, documents and videos through your instance.
+---
+
+# Claude Code skill
+
+The skill teaches Claude Code to read URLs with `curl` against your PullMD instance instead of its built-in fetch tool, and to fall back to the built-in tool when PullMD is unreachable. Your instance builds the bundle on request with its own address written in, so there's nothing to edit.
+
+Use the skill when you don't want to register an MCP server. With the [MCP server](/agents/mcp-server), you don't need the skill.
+
+## Install
+
+<Steps>
+  <Step title="Download the bundle from your instance">
+    ```bash
+    curl -O http://localhost:3000/pullmd.zip
+    ```
+
+    The address inside the bundle is your instance's `PUBLIC_URL`, or the host of the download request when `PUBLIC_URL` is unset. If you run PullMD behind a proxy, set `PUBLIC_URL` before you download, or the skill points at the wrong address.
+  </Step>
+  <Step title="Unzip it into your skills folder">
+    ```bash
+    mkdir -p ~/.claude/skills
+    unzip pullmd.zip -d ~/.claude/skills/
+    ```
+  </Step>
+  <Step title="Restart Claude Code">
+    The skill activates when you ask Claude Code to read, fetch or summarize a URL.
+  </Step>
+</Steps>
+
+## What the skill tells Claude Code
+
+- Call `GET /api?url=…` for web pages, Reddit and Hacker News threads, documents and YouTube videos.
+- Pass `query` when it needs one fact from a long page, to save context.
+- Use `POST /api/html` and `POST /api/file` for local files.
+- Use GitHub's CLI for GitHub URLs, and the built-in fetch for JSON APIs.
+- Fall back to the built-in fetch tool if PullMD fails.
+
+The bundle also contains a `PreToolUse` hook that asks Claude Code to use PullMD in place of its built-in `WebFetch`. The hook allows `WebFetch` for GitHub URLs, JSON API endpoints, and after a failed PullMD request.
+
+## Update
+
+To pick up a new version, download the zip again after you update PullMD and unzip it over the old copy.
+
+<Warning title="Upgrading from before v3">
+  The skill used to be called `web-reader`. Installing `pullmd.zip` doesn't remove it, so both would run side by side. Remove the old one first:
+
+  ```bash
+  rm -rf ~/.claude/skills/web-reader
+  ```
+
+  The old download address, `/web-reader.zip`, redirects to `/pullmd.zip`.
+</Warning>
+
+## With sign-in enabled
+
+The skill calls PullMD without credentials. On an instance with sign-in turned on, use the [MCP server](/agents/mcp-server) with an API key instead.
