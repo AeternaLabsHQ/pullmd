@@ -99,7 +99,7 @@ PULLMD_ALLOW_SIGNUP=false
 
 `/signup` then returns `404` and the login page drops its "create an account" link. Create accounts with the [admin commands](#admin-commands).
 
-<Note title="Compose files omit this setting">As of v3.18.2, the compose files don't pass `PULLMD_ALLOW_SIGNUP` to the container. Add `- PULLMD_ALLOW_SIGNUP=${PULLMD_ALLOW_SIGNUP:-}` to the `pullmd` service's `environment:` list. See [Installation](/self-hosting/installation#configure).</Note>
+<Note title="Compose files omit this setting">As of v3.19.0, the compose files don't pass `PULLMD_ALLOW_SIGNUP` to the container. Add `- PULLMD_ALLOW_SIGNUP=${PULLMD_ALLOW_SIGNUP:-}` to the `pullmd` service's `environment:` list. See [Installation](/self-hosting/installation#configure).</Note>
 
 ## Admin commands
 

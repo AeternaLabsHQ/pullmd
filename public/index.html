@@ -1288,7 +1288,7 @@
 
     <div class="loading" id="loading">
       <div class="spinner"></div>
-      <span data-i18n="loading">Lade Seite…</span>
+      <span id="loading-label" data-i18n="loading">Lade Seite…</span>
       <div id="status-line" style="font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 0.75rem; color: var(--fg-dim); margin-top: 0.5rem; min-height: 1em;"></div>
     </div>
 
@@ -1503,6 +1503,11 @@
           'err.empty':         'Leere Antwort vom Server.',
           'err.network':       'Netzwerkfehler: Server nicht erreichbar.',
           'err.deleteFailed':  'Löschen fehlgeschlagen.',
+          'upload.sending':    'Datei wird hochgeladen ({pct} %). Bitte App geöffnet lassen.',
+          'upload.processing': 'Hochgeladen, wird verarbeitet. Du kannst die App verlassen und später wiederkommen.',
+          'upload.resumed':    '"{name}" ist noch in Arbeit. Du kannst die App verlassen und später wiederkommen.',
+          'err.uploadInterrupted': 'Upload unterbrochen. Bitte die App während des Uploads geöffnet lassen und erneut versuchen.',
+          'err.jobGone':       'Das Ergebnis ist nicht mehr vorhanden (abgelaufen oder Server neu gestartet). Bitte die Datei erneut hochladen.',
           'drop.hint':         'Datei hier ablegen',
           'drop.affordance':   'Alternativ: Datei hierher ziehen oder auswählen',
           'drop.affordanceOpen': 'Alternativ: Datei auswählen',
@@ -1568,6 +1573,11 @@
           'err.empty':         'Empty response from server.',
           'err.network':       'Network error: server unreachable.',
           'err.deleteFailed':  'Delete failed.',
+          'upload.sending':    'Uploading file ({pct}%). Please keep the app open.',
+          'upload.processing': 'Uploaded, processing. You can leave the app and come back later.',
+          'upload.resumed':    '"{name}" is still being processed. You can leave the app and come back later.',
+          'err.uploadInterrupted': 'Upload interrupted. Keep the app open during the upload and try again.',
+          'err.jobGone':       'The result is no longer available (expired or server restarted). Please upload the file again.',
           'drop.hint':         'Drop file here',
           'drop.affordance':   'Alternatively: drag a file here or browse',
           'drop.affordanceOpen': 'Alternatively: choose a file',
@@ -1842,7 +1852,22 @@
         history.pushState({ pullmd: 'open' }, '', window.location.href);
       }
 
+      // The loading label is set programmatically during document uploads.
+      // Keep key + vars so a language switch re-renders the current text
+      // (same pattern as lastStatus for the status LED).
+      var loadingLabel = document.getElementById('loading-label');
+      var lastLoading = { key: 'loading', vars: null };
+      function setLoadingLabel(key, vars) {
+        lastLoading = { key: key, vars: vars || null };
+        // textContent only: vars can carry the user-controlled file name.
+        loadingLabel.textContent = t(key, vars);
+      }
+      window.addEventListener('langchange', function () {
+        loadingLabel.textContent = t(lastLoading.key, lastLoading.vars);
+      });
+
       function showLoading() {
+        setLoadingLabel('loading');
         loadingEl.classList.add('visible');
         errorEl.classList.remove('visible');
         resultContainer.classList.remove('visible');
@@ -2072,6 +2097,7 @@
         params.set('lang', getLang());
         if (clientMode) params.set('client_mode', clientMode);
 
+        abandonFileJob();
         pushOpenState();
         showLoading();
 
@@ -2314,6 +2340,7 @@
 
       function convertHtmlFile(file) {
         if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
+        abandonFileJob();
         pushOpenState();
         showLoading();
         var reader = new FileReader();
@@ -2353,43 +2380,184 @@
         reader.readAsText(file);
       }
 
+      // ---- Async document conversions ----
+      // A long conversion (audio transcription, OCR) outlives the app being in
+      // the foreground: on a phone the OS cuts an open request as soon as the
+      // user switches apps. So documents go out with async=1, the server
+      // answers 202 + job id, and the PWA picks the result up by polling,
+      // also after a reload. One tracked job at a time; the in-memory copy is
+      // authoritative, localStorage only carries it across reloads.
+      var FILE_JOB_KEY = 'pullmd-file-job';
+      var FILE_JOB_POLL_MS = 2000;
+      // A status request frozen by the OS while the app was in the background
+      // must not block the next check for long.
+      var FILE_JOB_FETCH_TIMEOUT_MS = 10000;
+      var uploadXhr = null;        // upload in flight, so a newer conversion can drop it
+      var fileJobTimer = null;
+      var fileJobChecking = false;
+      var fileJobCheckCtrl = null;   // AbortController of the status request in flight
+      var fileJob = readStoredFileJob();
+
+      function readStoredFileJob() {
+        try {
+          var job = JSON.parse(localStorage.getItem(FILE_JOB_KEY) || 'null');
+          return job && typeof job.id === 'string' ? { id: job.id, name: String(job.name || '') } : null;
+        } catch (e) { return null; }
+      }
+      function trackFileJob(job) {
+        fileJob = job;
+        try { localStorage.setItem(FILE_JOB_KEY, JSON.stringify(job)); } catch (e) {}
+      }
+      function forgetFileJob() {
+        fileJob = null;
+        try { localStorage.removeItem(FILE_JOB_KEY); } catch (e) {}
+      }
+      function deleteFileJob(id) {
+        fetch('/api/file/jobs/' + encodeURIComponent(id), { method: 'DELETE' }).catch(function () {});
+      }
+      function stopFileJobPolling() {
+        if (fileJobTimer) { clearInterval(fileJobTimer); fileJobTimer = null; }
+      }
+      // Idempotent: a second call never creates a second timer.
+      function startFileJobPolling() {
+        if (!fileJobTimer) fileJobTimer = setInterval(checkFileJob, FILE_JOB_POLL_MS);
+        checkFileJob();
+      }
+      // Starting any other conversion drops the tracked job and any upload
+      // still in flight.
+      function abandonFileJob() {
+        stopFileJobPolling();
+        abortFileJobCheck();
+        if (uploadXhr) { var xhr = uploadXhr; uploadXhr = null; xhr.abort(); }
+        if (fileJob) { deleteFileJob(fileJob.id); forgetFileJob(); }
+      }
+
+      // Drops the status request in flight; its result is then ignored.
+      function abortFileJobCheck() {
+        if (!fileJobCheckCtrl) return;
+        var stale = fileJobCheckCtrl;
+        fileJobCheckCtrl = null;
+        fileJobChecking = false;
+        stale.abort();
+      }
+
+      async function checkFileJob() {
+        if (!fileJob) { stopFileJobPolling(); return; }
+        if (fileJobChecking || document.visibilityState !== 'visible') return;
+        var job = fileJob;
+        var ctrl = new AbortController();
+        var timeout = setTimeout(function () { ctrl.abort(); }, FILE_JOB_FETCH_TIMEOUT_MS);
+        fileJobCheckCtrl = ctrl;
+        fileJobChecking = true;
+        try {
+          var res = await fetch('/api/file/jobs/' + encodeURIComponent(job.id), { cache: 'no-store', signal: ctrl.signal });
+          var d = res.ok ? await res.json() : null;
+          // Superseded by a fresh check, or the job was dropped or replaced
+          // meanwhile by another conversion: not ours to show.
+          if (fileJobCheckCtrl !== ctrl || fileJob !== job) return;
+          if (res.status === 401) {
+            // Keep the job: it is picked up again after login.
+            stopFileJobPolling();
+            location.href = '/login?next=' + encodeURIComponent('/');
+            return;
+          }
+          if (res.status === 404) {
+            stopFileJobPolling();
+            forgetFileJob();
+            // The result may arrive after the user went back: open a history
+            // entry again, so Back leaves the result instead of the app.
+            pushOpenState();
+            showError(t('err.jobGone'));
+            return;
+          }
+          if (!d) return;   // 429 or any other status: try again on the next tick
+          if (d.status !== 'done' && d.status !== 'error') return;   // pending: the loading view and its label stay as they are
+          pushOpenState();
+          if (d.status === 'done') {
+            if (!d.markdown || !d.markdown.trim()) showError(t('err.empty'));
+            else showResult(d.markdown, d.source || '', '', d.suggestedFilename || '');
+          } else {
+            showError(d.error || t('err.unknown', { code: d.httpStatus }));
+          }
+          stopFileJobPolling();
+          deleteFileJob(job.id);
+          forgetFileJob();
+        } catch (err) {
+          // Network failure, timeout or abort: stay quiet, the next tick tries again.
+        } finally {
+          clearTimeout(timeout);
+          // A superseded check leaves the flag to the check that replaced it.
+          if (fileJobCheckCtrl === ctrl) { fileJobCheckCtrl = null; fileJobChecking = false; }
+        }
+      }
+
+      // Timers are throttled or frozen while the app is in the background,
+      // so check at once when it comes back. A request still in flight may be
+      // one the OS froze: abort it and start a fresh one.
+      function recheckFileJob() {
+        if (!fileJobTimer || document.visibilityState !== 'visible') return;
+        abortFileJobCheck();
+        checkFileJob();
+      }
+      document.addEventListener('visibilitychange', recheckFileJob);
+      window.addEventListener('pageshow', recheckFileJob);
+
       function convertBinaryFile(file) {
         if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
+        abandonFileJob();
         pushOpenState();
         showLoading();
-        var reader = new FileReader();
-        reader.onerror = function () { showError(t('err.network')); };
-        reader.onload = async function () {
-          try {
-            var params = new URLSearchParams({ format: 'json' });
-            // Always fetch WITH frontmatter; the toggle swaps the view client-side.
-            params.set('frontmatter', 'true');
-            if (ocrToggle.checked && /\.pdf$/i.test(file.name || '')) params.set('pdf', 'ocr');
-            params.set('lang', window.PullMD.getLang());
-            var res = await fetch('/api/file?' + params.toString(), {
-              method: 'POST',
-              headers: {
-                'Content-Type': file.type || 'application/octet-stream',
-                'X-Client-Mode': clientMode,
-                'X-Filename': encodeURIComponent(file.name),
-              },
-              body: reader.result,
-            });
-            if (!res.ok) {
-              if (res.status === 401) { location.href = '/login?next=' + encodeURIComponent('/'); return; }
-              var msg = t('err.unknown', { code: res.status });
-              try { var body = await res.json(); if (body.error) msg = body.error; } catch (_) {}
-              showError(msg);
-              return;
-            }
-            var d = await res.json();
-            if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
-            showResult(d.markdown, d.source || '', '', res.headers.get('X-Suggested-Filename') || '');
-          } catch (err) {
-            showError(t('err.network'));
-          }
+        setLoadingLabel('upload.sending', { pct: 0 });
+        var params = new URLSearchParams({ format: 'json' });
+        // Always fetch WITH frontmatter; the toggle swaps the view client-side.
+        params.set('frontmatter', 'true');
+        if (ocrToggle.checked && /\.pdf$/i.test(file.name || '')) params.set('pdf', 'ocr');
+        params.set('lang', window.PullMD.getLang());
+        // 202 + job id, or a plain 200 with the full result when the server
+        // runs the conversion synchronously after all.
+        params.set('async', '1');
+        // XHR rather than fetch: only XHR reports upload progress.
+        var xhr = new XMLHttpRequest();
+        uploadXhr = xhr;
+        xhr.open('POST', '/api/file?' + params.toString());
+        xhr.setRequestHeader('Content-Type', file.type || 'application/octet-stream');
+        xhr.setRequestHeader('X-Client-Mode', clientMode);
+        xhr.setRequestHeader('X-Filename', encodeURIComponent(file.name));
+        xhr.upload.onprogress = function (e) {
+          if (uploadXhr !== xhr || !e.lengthComputable) return;
+          setLoadingLabel('upload.sending', { pct: Math.floor(e.loaded / e.total * 100) });
         };
-        reader.readAsArrayBuffer(file);
+        xhr.onload = function () {
+          if (uploadXhr !== xhr) return;
+          uploadXhr = null;
+          var d = null;
+          try { d = JSON.parse(xhr.responseText); } catch (_) {}
+          if (xhr.status === 202) {
+            if (!d || typeof d.jobId !== 'string') { pushOpenState(); showError(t('err.unknown', { code: xhr.status })); return; }
+            trackFileJob({ id: d.jobId, name: file.name || '' });
+            setLoadingLabel('upload.processing');
+            startFileJobPolling();
+            return;
+          }
+          if (xhr.status === 401) { location.href = '/login?next=' + encodeURIComponent('/'); return; }
+          // The answer may arrive after the user went back: open a history
+          // entry again, so Back leaves the result instead of the app.
+          pushOpenState();
+          if (xhr.status >= 200 && xhr.status < 300) {
+            if (!d) { showError(t('err.network')); return; }
+            if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
+            showResult(d.markdown, d.source || '', '', xhr.getResponseHeader('X-Suggested-Filename') || '');
+            return;
+          }
+          showError((d && d.error) || t('err.unknown', { code: xhr.status }));
+        };
+        xhr.onerror = xhr.onabort = function () {
+          if (uploadXhr !== xhr) return;
+          uploadXhr = null;
+          pushOpenState();
+          showError(t('err.uploadInterrupted'));
+        };
+        xhr.send(file);
       }
 
       // --- File picker: same conversion path as drop, works on mobile + desktop (#28) ---
@@ -2893,6 +3061,16 @@
         hideLoading();
       }
       window.addEventListener('popstate', function() { goHome(); });
+
+      // Resume a document conversion that was still running when the app was
+      // left or reloaded. Before checkHash(): a shared URL then supersedes it.
+      // A finished job shows its markdown at once, with nothing in between.
+      if (fileJob) {
+        pushOpenState();
+        showLoading();
+        setLoadingLabel('upload.resumed', { name: fileJob.name });
+        startFileJobPolling();
+      }
 
       checkHash();
       window.addEventListener('hashchange', checkHash);

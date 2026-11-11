@@ -11,6 +11,12 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+## [3.19.0] - 2026-11-11
+
+### Added
+
+- **File conversions that survive leaving the web app.** A mobile OS cuts the open `POST /api/file` request when the app goes to the background, so a long conversion (audio transcription, PDF OCR) ended in "Network error: server unreachable." while the server finished the work and discarded the result. `POST /api/file?async=1` now answers `202` with a job id and converts in the background; `GET /api/file/jobs/{id}` returns the state or the finished Markdown and `DELETE` removes it. The web app shows upload progress, says when it is safe to leave, remembers the job and shows the result on return. The uploaded file is never stored; the finished result waits in memory for up to 60 minutes (`PULLMD_FILE_JOB_TTL_MINUTES`, `0` turns async jobs off) within `PULLMD_FILE_JOB_MAX_MB` (64). When a job cannot be queued the request is converted synchronously, so a client that sends `async=1` handles both `202` and `200`. `/api/file` without `async` is unchanged. With sign-in enabled a job belongs to the account that created it; without sign-in the 128-bit job id is the only credential, as with share links (`SECURITY.md`).
+
 ### Fixed
 
 - **MCP `get_share` refreshes a Hacker News share through the Hacker News extractor.** A share row older than one hour was refreshed through the web pipeline, so the share lost its comments and came back as `source: web`. `GET /s/:id` already did this right; both now use the same refresh logic for Reddit, Hacker News and web pages.

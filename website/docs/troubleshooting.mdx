@@ -31,7 +31,7 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     Sign-in is on and the request had no valid credentials. Send an API key as `Authorization: Bearer pmd_…` (create one under **Settings** in the web app). A key from another instance, or one that was revoked, gives the same error. See [Authentication](/self-hosting/authentication#api-keys).
   </Accordion>
   <Accordion title="A setting in .env has no effect">
-    The compose files (`docker-compose.yml` and `docker-compose.traefik.yml`) pass variables to the container one by one. As of v3.18.2, `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` aren't in the list. Add a line such as `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service.
+    The compose files (`docker-compose.yml` and `docker-compose.traefik.yml`) pass variables to the container one by one. As of v3.19.0, `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` aren't in the list. Add a line such as `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service.
 
     Check what the container received:
 
@@ -45,6 +45,43 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     `Failed to convert file: markitdown sidecar unavailable or could not convert this document` (upload) or `Failed to extract page: markitdown sidecar unavailable or could not convert this document` (URL) means the MarkItDown sidecar is down, not configured, or couldn't read the file. Check `/api/status`, then `docker compose logs markitdown`.
 
     Uploads over 25 MB return `413`. A URL whose body exceeds `PULLMD_MAX_FETCH_BYTES` (50 MB by default) returns `502` with `response larger than the 50 MB limit`.
+  </Accordion>
+  <Accordion title="Upload interrupted, or Network error: server unreachable after switching apps">
+    ```text
+    Upload interrupted. Keep the app open during the upload and try again.
+    ```
+
+    The browser cut the upload off before it finished, usually because you switched to another app while the file was still uploading. A cut upload can't resume. Upload the file again and keep the app open until it shows `Uploaded, processing. You can leave the app and come back later.` Once the upload is done, you can leave the app: the conversion keeps running on the server.
+
+    A document upload that is cut off shows `Upload interrupted...` as above. `Network error: server unreachable.` appears when a saved HTML file upload or a URL conversion was cut the same way. Start it again and keep the app open until the result shows. See [Leave the app during a long conversion](/guides/documents#leave-the-app-during-a-long-conversion).
+  </Accordion>
+  <Accordion title="The result is no longer available">
+    ```text
+    The result is no longer available (expired or server restarted). Please upload the file again.
+    ```
+
+    The web app asked for the result of a file you uploaded earlier, and the server answered `404`. The server holds a result in memory for 60 minutes by default (`PULLMD_FILE_JOB_TTL_MINUTES`), drops it when you delete it or to make room for a newer result of the same user or address, and loses it when PullMD restarts. With sign-in on, another account's job also gives `404`. Upload the file again. To keep results longer, raise `PULLMD_FILE_JOB_TTL_MINUTES`. See [Configuration](/reference/configuration#async-file-conversions).
+  </Accordion>
+  <Accordion title="Conversion timed out">
+    ```text
+    Conversion timed out. / Konvertierung abgebrochen (Zeitlimit).
+    ```
+
+    An upload sent with `async=1` was still converting after 15 minutes, so the server gave up waiting for it. The web app shows this message. The usual cause is a long audio file or a slow transcription, OCR or MarkItDown backend. Check `/api/status` and the logs of the service that converts the file type, then upload again, or split a long recording into shorter parts.
+  </Accordion>
+  <Accordion title="Result too large to hold for pickup">
+    ```text
+    Result too large to hold for pickup, upload again. / Ergebnis zu groß zum Bereithalten, bitte erneut hochladen.
+    ```
+
+    The conversion of an `async=1` upload finished, but its result did not fit into the memory for held results. One user or address may hold at most a quarter of `PULLMD_FILE_JOB_MAX_MB` (16 MB of 64 MB by default), and all results together at most `PULLMD_FILE_JOB_MAX_MB`. Delete results you have already fetched, raise `PULLMD_FILE_JOB_MAX_MB`, or call `/api/file` without `async`, which returns the result in the same request. See [Configuration](/reference/configuration#async-file-conversions).
+  </Accordion>
+  <Accordion title="Job not found or expired">
+    ```text
+    Job not found or expired. / Auftrag nicht gefunden oder abgelaufen.
+    ```
+
+    `GET` or `DELETE /api/file/jobs/{id}` answered `404`: no job has this id, its result passed the retention time (`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default) or was dropped to make room for a newer result of the same user or address, it was already deleted, PullMD restarted, or, with sign-in on, the job belongs to another account. Upload the file again. To keep results longer, raise `PULLMD_FILE_JOB_TTL_MINUTES`.
   </Accordion>
   <Accordion title="YouTube returns the page text but no transcript">
     The YouTube tier is off by default. Set `MARKITDOWN_YOUTUBE=true` in `.env` and run `docker compose up -d` (a plain `restart` doesn't re-read `.env`). If `X-Transcript-Status` is `blocked`, YouTube is rate-limiting your server's IP; retry later or set `MARKITDOWN_YT_PROXY`. See [YouTube transcripts](/guides/youtube).

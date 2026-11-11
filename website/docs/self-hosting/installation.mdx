@@ -41,7 +41,7 @@ PUBLIC_URL=https://pullmd.example.com
 The compose file passes each variable to the container through its own line. Use the downloaded compose file. The shorter version in the README doesn't pass settings beyond the basics to PullMD.
 
 <Warning title="Seven settings need an extra line">
-  `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` are not in the compose file's list as of v3.18.2, so setting them in `.env` alone has no effect. Add the ones you use to the `environment:` list of the `pullmd` service:
+  `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` are not in the compose file's list as of v3.19.0, so setting them in `.env` alone has no effect. Add the ones you use to the `environment:` list of the `pullmd` service:
 
   ```yaml
   services:
@@ -75,7 +75,7 @@ The Playwright sidecar saves the most space: it adds about 3.7 GB of browser bin
 `:latest` follows the newest release. To upgrade only when you choose, pin a version on all four images, for example:
 
 ```yaml
-image: aeternalabshq/pullmd:3.18.2
+image: aeternalabshq/pullmd:3.19.0
 ```
 
 `aeternalabshq/pullmd:2` stays on the last 2.x release. See [Upgrading](/self-hosting/upgrading).

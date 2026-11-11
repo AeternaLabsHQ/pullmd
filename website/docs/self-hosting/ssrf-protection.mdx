@@ -47,7 +47,7 @@ PULLMD_ALLOWED_HOSTS=10.0.5.0/24,wiki.internal
 
 Entries are CIDR ranges, single IP addresses, or exact host names (matched case-insensitively, on any port, with no subdomain matching), separated by commas. A host-name entry skips the address checks, so list only names you control. Malformed CIDR entries are dropped without a warning. Empty (the default) blocks every internal address. PullMD passes the list to the Playwright sidecar with each render, so you set it in one place.
 
-<Note title="Compose files omit this setting">As of v3.18.2, the compose files don't pass `PULLMD_ALLOWED_HOSTS` to the container. Add `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service's `environment:` list. See [Installation](/self-hosting/installation#configure).</Note>
+<Note title="Compose files omit this setting">As of v3.19.0, the compose files don't pass `PULLMD_ALLOWED_HOSTS` to the container. Add `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service's `environment:` list. See [Installation](/self-hosting/installation#configure).</Note>
 
 ## Known limit
 

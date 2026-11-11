@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: PullMD API
-  version: 3.18.2
+  version: 3.19.0
   license:
     name: AGPL-3.0-or-later
     url: https://github.com/AeternaLabsHQ/pullmd/blob/main/LICENSE
@@ -118,6 +118,12 @@ components:
       in: query
       description: Original file name. Prefer the `X-Filename` header, which stays out of proxy access logs.
       schema: { type: string }
+    fileJobId:
+      name: id
+      in: path
+      required: true
+      description: The `jobId` from the `202` answer of `POST /api/file?async=1`, 32 lowercase hex characters.
+      schema: { type: string, pattern: '^[0-9a-f]{32}$' }
     xFilename:
       name: X-Filename
       in: header
@@ -222,6 +228,23 @@ components:
             sectionsSelected: { type: integer, description: 'Number of page sections returned. `0` when the whole page came back.' }
             originalTokens: { type: integer, description: Estimated tokens of the whole page (characters divided by 4). }
             returnedTokens: { type: integer, description: Estimated tokens of the returned Markdown. }
+    FileJobCreated:
+      type: object
+      properties:
+        jobId: { type: string, description: '32 lowercase hex characters. Use it in `GET /api/file/jobs/{id}`.' }
+        status: { type: string, enum: [pending] }
+    FileJob:
+      type: object
+      description: 'State of an async file job. `done` carries the fields of the `format=json` conversion, with `shareId` always `null`.'
+      properties:
+        status: { type: string, enum: [pending, done, error] }
+        markdown: { type: string, description: 'With `done`: the converted Markdown, including the frontmatter block when `frontmatter=true` was sent.' }
+        metadata: { type: object, nullable: true, description: 'With `done`: the same object as `metadata` in [`Conversion`](/reference/api/convert/convert-a-file).' }
+        source: { type: string, description: 'With `done`: which extractor produced the result. Same values as the `X-Source` header.' }
+        shareId: { type: string, nullable: true, description: 'With `done`: always `null`, because uploads are not cached.' }
+        suggestedFilename: { type: string, description: 'With `done`: a download file name for the result.' }
+        error: { type: string, description: 'With `error`: what went wrong, at most 500 characters.' }
+        httpStatus: { type: integer, description: 'With `error`: the status the same conversion would have returned without `async`: `422` or `502`. `504` when the job was still pending after 15 minutes, `507` when the result was too large to hold.' }
     ServiceStatus:
       type: object
       properties:
@@ -495,7 +518,9 @@ paths:
       description: |
         Converts an uploaded file. Send the raw bytes as the request body with `Content-Type` set to the file's type. PullMD reads the raw body and doesn't decode multipart forms.
 
-        PDF, Word, PowerPoint, Excel, EPUB and ZIP files need the MarkItDown sidecar. PullMD reads e-mail, saved pages, text, subtitles, OpenDocument, RTF, calendars, contacts, data files, feeds, notebooks and source code itself; see [Documents](/guides/documents#upload-formats-pullmd-reads-itself). Images and audio go to a vision or speech-to-text provider when one is configured, and to the MarkItDown sidecar otherwise. Without `MARKITDOWN_URL`, that request fails with `502`. Nothing is cached: no history entry and no share link.
+        PDF, Word, PowerPoint, Excel, EPUB and ZIP files need the MarkItDown sidecar. PullMD reads e-mail, saved pages, text, subtitles, OpenDocument, RTF, calendars, contacts, data files, feeds, notebooks and source code itself; see [Documents](/guides/documents#upload-formats-pullmd-reads-itself). Images and audio go to a vision or speech-to-text provider when one is configured, and to the MarkItDown sidecar otherwise. Without `MARKITDOWN_URL`, that request fails with `502`. The uploaded file is never stored, and nothing is cached: no history entry and no share link.
+
+        Add `async=1` to leave the conversion running on the server and fetch the result later. The server answers `202` with a job id, and you collect the result from [`GET /api/file/jobs/{id}`](/reference/api/convert/get-an-async-file-result). The result is held in memory for up to 60 minutes by default (`PULLMD_FILE_JOB_TTL_MINUTES`) or until you delete it, and a restart loses it. The server cannot always queue a job: when async jobs are off (`PULLMD_FILE_JOB_TTL_MINUTES=0`), 100 jobs are already held, your user or address already holds 3, or half of the result memory (`PULLMD_FILE_JOB_MAX_MB`, 32 MB of 64 MB by default) is in use, it converts the file in the same request and answers `200` as it does without `async`. Handle both `202` and `200`.
       security: [{}, { bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/xFilename'
@@ -507,6 +532,10 @@ paths:
           in: query
           description: Language of the labels PullMD writes into e-mail, calendar, contact, notebook, data file and OpenDocument output. `en` gives English, and any other value gives German.
           schema: { type: string, enum: [de, en], default: de }
+        - name: async
+          in: query
+          description: 'Only `1` and `true` request a job: the file converts in the background and the server answers `202` with a job id, when it can queue the job. Any other value converts in the request. The result is JSON whatever `format` says; `format` is ignored for async jobs.'
+          schema: { type: string }
         - $ref: '#/components/parameters/client_mode'
         - $ref: '#/components/parameters/xClientMode'
       requestBody:
@@ -540,6 +569,16 @@ paths:
               schema: { type: string, description: 'With `format=text`: the content with the Markdown syntax removed.' }
             application/json:
               schema: { $ref: '#/components/schemas/Conversion' }
+        '202':
+          description: 'With `async=1`, the file is converting in the background. Fetch the result with `GET /api/file/jobs/{id}`.'
+          headers:
+            Cache-Control:
+              description: Always `no-store`.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileJobCreated' }
+              example: { jobId: 2f2f4a7b37f071b7e3137d42eb9dbec3, status: pending }
         '401':
           description: Sign-in is enabled and no valid API key or session was sent.
           headers:
@@ -572,6 +611,97 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: 'Failed to convert file: markitdown sidecar unavailable or could not convert this document' }
+  /api/file/jobs/{id}:
+    get:
+      tags: [Convert]
+      operationId: getFileJob
+      summary: Get an async file result
+      description: |
+        Returns the state of a job started with `POST /api/file?async=1`. Poll until `status` is `done` or `error`. Fetching a finished result doesn't remove it: it stays until you call `DELETE /api/file/jobs/{id}` or the retention time passes (`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default), except that when your share of the result memory (a quarter of `PULLMD_FILE_JOB_MAX_MB`, 16 MB by default) or the total result memory is used up, your older finished results are dropped first to make room for a new one. A job that is still `pending` after 15 minutes becomes an `error` with `httpStatus` `504`.
+
+        With sign-in enabled, a job belongs to the account that started it, and any other account gets `404`. Without sign-in, the job id is the only credential. Every response carries `Cache-Control: no-store`.
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/fileJobId'
+      responses:
+        '200':
+          description: The job is pending, done or failed. The `status` field tells which.
+          headers:
+            Cache-Control:
+              description: Always `no-store`.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FileJob' }
+              examples:
+                pending:
+                  summary: Still converting
+                  value: { status: pending }
+                done:
+                  summary: Converted
+                  value: { status: done, markdown: "# report.pdf\n\nRelease checklist\n\n…", metadata: { title: report.pdf, quality: 0.8 }, source: markitdown, shareId: null, suggestedFilename: report.md }
+                error:
+                  summary: Conversion failed
+                  value: { status: error, error: 'Failed to convert file: markitdown sidecar unavailable or could not convert this document', httpStatus: 502 }
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '404':
+          description: No job has this id, it expired, it was deleted, or it belongs to another account. All four give the same answer. A malformed id gives it too.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Job not found or expired. / Auftrag nicht gefunden oder abgelaufen. }
+        '429':
+          description: Too many unknown job ids from your address (more than 120 a minute). Only ids that don't exist count toward the limit, so polling your own job is never throttled.
+          headers:
+            Retry-After:
+              description: Seconds until the address can try again.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: rate_limited }
+    delete:
+      tags: [Convert]
+      operationId: deleteFileJob
+      summary: Delete an async file result
+      description: 'Removes a job and its result from memory. Call it after you have the result. A job that is still converting is gone for `GET` and `DELETE` at once and its result is discarded, but it counts toward the 3 jobs of your user or address until the conversion ends. Every response carries `Cache-Control: no-store`.'
+      security: [{}, { bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/fileJobId'
+      responses:
+        '204':
+          description: The job is deleted.
+        '401':
+          description: Sign-in is enabled and no valid API key or session was sent.
+          headers:
+            WWW-Authenticate: { $ref: '#/components/headers/WWW-Authenticate' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Authentication required }
+        '404':
+          description: No job has this id, it expired, it was already deleted, or it belongs to another account.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Job not found or expired. / Auftrag nicht gefunden oder abgelaufen. }
+        '429':
+          description: Too many unknown job ids from your address (more than 120 a minute).
+          headers:
+            Retry-After:
+              description: Seconds until the address can try again.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: rate_limited }
   /api/stream:
     get:
       tags: [Convert]
@@ -934,7 +1064,7 @@ paths:
               schema: { $ref: '#/components/schemas/Status' }
               example: 
                 ok: true
-                version: 3.18.2
+                version: 3.19.0
                 services:
                   trafilatura: { status: ok, latencyMs: 7 }
                   playwright: { status: ok, latencyMs: 67 }
@@ -946,7 +1076,7 @@ paths:
               schema: { $ref: '#/components/schemas/Status' }
               example: 
                 ok: false
-                version: 3.18.2
+                version: 3.19.0
                 services:
                   trafilatura: { status: ok, latencyMs: 7 }
                   playwright: { status: down, error: unreachable }

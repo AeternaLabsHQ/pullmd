@@ -7,7 +7,7 @@ description: Every PullMD environment variable, grouped by what it controls, wit
 
 PullMD is configured with environment variables. With Docker Compose, put them in a `.env` file next to `docker-compose.yml` and run `docker compose up -d` to apply them. Every variable is optional unless marked.
 
-<Warning title="Compose passthrough">`PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` (marked † below) aren't passed through by the compose files as of v3.18.2. Add a line for each one you use to the `pullmd` service's `environment:` list, for example `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}`.</Warning>
+<Warning title="Compose passthrough">`PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` (marked † below) aren't passed through by the compose files as of v3.19.0. Add a line for each one you use to the `pullmd` service's `environment:` list, for example `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}`.</Warning>
 
 ## Server
 
@@ -106,6 +106,19 @@ There is no `PULLMD_LLM_MODEL`: the shared `PULLMD_LLM_*` settings cover the key
 | `REDDIT_USER_AGENT` | `PullMD/1.0 (URL-to-Markdown service)` | Reddit requires a unique user agent: `platform:appname:version (by u/yourname)`. |
 | `PULLMD_REDDIT_MORE_REQUESTS` | `20` with credentials, `5` without | Extra Reddit requests per conversion to load collapsed comments with `comment_depth=all`. Maximum `200`, and `0` turns the loading off. |
 
+## Async file conversions
+
+Set on the `pullmd` service. These control the results that `POST /api/file?async=1` holds in memory. See [Documents](/guides/documents#leave-the-app-during-a-long-conversion).
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PULLMD_FILE_JOB_TTL_MINUTES` | `60` | Minutes a finished result waits for pickup before PullMD drops it. `0` turns async jobs off, and every upload is then converted in the request. A non-numeric value uses `60`. |
+| `PULLMD_FILE_JOB_MAX_MB` | `64` | Memory in MB that all held results may use together. One user or address may hold at most a quarter of it, and while half of it is in use, uploads are converted in the request. `0` or a non-numeric value uses `64`. |
+
+A client holds at most 3 jobs at once, counted per signed-in user or, without sign-in, per client address. Behind a reverse proxy without [`PULLMD_TRUST_PROXY`](/self-hosting/reverse-proxy), all anonymous clients share one address and so one limit, and the extra uploads are converted in the request.
+
+With the default of 64 MB, one user or address holds at most 16 MB of results. When a new result would go over that share or over the total, that client's older finished results are dropped first, oldest first; results of other clients are never dropped. Once 32 MB of results are held, `POST /api/file?async=1` converts in the request and answers `200`.
+
 ## Document sidecar limits
 
 Set on the `markitdown` service.
@@ -128,6 +141,9 @@ PullMD enforces these limits, and none has a setting:
 | Login attempts | 10 per minute per address |
 | Signups | 5 per hour per address |
 | Unknown share-link lookups | 120 per minute per address |
+| Unknown async file job lookups | 120 per minute per address |
+| Async file jobs held | 100 in total, 3 per user or address |
+| Async file job still pending | Fails after 15 minutes |
 | OAuth authorization (`/oauth/authorize`, `/oauth/consent`) | 60 per minute per address |
 | OAuth token requests (`/oauth/token`, `/oauth/revoke`) | 60 per minute per address |
 | OAuth client registrations (`/oauth/register`) | 10 per hour per address |

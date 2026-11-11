@@ -168,14 +168,16 @@ Errors are JSON with an `error` message for every `format`:
 
 `/api/stream` is the exception: once the event stream has started, an error arrives as an `error` event whose data holds a `message`.
 
+A file uploaded with `async=1` answers `202` with a job id, and a failed conversion shows up in the body of `GET /api/file/jobs/{id}` as `status: "error"` with an `httpStatus`, not as the status of that response. See [Documents](/guides/documents#leave-the-app-during-a-long-conversion).
+
 | Status | When |
 | --- | --- |
 | `400` | Missing or invalid parameter, empty upload, or a Reddit page that isn't a post or subreddit |
 | `401` | Sign-in is on and no valid credentials were sent |
 | `403` | URL blocked by [SSRF protection](/self-hosting/ssrf-protection), a URL that can't be parsed or isn't `http` or `https` on `GET /api`, or history and deletes refused by `DISABLE_PUBLIC_HISTORY` |
-| `404` | Share link, cache entry or Reddit post not found |
+| `404` | Share link, cache entry, Reddit post or async file job not found |
 | `413` | Upload too large |
 | `422` | Uploaded HTML has almost no content, or an uploaded file doesn't match its format |
-| `429` | Rate limit reached. Share-link lookups send a `Retry-After` header. |
+| `429` | Rate limit reached. Share-link and async file job lookups send a `Retry-After` header. |
 | `500` | Unexpected Reddit error, or extraction failed on `POST /api/html` |
 | `502` | The source or a sidecar failed. On `GET /api`, a site behind a bot-protection challenge adds `"code": "bot_challenge"` and the challenge's `vendor` to the body. |
