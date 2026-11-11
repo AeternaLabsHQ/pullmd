@@ -56,6 +56,18 @@ To authenticate scripts and agents, create an API key:
      -H "Authorization: Bearer <api-key>"
    ```
 
+To create a key from a script, sign in with a form post, keep the session cookie, and post to `/api/keys`:
+
+```bash
+curl -s -c cookies.txt -X POST https://pullmd.example.com/login \
+  -d "email=you@example.com" -d "password=<admin-password>"
+
+curl -s -b cookies.txt -X POST https://pullmd.example.com/api/keys \
+  -H "Accept: application/json" -d "label=ci"
+```
+
+The login returns `302` with a `pullmd_session` cookie, or `401` for a wrong email or password. With `Accept: application/json`, `/api/keys` returns `{"key":"pmd_..."}`, and `label` is optional. Without that header, it redirects to `/settings`. A login request that carries an `Origin` header from another host gets `403`.
+
 Keys look like `pmd_` followed by 32 letters and digits. PullMD stores only a hash. To revoke a key, open `/settings`.
 
 claude.ai and Claude Desktop sign in with [OAuth](/agents/claude-ai-connector), because they can't send a header.

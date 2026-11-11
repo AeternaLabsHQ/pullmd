@@ -15,6 +15,8 @@ The share id is in the `X-Share-Id` header (or `shareId` with `format=json`):
 X-Share-Id: 2f2f4a7b37f071b7e3137d42eb9dbec3
 ```
 
+PullMD creates the share id when it caches the conversion, so every cached conversion has one and you do nothing to request it. The share URL is your instance's base URL, then `/s/`, then the id. For an instance at `https://pullmd.example.com`, that is `https://pullmd.example.com/s/2f2f4a7b37f071b7e3137d42eb9dbec3`. The REST API returns the id only (`X-Share-Id`, `shareId`, and `share_id` with `frontmatter=true`), so you build the URL yourself. The MCP tools return a ready-made `share_url` built from `PUBLIC_URL` (default `http://localhost:<PORT>`, trailing slash removed). The web app builds the link from the address in your browser.
+
 To open the share link, request `/s/<id>`:
 
 ```bash

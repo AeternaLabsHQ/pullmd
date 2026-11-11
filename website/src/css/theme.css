@@ -737,3 +737,6 @@ html.docs-doc-page .ds-page-footer { display: none; }
 .ds-not-found p { color: var(--ds-text-muted); }
 .ds-not-found__search { margin: 1.5rem 0 1.25rem; }
 .ds-not-found__links { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; font-weight: 500; }
+
+/* Note for AI agents at the top of every page (src/theme/Root.tsx): hidden on screen, present in the HTML. */
+.llms-directive { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }

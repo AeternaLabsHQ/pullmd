@@ -12,9 +12,9 @@ PullMD describes images and transcribes audio files, by URL or upload, using any
 | Image (PNG, JPEG, GIF, WebP, BMP, TIFF) | A text caption | Upload: the file name as a heading, no caption |
 | Audio (MP3, WAV, M4A, OGG, FLAC, AAC, WebM) | A transcript | Upload: the file name as a heading, no transcript |
 
-With a model, both run inside PullMD, without the MarkItDown sidecar. Without one, an upload of PNG, JPEG, MP3, WAV, or M4A goes through the MarkItDown sidecar and returns only the heading, and other formats return `502`. An image or audio URL without a model returns the file's raw bytes as text below a heading with the host name.
+With a model, both run inside PullMD, without the MarkItDown sidecar. Without one, an upload of PNG, JPEG, MP3, WAV, or M4A goes through the MarkItDown sidecar and returns only the heading, and other formats return `502`. An image or audio URL without a model returns no caption or transcript. A PNG, JPEG, WebP or BMP image gives a heading with the file name and size and an image link. Other files give a heading with the host name, and some formats, such as GIF, MP3 and OGG, add the file's raw bytes as text.
 
-PullMD recognizes a file by its content type, or by its extension when the content type is empty or `application/octet-stream` (WebM is recognized by content type only). Images over 20 MB and audio over 25 MB skip the model and get the no-model result.
+PullMD recognizes a file by its content type, or by its extension when the content type is empty or `application/octet-stream` (WebM is recognized by content type only). Images over 20 MB, and audio URLs over 25 MB, skip the model and get the no-model result. An audio upload over 25 MB is refused with `413` `File too large (max 25 MB)`, the [upload limit](/guides/documents).
 
 ## Configure a model
 

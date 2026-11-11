@@ -134,15 +134,84 @@ function sliceSpec(spec, method, opPath) {
   return out;
 }
 
-// Generated API operation -> Markdown: a short header, then the operation's slice of the spec,
-// the same source the rendered page is generated from.
-function operationToMarkdown(op, spec, yaml) {
+// Type label as the rendered page shows it (src/components/api/ApiOperation.tsx).
+function typeLabel(s) {
+  if (!s) return '';
+  if (s.oneOf || s.anyOf) return Array.from(new Set((s.oneOf || s.anyOf).map(typeLabel).filter(Boolean))).join(' | ');
+  const t = Array.isArray(s.type) ? s.type.filter((x) => x !== 'null').join(' | ') : s.type ?? (s.properties ? 'object' : '');
+  if (t === 'array') return `${typeLabel(s.items) || 'any'}[]`;
+  return s.format ? `${t}<${s.format}>` : t;
+}
+
+// One field as a list item, in the order the rendered page shows it: name and type, the
+// description, then default, options, range, length and example.
+function fieldToMarkdown(name, s = {}, { required, location } = {}) {
+  const meta = [typeLabel(s), location, required && 'required', s.deprecated && 'deprecated', s.readOnly && 'read-only'].filter(Boolean);
+  const L = [`- \`${name}\`${meta.length ? ` (${meta.join(', ')})` : ''}`];
+  if (s.description) L.push(...s.description.trim().split('\n').map((l) => (l ? `  ${l}` : '')));
+  const extra = [];
+  if (s.default !== undefined) extra.push(`Default: \`${JSON.stringify(s.default)}\``);
+  if (s.enum) extra.push(`Available options: ${s.enum.map((v) => `\`${v}\``).join(' ')}`);
+  if (s.minimum !== undefined || s.maximum !== undefined) extra.push(`Range: \`${s.minimum ?? '−∞'} ≤ x ≤ ${s.maximum ?? '∞'}\``);
+  if (s.minLength !== undefined || s.maxLength !== undefined) extra.push(`Length: \`${s.minLength ?? 0}–${s.maxLength ?? '∞'}\``);
+  if (s.example !== undefined && typeof s.example !== 'object') extra.push(`Example: \`${s.example}\``);
+  for (const e of extra) L.push('', `  ${e}`);
+  return L.join('\n');
+}
+
+function schemaFieldsToMarkdown(schema) {
+  if (!schema) return [];
+  const s = schema.items?.properties ? schema.items : schema;
+  if (!s.properties) return [fieldToMarkdown(typeLabel(schema) || 'body', schema)];
+  return Object.entries(s.properties).map(([k, v]) => fieldToMarkdown(k, v, { required: s.required?.includes(k) }));
+}
+
+// The sections of the rendered API page, as Markdown: description, authorization, parameters,
+// body, response and response headers.
+function operationBody(op) {
+  const L = [];
+  const section = (title, items, intro = []) => {
+    if (!items.length && !intro.length) return;
+    L.push(`## ${title}`, '', ...intro.flatMap((x) => [x, '']), ...items.flatMap((x) => [x, '']));
+  };
+  if (op.deprecated) L.push('> **Warning:** This endpoint is deprecated.', '');
+  if (op.description) L.push(op.description.trim(), '');
+  section('Authorizations', (op.security || []).map((s) => (s.type === 'http' && s.scheme === 'bearer'
+    ? fieldToMarkdown('Authorization', { type: 'string', description: s.description || 'Bearer authentication header of the form `Bearer <token>`, where `<token>` is your auth token.' }, { location: 'header', required: !op.securityOptional })
+    : s.type === 'apiKey'
+      ? fieldToMarkdown(String(s.name), { type: 'string', description: s.description || 'Your API key.' }, { location: String(s.in), required: !op.securityOptional })
+      : fieldToMarkdown(s.name, { type: s.type, description: s.description ?? '' }))));
+  const params = (list = []) => list.map((p) => fieldToMarkdown(p.name,
+    { ...(p.schema || {}), description: p.description ?? p.schema?.description, example: p.example ?? p.schema?.example }, { required: p.required }));
+  section('Path parameters', params(op.params?.path));
+  section('Query parameters', params(op.params?.query));
+  section('Headers', params(op.params?.header));
+  if (op.body) section('Body', schemaFieldsToMarkdown(op.body.schema), [`\`${op.body.contentType}\``, op.body.description].filter(Boolean));
+  const ok = (op.responses || []).find((r) => r.status.startsWith('2'));
+  if (ok) {
+    const types = ok.contents?.length ? ok.contents.map((c) => c.contentType) : [ok.contentType];
+    const isJson = (ct) => !ct || /json/.test(ct);
+    const structured = (ok.contents?.length ? ok.contents : [{ contentType: ok.contentType, schema: ok.schema }])
+      .find((c) => c.schema && (isJson(c.contentType) || c.schema.properties || c.schema.items));
+    const intro = [`${ok.status}${ok.contentType ? ` · ${types.join(', ')}` : ''}`, ok.description];
+    if (structured && (structured.schema?.description || (ok.contents && ok.contents.length > 1))) {
+      intro.push(structured.schema?.description || `Fields of the \`${structured.contentType}\` response:`);
+    }
+    section('Response', structured ? schemaFieldsToMarkdown(structured.schema) : [], intro.filter(Boolean));
+    section('Response headers', (ok.headers || []).map((h) => fieldToMarkdown(h.name, { ...h.schema, description: h.description || h.schema?.description })));
+  }
+  return L;
+}
+
+// Generated API operation -> Markdown: the page's sections as Markdown, then the operation's
+// slice of the spec, the same source the rendered page is generated from.
+function operationToMarkdown(op, spec, yaml, link) {
   const slice = spec && sliceSpec(spec, op.method, op.path);
   if (!slice) throw new Error(`[ai-readable] ${op.method} ${op.path} is not in the OpenAPI spec`);
   const L = [`# ${op.summary}`, ''];
-  if (op.description) L.push(`> ${firstSentence(op.description)}`, '');
-  L.push(`\`${op.method.toUpperCase()} ${op.path}\``, '', '## OpenAPI', '');
-  L.push(`\`\`\`\`yaml ${op.method.toLowerCase()} ${op.path}`, yaml.dump(slice, { noRefs: true, lineWidth: 100 }).trimEnd(), '````');
+  const body = operationBody(op).map((l) => l.replace(/\]\((\/[^)\s]*)\)/g, (m, href) => `](${link(href)})`));
+  L.push(`\`${op.method.toUpperCase()} ${op.path}\``, '', ...body, '## OpenAPI', '');
+  L.push(`\`\`\`\`yaml ${op.method.toLowerCase()} ${op.path}`, yaml.dump(slice, { noRefs: true, lineWidth: -1 }).trimEnd(), '````');
   return L.join('\n');
 }
 
@@ -196,7 +265,7 @@ module.exports = function aiReadable(context, opts) {
         let md;
         if (opJson) {
           const op = JSON.parse(fs.readFileSync(path.join(context.siteDir, 'src/generated/api', `${opJson}.json`), 'utf8'));
-          md = operationToMarkdown(op, spec, yaml);
+          md = operationToMarkdown(op, spec, yaml, link);
         } else {
           md = mdxToMarkdown(text, link);
           if (!/^# /.test(md)) md = `# ${d.title}\n\n${md}`;

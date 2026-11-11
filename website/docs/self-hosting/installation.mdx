@@ -38,7 +38,7 @@ PORT=3080
 PUBLIC_URL=https://pullmd.example.com
 ```
 
-The compose file passes each variable to the container through its own line. Use the downloaded compose file. The shorter version in the README doesn't pass settings beyond the basics to PullMD.
+The compose file passes each variable to the container through its own line.
 
 <Warning title="Seven settings need an extra line">
   `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` are not in the compose file's list as of v3.19.0, so setting them in `.env` alone has no effect. Add the ones you use to the `environment:` list of the `pullmd` service:
@@ -79,6 +79,39 @@ image: aeternalabshq/pullmd:3.19.0
 ```
 
 `aeternalabshq/pullmd:2` stays on the last 2.x release. See [Upgrading](/self-hosting/upgrading).
+
+The downloaded compose file uses `:latest` on every image. To pin all four to one version, replace the tag:
+
+```bash
+sed -i.bak 's/:latest/:3.19.0/' docker-compose.yml
+```
+
+## Run a second instance
+
+The compose file sets a fixed `container_name` on each service (`pullmd`, `pullmd-trafilatura`, `pullmd-playwright` and `pullmd-markitdown`), so a second copy fails with a name conflict. To run another instance, delete those lines, give the stack a project name with `-p`, and set a different `PORT` in its `.env`:
+
+```bash
+mkdir pullmd-2 && cd pullmd-2
+curl -O https://raw.githubusercontent.com/AeternaLabsHQ/pullmd/main/docker-compose.yml
+sed -i.bak '/container_name:/d' docker-compose.yml
+echo 'PORT=3081' > .env
+docker compose -p pullmd-2 up -d
+```
+
+Compose names the containers after the project (`pullmd-2-pullmd-1`, `pullmd-2-trafilatura-1`, and so on) and gives the stack its own network, so the sidecars of the two instances stay separate. The second instance listens on `http://localhost:3081`, keeps its cache in its own `./data`, and takes its `PUBLIC_URL` from `PORT` unless you set it. To stop it, run `docker compose -p pullmd-2 down` in that folder.
+
+## Run the image without Compose
+
+To start the server image with `docker run`, set `CACHE_DB` and mount a folder for it. Without `CACHE_DB`, the container exits at start with `TypeError: Cannot open database because the directory does not exist`. The compose file sets `CACHE_DB=/data/cache.db` for you.
+
+```bash
+docker run -d --name pullmd -p 3000:3000 \
+  -e CACHE_DB=/data/cache.db \
+  -v "$PWD/data:/data" \
+  aeternalabshq/pullmd:3.19.0
+```
+
+The server listens on port `3000` inside the container. Without the sidecars, `GET /api/status` reports each one as `not-configured`, and Readability is the only HTML extractor. To use sidecar containers, set `TRAFILATURA_URL`, `PLAYWRIGHT_URL` and `MARKITDOWN_URL`, as in the compose file. To turn on sign-in, add `-e PULLMD_AUTH_MODE=single-admin -e PULLMD_ADMIN_EMAIL=<email> -e PULLMD_ADMIN_PASSWORD=<password>`, as described in [Authentication](/self-hosting/authentication).
 
 ## Run without Docker
 

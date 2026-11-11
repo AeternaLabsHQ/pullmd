@@ -39,7 +39,7 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     docker exec pullmd printenv | grep PULLMD_
     ```
 
-    Use the full `docker-compose.yml` from the repository, not the shortened one in the README, and run `docker compose up -d` after the change.
+    Use the `docker-compose.yml` from the repository and run `docker compose up -d` after the change.
   </Accordion>
   <Accordion title="502 for a PDF or Office file">
     `Failed to convert file: markitdown sidecar unavailable or could not convert this document` (upload) or `Failed to extract page: markitdown sidecar unavailable or could not convert this document` (URL) means the MarkItDown sidecar is down, not configured, or couldn't read the file. Check `/api/status`, then `docker compose logs markitdown`.
@@ -67,7 +67,7 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     Conversion timed out. / Konvertierung abgebrochen (Zeitlimit).
     ```
 
-    An upload sent with `async=1` was still converting after 15 minutes, so the server gave up waiting for it. The web app shows this message. The usual cause is a long audio file or a slow transcription, OCR or MarkItDown backend. Check `/api/status` and the logs of the service that converts the file type, then upload again, or split a long recording into shorter parts.
+    An upload sent with `async=1` was still converting after 15 minutes, so the server gave up waiting for it. The web app shows this message. A slow backend doesn't cause it: each backend call has its own timeout (transcription and OCR 120 seconds, image descriptions 60 seconds, MarkItDown 30 seconds), and a call that runs out ends the job as an `error` with `httpStatus` `502`. Upload the file again.
   </Accordion>
   <Accordion title="Result too large to hold for pickup">
     ```text

@@ -12,20 +12,23 @@ function typeLabel(s?: Schema): string {
   if (t === 'array') return `${typeLabel(s.items) || 'any'}[]`;
   return s.format ? `${t}<${s.format}>` : t;
 }
+function spans(text: string): ReactNode[] {
+  return text.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g).map((part, j) => {
+    if (/^`.*`$/.test(part)) return <code key={j}>{part.slice(1, -1)}</code>;
+    if (/^\*\*.*\*\*$/.test(part)) return <strong key={j}>{part.slice(2, -2)}</strong>;
+    const m = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (m) return <Link key={j} to={m[2]}>{spans(m[1])}</Link>; // Link adds the baseUrl to internal paths; link text may hold `code`
+    return part;
+  });
+}
 function inline(text?: string): ReactNode {
   if (!text) return null;
-  // minimal Markdown: `code`, **bold**, [link](url); paragraphs split on blank lines
-  return text.trim().split(/\n{2,}/).map((para, i) => (
-    <p key={i}>
-      {para.split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\))/g).map((part, j) => {
-        if (/^`.*`$/.test(part)) return <code key={j}>{part.slice(1, -1)}</code>;
-        if (/^\*\*.*\*\*$/.test(part)) return <strong key={j}>{part.slice(2, -2)}</strong>;
-        const m = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-        if (m) return <Link key={j} to={m[2]}>{m[1]}</Link>; // Link adds the baseUrl to internal paths
-        return part;
-      })}
-    </p>
-  ));
+  // minimal Markdown: `code`, **bold**, [link](url) and "- " lists; paragraphs split on blank lines
+  return text.trim().split(/\n{2,}/).map((para, i) => {
+    const lines = para.split('\n');
+    if (lines.every((l) => /^- /.test(l))) return <ul key={i}>{lines.map((l, j) => <li key={j}>{spans(l.slice(2))}</li>)}</ul>;
+    return <p key={i}>{spans(para)}</p>;
+  });
 }
 function hasChildren(s?: Schema) {
   return !!(s?.properties || s?.items?.properties || s?.oneOf || s?.anyOf);
@@ -57,22 +60,22 @@ function Field({ name, schema, required, location, depth = 0 }:
   return (
     <div className={clsx('ds-field', depth > 0 && 'ds-field--nested')}>
       <div className="ds-field__head">
-        <span className="ds-field__name">{name}</span>
-        {typeLabel(s) && <span className="ds-field__type">{typeLabel(s)}</span>}
-        {location && <span className="ds-field__type">{location}</span>}
-        {required && <span className="ds-field__required">required</span>}
-        {s.deprecated && <span className="ds-field__chip ds-field__chip--warn">deprecated</span>}
-        {s.readOnly && <span className="ds-field__chip">read-only</span>}
+        <div className="ds-field__name">{name}</div>
+        {typeLabel(s) && <div className="ds-field__type">{typeLabel(s)}</div>}
+        {location && <div className="ds-field__type">{location}</div>}
+        {required && <div className="ds-field__required">required</div>}
+        {s.deprecated && <div className="ds-field__chip ds-field__chip--warn">deprecated</div>}
+        {s.readOnly && <div className="ds-field__chip">read-only</div>}
       </div>
       {s.description && <div className="ds-field__desc">{inline(s.description)}</div>}
       <div className="ds-field__meta">
-        {s.default !== undefined && <span>Default: <code>{JSON.stringify(s.default)}</code></span>}
-        {s.enum && <span>Available options: {s.enum.map((v, i) => <code key={i}>{String(v)}</code>)}</span>}
+        {s.default !== undefined && <div>Default: <code>{JSON.stringify(s.default)}</code></div>}
+        {s.enum && <div>Available options:{s.enum.map((v, i) => <React.Fragment key={i}> <code>{String(v)}</code></React.Fragment>)}</div>}
         {(s.minimum !== undefined || s.maximum !== undefined) &&
-          <span>Range: <code>{s.minimum ?? '−∞'} ≤ x ≤ {s.maximum ?? '∞'}</code></span>}
+          <div>Range: <code>{s.minimum ?? '−∞'} ≤ x ≤ {s.maximum ?? '∞'}</code></div>}
         {(s.minLength !== undefined || s.maxLength !== undefined) &&
-          <span>Length: <code>{s.minLength ?? 0}–{s.maxLength ?? '∞'}</code></span>}
-        {s.example !== undefined && typeof s.example !== 'object' && <span>Example: <code>{String(s.example)}</code></span>}
+          <div>Length: <code>{s.minLength ?? 0}–{s.maxLength ?? '∞'}</code></div>}
+        {s.example !== undefined && typeof s.example !== 'object' && <div>Example: <code>{String(s.example)}</code></div>}
       </div>
       {(kids?.properties || variants) && (
         <div className="ds-field__children">
@@ -191,7 +194,7 @@ export default function ApiOperation({ op }: { op: Op }) {
         <h1 className="ds-api__title">{op.summary}</h1>
         <div className="ds-api-endpoint">
           <div className="ds-api-endpoint__field">
-            <span className={clsx('ds-api-endpoint__method', `ds-api-endpoint__method--${op.method.toLowerCase()}`)}>{op.method}</span>
+            <span className={clsx('ds-api-endpoint__method', `ds-api-endpoint__method--${op.method.toLowerCase()}`)}>{op.method}</span>{' '}
             <span className="ds-api-endpoint__path">
               {op.path.split('/').filter(Boolean).map((seg, i) => (
                 <React.Fragment key={i}>

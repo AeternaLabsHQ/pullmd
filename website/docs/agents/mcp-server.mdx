@@ -69,3 +69,52 @@ The agent picks the tools up from their descriptions. `read_url` describes itsel
 | claude.ai | No | Yes |
 
 When sign-in is off, every client connects without credentials.
+
+## Call the server directly
+
+A client that speaks the protocol itself sends each JSON-RPC message as a `POST` to `/mcp`. The server is stateless: it issues no session id or session header, and every request stands alone. The `Accept` header must list both `application/json` and `text/event-stream`. Without both, the server answers `406` with `Not Acceptable: Client must accept both application/json and text/event-stream`. Replies arrive as server-sent events: one `event: message` frame whose `data:` line holds the JSON-RPC response. A reply to a slow `tools/call` can start with the comment line `: keepalive`, which the server repeats every 15 seconds while the call runs. Clients skip lines that start with `:`.
+
+<Steps>
+  <Step title="Initialize">
+    ```bash
+    curl -si -X POST http://localhost:3000/mcp \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
+      -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
+    ```
+
+    The response has status `200` and `Content-Type: text/event-stream`:
+
+    ```text
+    event: message
+    data: {"result":{"protocolVersion":"2025-06-18","capabilities":{"tools":{"listChanged":true}},"serverInfo":{"name":"pullmd","version":"3.19.0"}},"jsonrpc":"2.0","id":1}
+    ```
+  </Step>
+  <Step title="Send the initialized notification">
+    ```bash
+    curl -si -X POST http://localhost:3000/mcp \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
+      -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+    ```
+
+    The response is `202 Accepted` with no body.
+  </Step>
+  <Step title="Call a tool">
+    ```bash
+    curl -si -X POST http://localhost:3000/mcp \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
+      -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"read_url","arguments":{"url":"https://example.com"}}}'
+    ```
+
+    The Markdown is in `result.content[0].text`, shortened here:
+
+    ```text
+    event: message
+    data: {"result":{"content":[{"type":"text","text":"---\nsource: playwright\nshare_id: 7b3139594f5e2ff13a79efa044df41e6\nshare_url: http://localhost:3000/s/7b3139594f5e2ff13a79efa044df41e6\nquality: 1\ncached: true\n---\n\n# Example Domain\n\n…"}]},"jsonrpc":"2.0","id":3}
+    ```
+  </Step>
+</Steps>
+
+Send `{"jsonrpc":"2.0","id":2,"method":"tools/list"}` to list the tools. With sign-in enabled, add `-H "Authorization: Bearer <api-key>"` to every request. The server accepts a `tools/call` without the earlier two steps.

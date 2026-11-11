@@ -42,7 +42,7 @@ Converts a URL to Markdown with the same extraction and cache as `GET /api`. On 
   Comments heading language, `de` or `en`.
 </ParamField>
 <ParamField name="extractor" type="string">
-  `readability`, `trafilatura` or `playwright`.
+  `readability`, `trafilatura` or `playwright`. If the result has low quality, PullMD still renders the page in the browser, and `read_url` has no `render` parameter to prevent it.
 </ParamField>
 <ParamField name="yt_timecodes" type="string" default="links">
   `links`, `plain` or `none`. Without it, the MarkItDown sidecar uses `MARKITDOWN_YT_TIMECODES`, which defaults to `links`.

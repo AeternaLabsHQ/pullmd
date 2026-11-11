@@ -9,7 +9,7 @@ To convert a page behind a login or a paywall that you can access, save it from 
 
 <Steps>
   <Step title="Save the page">
-    In your browser, select **File → Save Page As**. PullMD accepts any HTML file up to 10 MB.
+    In your browser, select **File → Save Page As**. PullMD rejects HTML files over 10 MB with `413`. Conversion gets slower as the file grows, and a file close to the limit can fail with `500` or not finish, so send pages well under 10 MB.
   </Step>
   <Step title="Send it to PullMD">
     ```bash

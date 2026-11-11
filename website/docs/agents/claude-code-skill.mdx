@@ -35,7 +35,7 @@ Use the skill when you don't want to register an MCP server. With the [MCP serve
 - Call `GET /api?url=…` for web pages, Reddit and Hacker News threads, documents and YouTube videos.
 - Pass `query` when it needs one fact from a long page, to save context.
 - Use `POST /api/html` and `POST /api/file` for local files.
-- Use GitHub's CLI for GitHub URLs, and the built-in fetch for JSON APIs.
+- Use GitHub's CLI for GitHub URLs, and `curl` or fetch directly for JSON APIs.
 - Fall back to the built-in fetch tool if PullMD fails.
 
 The bundle also contains a `PreToolUse` hook that asks Claude Code to use PullMD in place of its built-in `WebFetch`. The hook allows `WebFetch` for GitHub URLs, JSON API endpoints, and after a failed PullMD request.
