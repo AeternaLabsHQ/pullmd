@@ -1,5 +1,6 @@
 import express from 'express';
 import { extractPost, normalizeRedditUrl, RedditUnsupportedPageError } from './lib/reddit.js';
+import { RedditAuthError } from './lib/reddit-auth.js';
 import { extractHn, normalizeHnUrl } from './lib/hackernews.js';
 import { extractWeb, extractHtml, extractFile } from './lib/web.js';
 import { createCache, readCacheRetentionDays } from './lib/cache.js';
@@ -566,6 +567,10 @@ export function createApp(overrides = {}) {
       } catch (err) {
         if (err instanceof RedditUnsupportedPageError) {
           return res.status(400).json({ error: err.message, code: err.code });
+        }
+        if (err instanceof RedditAuthError) {
+          console.error('Reddit credentials rejected:', err.message);
+          return res.status(502).json({ error: err.message });
         }
         if (err.message.includes('not found') || err.message.includes('Not found')) {
           return res.status(404).json({ error: 'Post not found' });
