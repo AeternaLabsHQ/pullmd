@@ -67,7 +67,7 @@ curl -X POST "http://localhost:3000/api/file" \
   --data-binary @standup.mp3
 ```
 
-When a model produces the result, `X-Source` is `image-caption` or `audio-transcript`.
+When a model produces the result, `X-Source` is `image-caption` or `audio-transcript`. When the model fails on an upload, PullMD tries the MarkItDown sidecar. If that can't convert the file either, the upload returns `502` with the model's error, for example `Failed to convert file: transcription timed out after 120 s`.
 
 ## Usage fields
 

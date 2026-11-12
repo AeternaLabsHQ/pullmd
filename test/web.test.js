@@ -1129,6 +1129,38 @@ describe('extractWeb - binary media without a description (#98)', () => {
   });
 });
 
+describe('extractFile - failed transcription is reported (#98)', () => {
+  it('names the transcription error when markitdown cannot convert the audio either', async () => {
+    const sv = process.env.PULLMD_STT_API_KEY; process.env.PULLMD_STT_API_KEY = 'k';
+    try {
+      await assert.rejects(
+        extractFile(Buffer.from('OggS'), {
+          filename: 'memo.ogg', contentType: 'audio/ogg',
+          transcribeFn: async () => { throw new Error('transcription timed out after 120 s'); },
+          markitdownClient: async () => null,
+        }),
+        (err) => /transcription timed out after 120 s/.test(err.message) && !/markitdown/.test(err.message),
+      );
+    } finally { if (sv === undefined) delete process.env.PULLMD_STT_API_KEY; else process.env.PULLMD_STT_API_KEY = sv; }
+  });
+
+  it('still returns the markitdown result when it can convert the file', async () => {
+    const r = await extractFile(Buffer.from('ID3'), {
+      filename: 'memo.mp3', contentType: 'audio/mpeg',
+      transcribeFn: async () => { throw new Error('transcription failed (500)'); },
+      markitdownClient: async () => ({ markdown: '# memo.mp3\n', title: 'memo.mp3' }),
+    });
+    assert.equal(r.source, 'markitdown');
+  });
+
+  it('keeps the markitdown error for files that never reached a model', async () => {
+    await assert.rejects(
+      extractFile(Buffer.from('PK'), { filename: 'x.docx', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', markitdownClient: async () => null }),
+      /markitdown sidecar unavailable/,
+    );
+  });
+});
+
 describe('PDF-OCR routing (opt-in)', () => {
   const PDF = Buffer.from('%PDF-1.4 fake');
   const pdfFetch = (bytes = PDF) => async () => ({

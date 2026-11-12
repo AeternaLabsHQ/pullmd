@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { transcribeAudio } from '../lib/llm/stt.js';
 
@@ -46,6 +46,31 @@ describe('transcribeAudio', () => {
       () => transcribeAudio(Buffer.from('x'), { filename: 'a.mp3', fetch: async () => ({ ok: false, status: 500, text: async () => 'upstream boom' }) }),
       /transcription failed \(500\): upstream boom/
     );
+    restore(s);
+  });
+});
+
+describe('transcribeAudio - provider timeout (#98)', () => {
+  const hanging = async (url, opts) => new Promise((_, reject) => {
+    opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })));
+  });
+
+  it('names the timeout when the provider never answers', async () => {
+    const s = save(); process.env.PULLMD_STT_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const p = transcribeAudio(Buffer.from('AUDIO'), { filename: 'a.mp3', fetch: hanging });
+      mock.timers.tick(120_000);
+      await assert.rejects(p, /transcription timed out after 120 s/);
+    } finally { mock.timers.reset(); restore(s); }
+  });
+
+  it('keeps the abort error when the caller cancelled', async () => {
+    const s = save(); process.env.PULLMD_STT_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    const ctrl = new AbortController();
+    const p = transcribeAudio(Buffer.from('AUDIO'), { filename: 'a.mp3', fetch: hanging, signal: ctrl.signal });
+    ctrl.abort();
+    await assert.rejects(p, (err) => err.name === 'AbortError');
     restore(s);
   });
 });
