@@ -1086,6 +1086,49 @@ describe('extractWeb - media null-fallthrough single body read (regression)', ()
   });
 });
 
+describe('extractWeb - binary media without a description (#98)', () => {
+  const GIF = Buffer.from('GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;', 'latin1');
+  const MP3 = Buffer.from('ID3\x03\x00\x00\x00\x00\x00\x00\xff\xfb\x90\x00', 'latin1');
+  const fetchOf = (bytes, ct) => async () => ({
+    ok: true, status: 200,
+    headers: { get: (h) => (h.toLowerCase() === 'content-type' ? ct : null) },
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+
+  it('links a GIF instead of returning its bytes as text', async () => {
+    const r = await extractWeb('https://example.com/img/anim.gif', { fetch: fetchOf(GIF, 'image/gif'), captionFn: async () => null });
+    assert.equal(r.source, 'media-link');
+    assert.ok(r.markdown.includes('![anim.gif](https://example.com/img/anim.gif)'));
+    assert.ok(!r.markdown.includes('GIF89a'));
+  });
+
+  it('links an MP3 when no speech-to-text provider is configured', async () => {
+    const r = await extractWeb('https://example.com/a%20b.mp3', { fetch: fetchOf(MP3, 'audio/mpeg'), transcribeFn: async () => null });
+    assert.equal(r.source, 'media-link');
+    assert.ok(r.markdown.includes('[a b.mp3](https://example.com/a%20b.mp3)'));
+    assert.ok(!r.markdown.includes('ID3'));
+  });
+
+  it('links the file when the provider fails', async () => {
+    const r = await extractWeb('https://example.com/x.ogg', { fetch: fetchOf(MP3, 'audio/ogg'), transcribeFn: async () => { throw new Error('timeout'); } });
+    assert.equal(r.source, 'media-link');
+  });
+
+  it('links video and other image types the LLM layer does not take', async () => {
+    const v = await extractWeb('https://example.com/v.mp4', { fetch: fetchOf(MP3, 'video/mp4') });
+    assert.equal(v.source, 'media-link');
+    assert.ok(v.markdown.includes('[v.mp4]('));
+    const i = await extractWeb('https://example.com/f.avif', { fetch: fetchOf(GIF, 'image/avif') });
+    assert.equal(i.source, 'media-link');
+    assert.ok(i.markdown.includes('![f.avif]('));
+  });
+
+  it('escapes parentheses in the link target', async () => {
+    const r = await extractWeb('https://example.com/a(1).gif', { fetch: fetchOf(GIF, 'image/gif'), captionFn: async () => null });
+    assert.ok(r.markdown.includes('(https://example.com/a%281%29.gif)'));
+  });
+});
+
 describe('PDF-OCR routing (opt-in)', () => {
   const PDF = Buffer.from('%PDF-1.4 fake');
   const pdfFetch = (bytes = PDF) => async () => ({

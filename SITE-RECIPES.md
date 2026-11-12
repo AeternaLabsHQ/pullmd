@@ -700,7 +700,7 @@ at the `X-Source` response header (or the `source:` field in the frontmatter,
 with `frontmatter=true`). Recipes only apply when it reads `readability`,
 `readability-fallback`, `trafilatura`, `playwright`, `coverage-guard`, or `article-series`. Any other value —
 `cloudflare`, `reddit`, `hackernews`, `youtube`, `markitdown`, `pdf-ocr`,
-`image-caption`, `audio-transcript` — means the request never reached the
+`image-caption`, `audio-transcript`, `media-link` — means the request never reached the
 recipe layer for the reasons in [§1](#1-when-you-need-a-recipe); your recipe
 cannot apply there, no matter how it's written.
 
