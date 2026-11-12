@@ -1425,6 +1425,12 @@ describe('GET /api/config - markitdownYoutube flag', () => {
     assert.equal(JSON.parse(res.body).markitdownYoutube, true);
     if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
   });
+  it('reports false for MARKITDOWN_YOUTUBE=false (#98)', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'false';
+    const res = await request(createApp({}), '/api/config');
+    assert.equal(JSON.parse(res.body).markitdownYoutube, false);
+    if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
+  });
 });
 
 describe('GET /api/config - pdfOcr flag', () => {

@@ -24,6 +24,7 @@ import { createStatusChecker } from './lib/status.js';
 import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
 import { createFileJobStore } from './lib/file-jobs.js';
+import { isYoutubeEnabled } from './lib/youtube.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -1291,7 +1292,7 @@ export function createApp(overrides = {}) {
       vision: !!(process.env.PULLMD_VISION_API_KEY || process.env.PULLMD_LLM_API_KEY),
       stt: !!(process.env.PULLMD_STT_API_KEY || process.env.PULLMD_LLM_API_KEY),
       pdfOcr: !!process.env.PULLMD_PDF_OCR_API_KEY,
-      markitdownYoutube: !!process.env.MARKITDOWN_YOUTUBE,
+      markitdownYoutube: isYoutubeEnabled(),
     });
   });
 
