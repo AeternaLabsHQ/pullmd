@@ -59,7 +59,7 @@ The example leaves out some `metadata` fields: `canonical`, `modifiedTime`, and 
 
 On a cache hit, `quality` is recomputed from the cached Markdown, so it can differ from the value of the fresh fetch.
 
-For `POST /api/html` and `POST /api/file`, `statusCode` is `null`, and so is `sourceUrl` for files. With `query`, an `extract` object is added. `shareId` is `null` for uploads. Every field is described in the [API reference](/reference/api/convert/convert-a-url).
+For `POST /api/html`, `statusCode` is `null`. For `POST /api/file`, `statusCode` is `null` for files converted by MarkItDown and absent for files PullMD reads itself, such as e-mail, Markdown or text. `sourceUrl` is `null` for MarkItDown files. With `query` on `GET /api`, an `extract` object is added. `POST /api/html` and `POST /api/file` ignore `query`. `shareId` is `null` for uploads. Every field is described in the [API reference](/reference/api/convert/convert-a-url).
 
 ## Frontmatter
 
@@ -83,11 +83,11 @@ A field appears only when it has a value.
 | Field | Present for | Value |
 | --- | --- | --- |
 | `title` | Results with a title. Results from MarkItDown, PDF OCR, a vision or speech model, or YouTube have none, except a URL result served from the cache. | Page or document title |
-| `url` | Results with a source URL | Source URL. Most uploaded files and `POST /api/html` without `url` have none; saved pages (`.mhtml`) and feeds carry the URL stated in the file. |
+| `url` | Results with a source URL | Source URL. Most uploaded files have none, and neither does `POST /api/html` without `url` unless the HTML has a canonical link; saved pages (`.mhtml`) and feeds carry the URL stated in the file. |
 | `source` | All | Which extractor produced the result. See [`X-Source` values](#x-source-values). |
 | `fetched` | All | When this response was built (ISO 8601) |
-| `quality` | All | Extraction confidence, `0` to `1` |
-| `author` | Pages, Reddit, Hacker News, YouTube, and uploads of e-mail, OpenDocument, RTF and feeds | Author, poster or sender. Reddit values start with `u/`. |
+| `quality` | All except uploads PullMD reads itself | Extraction confidence, `0` to `1`. Uploads PullMD reads itself, such as e-mail, Markdown, text, subtitles, RTF, calendar, contact, data, feed, notebook, code and OpenDocument files, have none. |
+| `author` | Pages, Reddit, Hacker News, YouTube, and uploads of e-mail, OpenDocument, RTF and Atom feeds with a feed author | Author, poster or sender. Reddit values start with `u/`. |
 | `published` | Pages, Reddit, Hacker News, YouTube, and uploads of e-mail, OpenDocument and RTF | Publication date. ISO 8601 for Reddit, Hacker News and e-mail; other sources give the date as the source states it. |
 | `modified` | Pages | Last-modified date from the page |
 | `description` | Pages | Meta or Open Graph description |
@@ -97,7 +97,7 @@ A field appears only when it has a value.
 | `extractor_reason` | Pages | Why this extractor won, or why the page was rendered |
 | `share_id` | Cached results | Share id. Open at `/s/<id>`. |
 | `subreddit`, `upvotes` | Reddit (`upvotes` also Hacker News) | Post details. `subreddit` starts with `r/`. |
-| `duration`, `views` | YouTube | Video length and view count |
+| `duration`, `views` | YouTube | Video length, and view count when the video page states one |
 | `image_size` | Captioned images | `WIDTHxHEIGHT` |
 | `audio_seconds` | Transcribed audio | Length in seconds |
 | `llm_model`, `llm_tokens` | Captions, transcripts and PDF OCR | Model and total tokens, when the provider reports usage |
@@ -125,7 +125,7 @@ Unknown names are ignored with a warning at startup. If none of the names are va
 | Header | Present | Value |
 | --- | --- | --- |
 | `X-Source` | Every conversion | Which extractor produced the result |
-| `X-Quality` | Every conversion | `0` to `1` |
+| `X-Quality` | Every conversion except uploads PullMD reads itself | `0` to `1` |
 | `X-Share-Id` | Cached conversions | 32-character hex share id |
 | `X-Suggested-Filename` | Every conversion | A file name for saving the result, such as `example-domain.md` |
 | `X-Transcript-Status` | Fresh YouTube fetches | `ok`, `none`, `blocked` or `error` |

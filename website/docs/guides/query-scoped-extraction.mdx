@@ -14,26 +14,26 @@ curl -i "http://localhost:3000/api?url=https://en.wikipedia.org/wiki/Markdown&qu
 ```http
 X-Extracted: true
 X-Extract-Confidence: high
-X-Extract-Sections: 2
-X-Extract-Original-Tokens: 10015
-X-Extract-Returned-Tokens: 502
+X-Extract-Sections: 4
+X-Extract-Original-Tokens: 10661
+X-Extract-Returned-Tokens: 604
 ```
 
 The Markdown body, shortened:
 
 ```markdown
-# Markdown
+# Markdown - Wikipedia
 
 <!-- … -->
 
-## History
+Markdown was inspired by pre-existing [conventions](https://en.wikipedia.org/wiki/Convention%5F%28norm%29 "Convention (norm)") for marking up [plain text](https://en.wikipedia.org/wiki/Plain%5Ftext "Plain text") in [email](https://en.wikipedia.org/wiki/Email "Email") and [usenet](https://en.wikipedia.org/wiki/Usenet "Usenet") posts, …
 
-Markdown was inspired by pre-existing [conventions](<https://en.wikipedia.org/wiki/Convention_(norm)>) for marking up [plain text](https://en.wikipedia.org/wiki/Plain_text) in [email](https://en.wikipedia.org/wiki/Email) …
+In 2002, [Aaron Swartz](https://en.wikipedia.org/wiki/Aaron%5FSwartz "Aaron Swartz") created [atx](https://en.wikipedia.org/wiki/Atx%5F%28markup%5Flanguage%29 "Atx (markup language)") and referred to it as "the true structured text format". Gruber created the Markdown language in 2004 with Swartz as his "sounding board". …
 
-In 2002, [Aaron Swartz](https://en.wikipedia.org/wiki/Aaron_Swartz) created [atx](<https://en.wikipedia.org/wiki/Atx_(markup_language)>) and referred to it as "the true structured text format". Gruber created the Markdown language in 2004 with Swartz as his "sounding board". …
+<!-- … -->
 ```
 
-The full article is about 10,000 tokens, and the result is about 500. The response is captured from a live Wikipedia page, so the counts change as the article is edited.
+The full article is about 10,700 tokens, and the result is about 600. The response is captured from a live Wikipedia page, so the counts change as the article is edited.
 
 On the MCP server, pass `query` and `max_tokens` to the `read_url` tool.
 
@@ -50,7 +50,7 @@ PullMD splits the converted Markdown into sections at its headings and ranks the
 
 ## Set the budget
 
-`max_tokens` caps the result. The default is `600`, the range is `64` to `20000`, and tokens are estimated as characters divided by 4. A value outside the range returns `400` when `query` is set.
+`max_tokens` is a soft budget for the result. The default is `600`, the range is `64` to `20000`, and tokens are estimated as characters divided by 4. A value outside the range returns `400` when `query` is set. The heading and parent headings of the best-matching section are always kept, so a result can be larger than the budget. Further sections are added whole, in ranking order, and PullMD stops at the first one that doesn't fit in what is left of the budget. If `X-Extract-Sections` is lower than you expect, raise `max_tokens`.
 
 For a question whose answer spans several sections ("compare the pricing tiers"), raise it. For a single fact ("what's the rate limit"), keep the default.
 
@@ -64,6 +64,36 @@ PullMD returns the full page, unchanged, in these cases:
 | Nothing on the page matches the question's words | `false` | `low` |
 
 You can pass `query` on every request that has a question, because the worst case is the full page. On MCP, which has no headers, a no-match result carries `<!-- query-extract: no match; returning full page -->` on the first line after the YAML block that starts every MCP result.
+
+## Word the question
+
+Ranking compares your words with the words in each section, and a section's heading counts as part of its text. There is no parameter to request a section by its heading name. Write the distinctive words you expect in the section you want. A topic word that appears nowhere on the page matches nothing, and you get the whole page back. The converted Wikipedia article above has no section about history and contains no word starting with "histor", so one word returns everything:
+
+```bash
+curl -i "http://localhost:3000/api?url=https://en.wikipedia.org/wiki/Markdown&query=history"
+```
+
+```http
+X-Extracted: false
+X-Extract-Confidence: low
+X-Extract-Sections: 0
+X-Extract-Original-Tokens: 10661
+X-Extract-Returned-Tokens: 10661
+```
+
+Two words from the section you want work as a topic query. This one returns the title, the heading "Rise and divergence" and the paragraphs under it:
+
+```bash
+curl -i "http://localhost:3000/api?url=https://en.wikipedia.org/wiki/Markdown&query=divergence+standardization"
+```
+
+```http
+X-Extracted: true
+X-Extract-Confidence: high
+X-Extract-Sections: 3
+X-Extract-Original-Tokens: 10661
+X-Extract-Returned-Tokens: 604
+```
 
 ## Read the result
 

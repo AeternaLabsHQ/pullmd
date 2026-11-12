@@ -41,6 +41,7 @@ Run through these steps before every release so nothing ships half-finished.
 - **`X-Filename`:** the file name, URI-encoded. PullMD uses it for the suggested download name, and as the title when the document has none. `?filename=` also works, but the header keeps the name out of proxy access logs.
 - **`Content-Type`:** the file's type. PullMD uses it, together with the file name, to pick the reader.
 - **`lang`:** `lang=en` sets English labels in e-mail, calendar, contact, OpenDocument, notebook and feed output. The default is German.
+- **`X-Quality`:** a score from `0.0` to `1.0` for the converted Markdown. A document has no HTML to compare against, so it starts at `0.4`, and more than 500 characters adds `0.3`. A one-line PDF returns `0.4` and is a correct conversion. See [how the score is built](/how-it-works#quality-score).
 - **Privacy:** PullMD never stores the uploaded file. The conversion creates no history entry or share link, and the stats record it as `local-file`, not the file name. With `async=1`, PullMD holds the converted result in memory for a limited time; see [below](#leave-the-app-during-a-long-conversion).
 
 In the web app, drag a file onto the page or use the file picker.
@@ -137,7 +138,7 @@ MarkItDown reads the text layer of a PDF, which works for prose but loses the st
   </Step>
 </Steps>
 
-When OCR runs, `X-Source` is `pdf-ocr` and the frontmatter gains `pdf_pages`. If the provider fails, no key is set, or the PDF is over 50 MB, PullMD uses the standard conversion instead; the request doesn't fail.
+When OCR runs, `X-Source` is `pdf-ocr` and the frontmatter gains `pdf_pages`. If the provider fails or no key is set, PullMD uses the standard conversion instead; the request doesn't fail. A PDF over 50 MB returns `502`, with or without OCR.
 
 <Note title="OCR key">
   OCR doesn't use the shared `PULLMD_LLM_API_KEY`, because OCR providers are usually different from chat-model providers. Set `PULLMD_PDF_OCR_API_KEY` explicitly.

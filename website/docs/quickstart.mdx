@@ -23,10 +23,24 @@ Run PullMD on your machine with Docker and convert a page. You need Docker with 
     This starts PullMD and its three helper containers (Trafilatura, Playwright and MarkItDown). The first start downloads about 1.4 GB of images and uses about 5 GB of disk, most of it the headless browser.
 
     <Tip title="Port 3000 in use">If port 3000 is taken, create a `.env` file next to the compose file with `PORT=3080` (or any free port) and run the command again.</Tip>
+
+    The compose file sets fixed container names, so a second copy of it fails with a name conflict. To run another instance, see [Run a second instance](/self-hosting/installation#run-a-second-instance).
   </Step>
   <Step title="Check that it's healthy">
     ```bash
     curl http://localhost:3000/api/status
+    ```
+
+    Until the server is ready, the request fails to connect. To wait for it, repeat the request until it returns HTTP `200`:
+
+    ```bash
+    until curl -sf http://localhost:3000/api/status; do sleep 1; done
+    ```
+
+    When it is ready, the response looks like this:
+
+    ```json
+    {"ok":true,"version":"3.19.1","services":{"trafilatura":{"status":"ok","latencyMs":70},"playwright":{"status":"ok","latencyMs":49},"markitdown":{"status":"ok","latencyMs":55}}}
     ```
 
     <Check title="Healthy response">You should get `"ok": true` and each sidecar listed as `"status": "ok"`. If a sidecar is `down`, the request returns HTTP `503`; a sidecar that isn't set up shows `not-configured`.</Check>
@@ -36,7 +50,7 @@ Run PullMD on your machine with Docker and convert a page. You need Docker with 
     curl "http://localhost:3000/api?url=https://en.wikipedia.org/wiki/Markdown"
     ```
 
-    You get the article as Markdown: a `# Title` line, then the content. No navigation, no scripts.
+    You get the article as Markdown: a `# Title` line, then the content. No navigation, no scripts. Every conversion also gets a share link; see [Share links and cache](/guides/share-links).
   </Step>
   <Step title="Ask a question">
     To get only the sections that answer a question, add `query`:

@@ -81,7 +81,7 @@ components:
     extractor:
       name: extractor
       in: query
-      description: Use one extractor and skip the automatic pick of the best result. An unrecognized value is ignored. Setting it bypasses the cache.
+      description: Use one extractor and skip the automatic pick of the best result. If the result has low quality, PullMD still renders the page in headless Chromium and `X-Source` is `playwright`; add `render=skip` to prevent it. An unrecognized value is ignored. Setting it bypasses the cache.
       schema: { type: string, enum: [readability, trafilatura, playwright] }
     pdf:
       name: pdf
@@ -135,7 +135,7 @@ components:
       description: 'Which extractor produced the result: `cloudflare`, `readability`, `readability-fallback`, `trafilatura`, `playwright`, `recipe-content`, `coverage-guard`, `markitdown`, `youtube`, `reddit`, `hackernews`, `image-caption`, `audio-transcript`, `media-link`, `pdf-ocr`, `article-series`, or for uploads PullMD reads itself `email`, `text`, `markdown`, `subtitles`, `opendocument`, `rtf`, `calendar`, `contact`, `data`, `feed`, `notebook` or `code`.'
       schema: { type: string }
     X-Quality:
-      description: Extraction confidence from `0.0` to `1.0`.
+      description: Extraction confidence from `0.0` to `1.0`. Not sent for uploads PullMD reads itself.
       schema: { type: number }
     X-Share-Id:
       description: 32-character hex id of the cached copy. Open it at `/s/<id>`.
@@ -198,7 +198,7 @@ components:
             twitterDescription: { type: string, nullable: true, description: 'Description from the `twitter:description` meta tag.' }
             twitterImage: { type: string, nullable: true, description: 'Image URL from the `twitter:image` meta tag.' }
             sourceUrl: { type: string, nullable: true, description: 'The URL that was converted. For `POST /api/html`, the `url` you passed; `null` for uploaded files.' }
-            statusCode: { type: integer, nullable: true, description: 'HTTP status of the fetched page. `null` for HTML and file uploads.' }
+            statusCode: { type: integer, nullable: true, description: 'HTTP status of the fetched page. `null` for HTML uploads and for files converted by MarkItDown; absent for files PullMD reads itself.' }
             published: { type: string, nullable: true, description: 'Publication time as an ISO 8601 string, or `null` when the post has none. Present on cached Reddit and Hacker News results.' }
             upvotes: { type: integer, nullable: true, description: 'Post score, or `null` when the source has none. Present on cached Reddit and Hacker News results.' }
             contentLength: { type: integer, description: 'Length of the Markdown, in characters. Absent for Reddit, Hacker News and Cloudflare Markdown results.' }
@@ -211,7 +211,7 @@ components:
             audioSeconds: { type: number, description: '`audio-transcript` only. Length of the audio in seconds, when the speech-to-text provider reports it.' }
             imageSize: { type: string, description: '`image-caption` only. Width and height in pixels, such as `1920x1080`, when PullMD can read them from the file.' }
             pdfPages: { type: integer, description: '`pdf-ocr` only. Number of pages the OCR provider processed.' }
-            quality: { type: number, description: 'Extraction confidence from 0 to 1. On a cache hit it is recomputed from the cached Markdown, so it can differ from the fresh value.' }
+            quality: { type: number, description: 'Extraction confidence from 0 to 1. Absent for uploads PullMD reads itself. On a cache hit it is recomputed from the cached Markdown, so it can differ from the fresh value.' }
             extractorReason: { type: string, nullable: true, description: 'Why this extractor was chosen. Absent for uploads and for Reddit, Hacker News and Cloudflare Markdown results.' }
         source: { type: string, description: Which extractor produced the result. Same values as the `X-Source` header. }
         shareId: { type: string, nullable: true, description: 'Share id, or `null` when the result was not cached.' }
@@ -378,7 +378,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Conversion' }
         '400':
-          description: '`url` is missing, `query` is set and `max_tokens` isn''t an integer from 64 to 20000, `images` is invalid, or a Reddit link isn''t a post, gallery or subreddit page (`"code": "reddit_unsupported_page"`).'
+          description: '`url` is missing, `query` is set and `max_tokens` isn''t an integer from 64 to 20000, `images` is invalid for a Reddit link, or a Reddit link isn''t a post, gallery or subreddit page (`"code": "reddit_unsupported_page"`).'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -639,7 +639,7 @@ paths:
                   value: { status: pending }
                 done:
                   summary: Converted
-                  value: { status: done, markdown: "# report.pdf\n\nRelease checklist\n\n…", metadata: { title: report.pdf, quality: 0.8 }, source: markitdown, shareId: null, suggestedFilename: report.md }
+                  value: { status: done, markdown: "# report.pdf\n\nRelease checklist\n\nRun through these steps before every release.", metadata: { title: null, description: null, canonical: null, author: null, publishedTime: null, modifiedTime: null, ogTitle: null, ogDescription: null, ogImage: null, ogSiteName: null, ogType: null, twitterCard: null, twitterTitle: null, twitterDescription: null, twitterImage: null, language: null, sourceUrl: null, statusCode: null, quality: 0.4, contentLength: 64 }, source: markitdown, shareId: null, suggestedFilename: report.md }
                 error:
                   summary: Conversion failed
                   value: { status: error, error: 'Failed to convert file: markitdown sidecar unavailable or could not convert this document', httpStatus: 502 }

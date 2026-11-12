@@ -27,7 +27,7 @@ PullMD picks a path for each URL based on what it is, checks the result, and tri
     With `MARKITDOWN_YOUTUBE=true`, YouTube links return the title, description and transcript. See [YouTube transcripts](/guides/youtube).
   </Step>
   <Step title="Static HTML extraction">
-    Everything else is a web page. PullMD runs Readability and Trafilatura on the HTML and picks one result by comparing them: Trafilatura wins when Readability fell back or returned much less text, Readability wins when Trafilatura loses table rows, and Readability wins ties. `X-Source` and `extractor_reason` show which was chosen and why.
+    Everything else is a web page. PullMD runs Readability and Trafilatura on the HTML and picks one result by comparing them: Trafilatura wins when Readability fell back, when Readability returned under 500 characters and Trafilatura over 1000, or when Trafilatura is more than 20 percent longer and has a heading. Readability wins when Trafilatura loses table rows, or when Readability is more than 20 percent longer and has a heading. Readability wins ties. `X-Source` and `extractor_reason` show which was chosen and why.
   </Step>
   <Step title="Browser render, if needed">
     If the static result looks wrong, PullMD renders the page in headless Chromium and extracts again from the rendered HTML.

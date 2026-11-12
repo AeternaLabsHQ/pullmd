@@ -78,13 +78,17 @@ With OAuth off, a reverse proxy can accept the API key as part of the URL path, 
 
 ```caddy
 @bearer header Authorization "Bearer {$AUTH_TOKEN}"
-handle @bearer { reverse_proxy pullmd:3000 }
+handle @bearer {
+    reverse_proxy pullmd:3000
+}
 
 @token_path path /{$AUTH_TOKEN}/* /{$AUTH_TOKEN}
 handle @token_path {
     uri strip_prefix /{$AUTH_TOKEN}
-    reverse_proxy pullmd:3000
+    reverse_proxy pullmd:3000 {
+        header_up Authorization "Bearer {$AUTH_TOKEN}"
+    }
 }
 ```
 
-Then use `https://your-instance.example.com/<TOKEN>/mcp` as the connector URL. Anyone who sees that URL has full access, so treat it as a password.
+Set `AUTH_TOKEN` to a PullMD API key. The proxy passes it on as the `Authorization` header, so this works with sign-in on. Then use `https://your-instance.example.com/<TOKEN>/mcp` as the connector URL. Anyone who sees that URL has full access, so treat it as a password.

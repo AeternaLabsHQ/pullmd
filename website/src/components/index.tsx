@@ -92,9 +92,9 @@ export function ParamField({ name, type, required, default: def, children }:
     <div className="ds-param">
       <div className="ds-param__head">
         <code className="ds-param__name">{name}</code>
-        {type && <span className="ds-param__type">{type}</span>}
-        {required && <span className="ds-param__required">required</span>}
-        {def !== undefined && <span className="ds-param__default">default: <code>{def}</code></span>}
+        {type && <div className="ds-param__type">{type}</div>}
+        {required && <div className="ds-param__required">required</div>}
+        {def !== undefined && <div className="ds-param__default">default: <code>{def}</code></div>}
       </div>
       {children && <div className="ds-param__body">{children}</div>}
     </div>

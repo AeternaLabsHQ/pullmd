@@ -42,4 +42,4 @@ Add a CNAME DNS record pointing to `<org>.github.io` and set the domain under th
 
 ## AI-readable output
 
-Every build publishes `/llms.txt` (every sidebar page with its description, grouped under the sidebar headings), a `.md` copy of each page (API reference pages carry their slice of the spec as YAML), and the OpenAPI spec at `/openapi.yaml`. Nothing to maintain: a page added to a sidebar shows up in both, and its `description` frontmatter becomes the llms.txt summary.
+Every build publishes `/llms.txt` (every sidebar page with its description, grouped under the sidebar headings), a `.md` copy of each page (API reference pages list their parameters, body and response in Markdown, then carry their slice of the spec as YAML), and the OpenAPI spec at `/openapi.yaml`. Every HTML page starts with a visually hidden note for AI agents that links to `/llms.txt` (`src/theme/Root.tsx`), and docs pages put the content before the sidebar in the HTML (`src/theme/DocRoot/Layout`), so agents reach the content first. Nothing to maintain: a page added to a sidebar shows up in both, and its `description` frontmatter becomes the llms.txt summary.
