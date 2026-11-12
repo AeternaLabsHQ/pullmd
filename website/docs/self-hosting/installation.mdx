@@ -83,7 +83,7 @@ image: aeternalabshq/pullmd:3.19.1
 The downloaded compose file uses `:latest` on every image. To pin all four to one version, replace the tag:
 
 ```bash
-sed -i.bak 's/:latest/:3.19.0/' docker-compose.yml
+sed -i.bak 's/:latest/:3.19.1/' docker-compose.yml
 ```
 
 ## Run a second instance
@@ -108,7 +108,7 @@ To start the server image with `docker run`, set `CACHE_DB` and mount a folder f
 docker run -d --name pullmd -p 3000:3000 \
   -e CACHE_DB=/data/cache.db \
   -v "$PWD/data:/data" \
-  aeternalabshq/pullmd:3.19.0
+  aeternalabshq/pullmd:3.19.1
 ```
 
 The server listens on port `3000` inside the container. Without the sidecars, `GET /api/status` reports each one as `not-configured`, and Readability is the only HTML extractor. To use sidecar containers, set `TRAFILATURA_URL`, `PLAYWRIGHT_URL` and `MARKITDOWN_URL`, as in the compose file. To turn on sign-in, add `-e PULLMD_AUTH_MODE=single-admin -e PULLMD_ADMIN_EMAIL=<email> -e PULLMD_ADMIN_PASSWORD=<password>`, as described in [Authentication](/self-hosting/authentication).

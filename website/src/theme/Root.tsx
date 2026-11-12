@@ -9,7 +9,7 @@ export default function Root({children}: {children: ReactNode}): ReactNode {
   return (
     <>
       <div className="llms-directive">
-        For AI agents: fetch the complete documentation index at <a href={index}>{index}</a>.
+        For AI agents: fetch the complete documentation index at <a href={index} tabIndex={-1}>{index}</a>.
         Every page is also available as Markdown: add <code>.md</code> to its URL.
       </div>
       {children}

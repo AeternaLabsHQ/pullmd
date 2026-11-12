@@ -40,7 +40,7 @@ Run PullMD on your machine with Docker and convert a page. You need Docker with 
     When it is ready, the response looks like this:
 
     ```json
-    {"ok":true,"version":"3.19.0","services":{"trafilatura":{"status":"ok","latencyMs":70},"playwright":{"status":"ok","latencyMs":49},"markitdown":{"status":"ok","latencyMs":55}}}
+    {"ok":true,"version":"3.19.1","services":{"trafilatura":{"status":"ok","latencyMs":70},"playwright":{"status":"ok","latencyMs":49},"markitdown":{"status":"ok","latencyMs":55}}}
     ```
 
     <Check title="Healthy response">You should get `"ok": true` and each sidecar listed as `"status": "ok"`. If a sidecar is `down`, the request returns HTTP `503`; a sidecar that isn't set up shows `not-configured`.</Check>
