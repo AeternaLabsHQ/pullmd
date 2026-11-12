@@ -7,9 +7,21 @@ description: Highlights of recent PullMD releases. The full history is in CHANGE
 
 Highlights of recent releases. Every change, with issue links, is in [CHANGELOG.md](https://github.com/AeternaLabsHQ/pullmd/blob/main/CHANGELOG.md). Before upgrading across 3.0 or 3.13, read [Upgrading](/self-hosting/upgrading).
 
+## 3.19.1
+
+November 12, 2026 · <Badge tone="brand">Latest</Badge>
+
+- `comments=false` drops the comments from a [Reddit or Hacker News](/guides/reddit-and-hacker-news) post that is still cached, in the web app, on `/api` and `/api/stream`, and for Reddit on MCP `read_url`.
+- `MARKITDOWN_YOUTUBE=false` and `MARKITDOWN_YOUTUBE=0` leave the YouTube tier off. Only `true`, `1`, `yes` and `on` turn it on.
+- An image, audio or video URL that no model describes returns a heading and a link to the file instead of the file's bytes as text. `X-Source` is [`media-link`](/reference/output-format).
+- `POST /api/html` converts a large body made of one long paragraph instead of answering `500`.
+- With sign-in on, a cache hit appears in the user's `/api/history` and in MCP `list_recent`.
+- Rejected Reddit credentials answer `502` and name `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET` instead of a generic `500`.
+- A failed transcription reports the model's error, for example `transcription timed out after 120 s`, instead of a MarkItDown error.
+
 ## 3.19.0
 
-November 11, 2026 · <Badge tone="brand">Latest</Badge>
+November 11, 2026
 
 - File uploads in the web app [keep converting when you leave the app](/guides/documents#leave-the-app-during-a-long-conversion). The app shows upload progress, says when you can leave, and shows the result when you return.
 - `POST /api/file?async=1` answers `202` with a job id, and `GET` and `DELETE /api/file/jobs/{id}` pick up and remove the result. See [the async API](/guides/documents#use-the-async-api-in-a-script).

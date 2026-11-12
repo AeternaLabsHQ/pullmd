@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: PullMD API
-  version: 3.19.0
+  version: 3.19.1
   license:
     name: AGPL-3.0-or-later
     url: https://github.com/AeternaLabsHQ/pullmd/blob/main/LICENSE
@@ -1064,7 +1064,7 @@ paths:
               schema: { $ref: '#/components/schemas/Status' }
               example: 
                 ok: true
-                version: 3.19.0
+                version: 3.19.1
                 services:
                   trafilatura: { status: ok, latencyMs: 7 }
                   playwright: { status: ok, latencyMs: 67 }
@@ -1076,7 +1076,7 @@ paths:
               schema: { $ref: '#/components/schemas/Status' }
               example: 
                 ok: false
-                version: 3.19.0
+                version: 3.19.1
                 services:
                   trafilatura: { status: ok, latencyMs: 7 }
                   playwright: { status: down, error: unreachable }
