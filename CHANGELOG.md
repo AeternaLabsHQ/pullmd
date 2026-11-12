@@ -11,6 +11,17 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Fixed
+
+Six bugs reported in #98, found while testing the docs against 3.19.0.
+
+- **`MARKITDOWN_YOUTUBE=false` turned the YouTube tier on.** Any non-empty value enabled it, including `false` and `0`, and `/api/config` reported `markitdownYoutube: true`. Only `true`, `1`, `yes` and `on` enable it now.
+- **A large single-paragraph HTML upload crashed.** `POST /api/html` with a body of one long paragraph (about 10 MB) returned `500` with `Maximum call stack size exceeded` from the extractor scoring. It converts now.
+- **Image, audio and video URLs without a model returned the file's bytes as text.** A GIF, MP3 or OGG URL came back as a heading followed by binary content. A media URL that no vision or speech-to-text model describes now returns a heading and a link to the file (`![name](url)` for images, `[name](url)` for audio and video), with the new `X-Source` value `media-link`.
+- **With sign-in on, a cache hit was missing from the user's history.** When user B converted a URL user A had converted within the hour, the cached result did not appear in B's `/api/history` or MCP `list_recent`. Cache hits on `/api`, `/api/stream` and `read_url` are recorded now.
+- **Rejected Reddit credentials returned a generic `500`.** A `401` or `403` from Reddit's token endpoint now returns `502` with `Reddit rejected the configured API credentials (REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET), token request returned 401`.
+- **A failed transcription ended with a MarkItDown error.** When the speech-to-text provider failed or never answered and MarkItDown could not convert the file either, the upload reported `markitdown sidecar unavailable or could not convert this document`. It reports the model's error now, for example `transcription timed out after 120 s`.
+
 ## [3.19.0] - 2026-11-11
 
 ### Added

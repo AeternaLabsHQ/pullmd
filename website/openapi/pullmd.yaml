@@ -132,7 +132,7 @@ components:
       example: report.pdf
   headers:
     X-Source:
-      description: 'Which extractor produced the result: `cloudflare`, `readability`, `readability-fallback`, `trafilatura`, `playwright`, `recipe-content`, `coverage-guard`, `markitdown`, `youtube`, `reddit`, `hackernews`, `image-caption`, `audio-transcript`, `pdf-ocr`, `article-series`, or for uploads PullMD reads itself `email`, `text`, `markdown`, `subtitles`, `opendocument`, `rtf`, `calendar`, `contact`, `data`, `feed`, `notebook` or `code`.'
+      description: 'Which extractor produced the result: `cloudflare`, `readability`, `readability-fallback`, `trafilatura`, `playwright`, `recipe-content`, `coverage-guard`, `markitdown`, `youtube`, `reddit`, `hackernews`, `image-caption`, `audio-transcript`, `media-link`, `pdf-ocr`, `article-series`, or for uploads PullMD reads itself `email`, `text`, `markdown`, `subtitles`, `opendocument`, `rtf`, `calendar`, `contact`, `data`, `feed`, `notebook` or `code`.'
       schema: { type: string }
     X-Quality:
       description: Extraction confidence from `0.0` to `1.0`.

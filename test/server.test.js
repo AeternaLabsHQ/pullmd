@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server.js';
 import { createCache } from '../lib/cache.js';
+import { RedditAuthError } from '../lib/reddit-auth.js';
 
 async function request(app, path, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -1425,6 +1426,12 @@ describe('GET /api/config - markitdownYoutube flag', () => {
     assert.equal(JSON.parse(res.body).markitdownYoutube, true);
     if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
   });
+  it('reports false for MARKITDOWN_YOUTUBE=false (#98)', async () => {
+    const prev = process.env.MARKITDOWN_YOUTUBE; process.env.MARKITDOWN_YOUTUBE = 'false';
+    const res = await request(createApp({}), '/api/config');
+    assert.equal(JSON.parse(res.body).markitdownYoutube, false);
+    if (prev === undefined) delete process.env.MARKITDOWN_YOUTUBE; else process.env.MARKITDOWN_YOUTUBE = prev;
+  });
 });
 
 describe('GET /api/config - pdfOcr flag', () => {
@@ -1540,5 +1547,16 @@ describe('GET /api - LLM usage + meta frontmatter', () => {
     assert.ok(res.body.startsWith('---\n'));
     assert.ok(res.body.includes('image_size: 2x2'), 'expected image_size in frontmatter');
     assert.ok(res.body.includes('llm_model: gpt-4o-mini'), 'expected llm_model in frontmatter');
+  });
+});
+
+describe('GET /api - rejected Reddit credentials (#98)', () => {
+  it('answers 502 naming the credentials instead of a generic 500', async () => {
+    const app = createApp({ extractPost: async () => { throw new RedditAuthError(401); } });
+    const res = await request(app, '/api?url=https://www.reddit.com/r/test/comments/abc/title/');
+    assert.equal(res.status, 502);
+    const body = JSON.parse(res.body);
+    assert.match(body.error, /REDDIT_CLIENT_ID/);
+    assert.match(body.error, /401/);
   });
 });

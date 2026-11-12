@@ -46,6 +46,9 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
 
     Uploads over 25 MB return `413`. A URL whose body exceeds `PULLMD_MAX_FETCH_BYTES` (50 MB by default) returns `502` with `response larger than the 50 MB limit`.
   </Accordion>
+  <Accordion title="502 for an audio or image upload">
+    When the model fails on an upload and the MarkItDown sidecar can't convert the file either, the error names the model step. `Failed to convert file: transcription timed out after 120 s` means the speech-to-text provider didn't answer within 120 seconds. `Failed to convert file: transcription failed (…)` and `Failed to convert file: captioning failed (…)` carry the provider's status code. Check the provider and the `PULLMD_STT_*` or `PULLMD_VISION_*` settings. See [Images and audio](/guides/images-and-audio).
+  </Accordion>
   <Accordion title="Upload interrupted, or Network error: server unreachable after switching apps">
     ```text
     Upload interrupted. Keep the app open during the upload and try again.
@@ -88,6 +91,9 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
   </Accordion>
   <Accordion title="Reddit: 502 Reddit blocked the request">
     Reddit blocks requests without API credentials. Set `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` from an existing Reddit app. See [Reddit credentials](/guides/reddit-and-hacker-news#reddit-credentials). `502 Reddit rate limit. Try again later.` means Reddit throttled the request; retry later. See [Reddit credentials](/guides/reddit-and-hacker-news#reddit-credentials).
+  </Accordion>
+  <Accordion title="Reddit: 502 Reddit rejected the configured API credentials">
+    `502 Reddit rejected the configured API credentials (REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET), token request returned 401` means Reddit refused the app credentials. Check `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` against the app on Reddit's app page, then run `docker compose up -d`. See [Reddit credentials](/guides/reddit-and-hacker-news#reddit-credentials).
   </Accordion>
   <Accordion title="Comments heading is in German">
     The default for `lang` is `de`. Pass `lang=en` (and `nocache=true` if the thread was fetched in the last hour).
