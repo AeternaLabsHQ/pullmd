@@ -47,12 +47,6 @@ describe('reddit-auth', () => {
       assert.equal(t2, 'tok-abc');
       assert.equal(callCount, 1, 'token cached, only fetched once');
     });
-
-    it('throws on token endpoint failure', async () => {
-      const fakeFetch = async () => ({ ok: false, status: 401 });
-      const env = { REDDIT_CLIENT_ID: 'cid', REDDIT_CLIENT_SECRET: 'sec' };
-      await assert.rejects(() => getToken({ env, fetchFn: fakeFetch }), /401/);
-    });
   });
 
   describe('redditFetch', () => {

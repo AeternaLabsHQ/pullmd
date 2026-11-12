@@ -826,11 +826,13 @@ describe('extractWeb - media routing via Node LLM layer', () => {
     return async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
-      arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
+      // Not Buffer#buffer: a small Buffer lives in Node's shared pool, so that
+      // would hand over the whole pool, starting with some other test's bytes.
+      arrayBuffer: async () => Uint8Array.from(Buffer.from('JPEGBYTES')).buffer,
     });
   }
 
-  it('falls through to normal extraction when no vision provider is configured (captionFn returns null)', async () => {
+  it('links the image without calling markitdown when no vision provider is configured (captionFn returns null)', async () => {
     let called = false;
     const result = await extractWeb('https://example.com/photo.jpg', {
       fetch: imgFetch(),
@@ -838,7 +840,9 @@ describe('extractWeb - media routing via Node LLM layer', () => {
       markitdownClient: async () => { called = true; return { markdown: 'x', title: 'x' }; },
     });
     assert.equal(called, false, 'markitdown must not be called for an image when captionFn returns null');
-    assert.notEqual(result.source, 'markitdown');
+    assert.equal(result.source, 'media-link');
+    assert.ok(result.markdown.includes('![photo.jpg](https://example.com/photo.jpg)'));
+    assert.ok(!result.markdown.includes('JPEGBYTES'));
   });
 
   it('routes images to the vision adapter (source=image-caption) when captionFn is set', async () => {
@@ -850,13 +854,14 @@ describe('extractWeb - media routing via Node LLM layer', () => {
     assert.ok(result.markdown.includes('A caption of the photo.'));
   });
 
-  it('falls through to normal extraction when the vision provider throws (no 502)', async () => {
+  it('links the image when the vision provider throws (no 502)', async () => {
     const result = await extractWeb('https://example.com/photo.jpg', {
       fetch: imgFetch(),
       captionFn: async () => { throw new Error('rate limited (429)'); },
     });
-    assert.notEqual(result.source, 'image-caption');
-    assert.ok(result.source, 'extraction must resolve to some source, not reject');
+    assert.equal(result.source, 'media-link');
+    assert.ok(result.markdown.includes('![photo.jpg](https://example.com/photo.jpg)'));
+    assert.ok(!result.markdown.includes('rate limited'));
   });
 });
 
@@ -958,7 +963,9 @@ describe('extractWeb - LLM usage metadata', () => {
     return async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
-      arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
+      // Not Buffer#buffer: a small Buffer lives in Node's shared pool, so that
+      // would hand over the whole pool, starting with some other test's bytes.
+      arrayBuffer: async () => Uint8Array.from(Buffer.from('JPEGBYTES')).buffer,
     });
   }
   it('maps vision adapter usage/imageSize into metadata (source=image-caption)', async () => {
