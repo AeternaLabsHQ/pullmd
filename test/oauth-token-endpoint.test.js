@@ -52,6 +52,14 @@ async function form(base, body) {
   });
 }
 
+// Every validation failure here is a 400 invalid_grant; the description tells them apart.
+async function assertInvalidGrant(r, description) {
+  assert.equal(r.status, 400);
+  const m = await r.json();
+  assert.equal(m.error, 'invalid_grant');
+  assert.match(m.error_description, description);
+}
+
 describe('POST /oauth/token (authorization_code)', () => {
   it('happy path: returns access_token + refresh_token', async () => {
     const { app, oauth, userId, client } = await setup();
@@ -98,7 +106,6 @@ describe('POST /oauth/token (authorization_code)', () => {
       assert.equal(m.error, 'invalid_grant');
     });
     // Code is now used — second presentation rejected
-    const row = oauth.cache?.db ? null : null; // sentinel; check via store
     assert.equal(oauth.store.consumeAuthCode(codeHash), null);
   });
 
@@ -117,7 +124,7 @@ describe('POST /oauth/token (authorization_code)', () => {
         redirect_uri: 'https://different.example/cb',
         code_verifier: verifier,
       });
-      assert.equal(r.status, 400);
+      await assertInvalidGrant(r, /redirect_uri does not match/);
     });
   });
 
@@ -143,7 +150,7 @@ describe('POST /oauth/token (authorization_code)', () => {
         redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
         code_verifier: verifier,
       });
-      assert.equal(r2.status, 400);
+      await assertInvalidGrant(r2, /already used/);
     });
   });
 
@@ -261,7 +268,7 @@ describe('POST /oauth/token (refresh_token)', () => {
         refresh_token: 'pmd_rt_does-not-exist',
         client_id: client.client_id,
       });
-      assert.equal(r.status, 400);
+      await assertInvalidGrant(r, /Unknown refresh token/);
     });
   });
 
@@ -277,7 +284,7 @@ describe('POST /oauth/token (refresh_token)', () => {
         refresh_token: first.refresh_token,
         client_id: other.client_id,
       });
-      assert.equal(r.status, 400);
+      await assertInvalidGrant(r, /client_id does not match the refresh token/);
     });
   });
 
@@ -286,12 +293,14 @@ describe('POST /oauth/token (refresh_token)', () => {
     await withServer(app, async (base) => {
       const first = await obtainPair(base, oauth, userId, client);
       const hash = oauth.tokens.hashRefreshToken(first.refresh_token);
-      cache.db.prepare(`UPDATE oauth_refresh_tokens SET expires_at = datetime('now', '-1 hour') WHERE token_hash = ?`).run(hash);
+      // ISO string, the format production writes.
+      cache.db.prepare('UPDATE oauth_refresh_tokens SET expires_at = ? WHERE token_hash = ?')
+        .run(new Date(Date.now() - 3600e3).toISOString(), hash);
       const r = await form(base, {
         grant_type: 'refresh_token', refresh_token: first.refresh_token,
         client_id: client.client_id,
       });
-      assert.equal(r.status, 400);
+      await assertInvalidGrant(r, /Refresh token expired/);
     });
   });
 });

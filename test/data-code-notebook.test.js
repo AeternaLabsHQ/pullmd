@@ -1,10 +1,13 @@
-import { describe, it } from 'node:test';
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { dataFileKind, extractDataFile, fence, parseDelimited } from '../lib/datafile.js';
 import { isNotebookFile, extractNotebook } from '../lib/notebook.js';
 import { codeLanguage, extractCodeFile } from '../lib/codefile.js';
 import { plainTextKind } from '../lib/plaintext.js';
 import { htmlFragmentToMarkdown } from '../lib/web.js';
+
+// Dates are rendered in the server's zone (TZ, default Europe/Berlin).
+before(() => { process.env.TZ = 'Europe/Berlin'; });
 
 const fakeHtml = (h) => h.replace(/<[^>]+>/g, '');
 const csv = (text, filename = 'liste.csv') => extractDataFile(Buffer.from(text), { filename });

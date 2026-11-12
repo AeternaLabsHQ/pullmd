@@ -30,6 +30,12 @@ function normalizePort(text) {
   return text.replace(/^share_url: http:\/\/localhost:\d+\//m, 'share_url: http://localhost:PORT/');
 }
 
+// The tool result is a `---` meta block followed by the page markdown.
+function bodyOf(text) {
+  assert.ok(text.startsWith('---\n'), 'expected a leading meta block');
+  return text.slice(text.indexOf('\n---\n', 4) + 5).replace(/^\n+/, '');
+}
+
 const MCP_HEADERS = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
 
 async function callTool(app, name, args, id = 1) {
@@ -159,17 +165,16 @@ describe('MCP read_url - query-extract: byte-identical without query', () => {
       extractWeb: async () => ({ markdown: bigMarkdown(), title: 'Big Article', source: 'readability', metadata: { quality: 0.8 } }),
       cache,
     });
-    // Prime the cache, then compare two subsequent cache-hit calls (both
-    // cached:true) so the diff isolates query-extract's effect rather than
-    // the unrelated fresh-vs-cached-hit fields (share_url port, cached flag).
-    await callTool(app, 'read_url', { url: 'https://example.com/article' }, 1);
-    const second = await callTool(app, 'read_url', { url: 'https://example.com/article' }, 2);
-    const third = await callTool(app, 'read_url', { url: 'https://example.com/article' }, 3);
-    assert.equal(normalizePort(third.result.content[0].text), normalizePort(second.result.content[0].text));
-    assert.ok(third.result.content[0].text.includes('## Introduction'));
-    assert.ok(third.result.content[0].text.includes('## Zebra Migration Patterns'));
-    assert.ok(third.result.content[0].text.includes('## Conclusion'));
-    assert.ok(!third.result.content[0].text.includes('query-extract'));
+    const fresh = await callTool(app, 'read_url', { url: 'https://example.com/article' }, 1);
+    const hit = await callTool(app, 'read_url', { url: 'https://example.com/article' }, 2);
+    const freshText = fresh.result.content[0].text;
+    const hitText = hit.result.content[0].text;
+    assert.match(freshText, /^cached: false$/m);
+    assert.match(hitText, /^cached: true$/m);
+    // Behind the meta block both carry the page exactly as extracted.
+    assert.equal(bodyOf(hitText), bigMarkdown());
+    assert.equal(bodyOf(hitText), bodyOf(freshText));
+    assert.ok(!hitText.includes('query-extract'));
   });
 });
 
@@ -326,15 +331,17 @@ describe('MCP read_url - query-extract: reddit path with query', () => {
 });
 
 describe('MCP read_url - query-extract: get_share and list_recent untouched', () => {
-  it('get_share ignores query-like args and returns the full frontmatter unchanged', async () => {
+  it('get_share ignores query-like args and returns the full document', async () => {
     const cache = createCache(':memory:');
-    const shareId = cache.put({ url: 'https://example.com/z', title: 'Z', markdown: '# Z\n\nBody', source: 'readability', client: 'api' });
+    const shareId = cache.put({ url: 'https://example.com/z', title: 'Big Article', markdown: bigMarkdown(), source: 'readability', client: 'api' });
     const app = createApp({ cache });
-    const j = await callTool(app, 'get_share', { id: shareId });
+    // The same args cut this page down to one section on read_url.
+    const j = await callTool(app, 'get_share', { id: shareId, query: 'zebra', max_tokens: 64 });
+    assert.notEqual(j.result.isError, true);
     const text = j.result.content[0].text;
-    assert.ok(text.startsWith('---\n'));
     assert.match(text, /^share_id: /m);
     assert.ok(!text.includes('extracted:'));
+    assert.equal(bodyOf(text), bigMarkdown());
   });
 
   it('list_recent output shape unchanged', async () => {

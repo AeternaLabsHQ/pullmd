@@ -1,7 +1,10 @@
-import { describe, it } from 'node:test';
+import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { isEmlFile, extractEml } from '../lib/eml.js';
 import { extractFile } from '../lib/web.js';
+
+// Dates are rendered in the server's zone (TZ, default Europe/Berlin).
+before(() => { process.env.TZ = 'Europe/Berlin'; });
 
 function mail({ subject = 'Hallo Welt', html, text, attachment, extraHeaders = '' } = {}) {
   const lines = [

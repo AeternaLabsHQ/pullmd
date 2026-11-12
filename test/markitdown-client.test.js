@@ -5,9 +5,19 @@ import { convertViaMarkitdown, convertYoutubeViaSidecar } from '../lib/markitdow
 const okResp = (json) => ({ ok: true, json: async () => json });
 
 describe('convertViaMarkitdown', () => {
-  it('returns null when no URL is configured', async () => {
-    const out = await convertViaMarkitdown(Buffer.from('x'), { fetch: async () => okResp({}) });
-    assert.equal(out, null);
+  it('returns null without calling fetch when no URL is configured', async () => {
+    const saved = process.env.MARKITDOWN_URL;
+    delete process.env.MARKITDOWN_URL;
+    let calls = 0;
+    try {
+      const out = await convertViaMarkitdown(Buffer.from('x'), {
+        fetch: async () => { calls++; return okResp({ markdown: '# Doc', title: 'Doc' }); },
+      });
+      assert.equal(out, null);
+      assert.equal(calls, 0);
+    } finally {
+      if (saved !== undefined) process.env.MARKITDOWN_URL = saved;
+    }
   });
 
   it('POSTs bytes to the sidecar and returns {markdown,title}', async () => {
@@ -47,21 +57,35 @@ describe('convertViaMarkitdown', () => {
     assert.equal(out, null);
   });
 
-  it('returns null immediately when the signal is already aborted', async () => {
+  // The client does not short-circuit: it still calls fetch, but with an
+  // internal signal that is already aborted, and maps the rejection to null.
+  it('hands fetch an already-aborted signal and returns null when it rejects', async () => {
     const ctrl = new AbortController();
     ctrl.abort();
+    let abortedAtCall = null;
     const out = await convertViaMarkitdown(Buffer.from('x'), {
       url: 'http://m/convert',
       signal: ctrl.signal,
-      fetch: async () => { throw new Error('should not hang'); },
+      fetch: async (u, o) => {
+        abortedAtCall = o.signal.aborted;
+        if (o.signal.aborted) throw new DOMException('aborted', 'AbortError');
+        return okResp({ markdown: '# Doc', title: 'Doc' });
+      },
     });
+    assert.equal(abortedAtCall, true, 'internal signal must already be aborted when fetch is invoked');
     assert.equal(out, null);
   });
 });
 
 describe('convertYoutubeViaSidecar', () => {
-  it('returns null without a sourceUrl', async () => {
-    assert.equal(await convertYoutubeViaSidecar('<html>', { url: 'http://m/convert', fetch: async () => okResp({}) }), null);
+  it('returns null without calling fetch when sourceUrl is missing', async () => {
+    let calls = 0;
+    const out = await convertYoutubeViaSidecar('<html>', {
+      url: 'http://m/convert',
+      fetch: async () => { calls++; return okResp({ markdown: 'x', title: 't' }); },
+    });
+    assert.equal(out, null);
+    assert.equal(calls, 0);
   });
 
   it('POSTs to /youtube with X-Source-Url + format headers', async () => {

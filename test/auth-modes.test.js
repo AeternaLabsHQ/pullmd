@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
 
@@ -80,6 +81,14 @@ describe('auth modes', () => {
     assert.ok(user, 'legacy token should resolve to admin');
     assert.equal(user.email, 'a@b.c');
     assert.equal(auth.lookupLegacyToken('wrong-token'), null);
+
+    const keys = cache.db.prepare('SELECT user_id, key_hash, key_prefix, label FROM api_keys').all();
+    assert.deepEqual(keys, [{
+      user_id: user.id,
+      key_hash: createHash('sha256').update('legacy-token-abc').digest('hex'),
+      key_prefix: 'legacy-token',
+      label: 'legacy PULLMD_AUTH_TOKEN',
+    }]);
   });
 
   it('legacy lookup is disabled in multi-user mode', async () => {

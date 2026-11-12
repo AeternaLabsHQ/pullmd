@@ -135,14 +135,6 @@ describe('createStatusChecker', () => {
     assert.equal(status.services.trafilatura.status, 'ok');
   });
 
-  it('accepts a Playwright sidecar that reports the address policy', async () => {
-    const fetch = fakeFetch(() => reply());
-    const status = await createStatusChecker({ fetch, env: ENV })();
-
-    assert.equal(status.ok, true);
-    assert.equal(status.services.playwright.status, 'ok');
-  });
-
   it('flags a Playwright sidecar without the policy as degraded', async () => {
     // A pullmd-playwright image from before v3.15.2: healthy, renders fine,
     // but follows redirects into internal hosts (GHSA-26wr-prg5-vr77).
@@ -276,15 +268,23 @@ describe('createStatusChecker', () => {
     assert.deepEqual(a, b);
   });
 
-  it('does not cache across a failed probe round', async () => {
+  it('caches a failed round for the TTL and re-probes after it', async () => {
     let fail = true;
     const fetch = fakeFetch(() => { if (fail) throw new TypeError('fetch failed'); return reply(); });
     let clock = 1000;
     const check = createStatusChecker({ fetch, env: ENV, ttlMs: 5000, now: () => clock });
 
     assert.equal((await check()).ok, false);
+    assert.equal(fetch.calls.length, 3);
+
+    // The sidecars are back, but the failed round is still served from cache.
     fail = false;
-    clock += 5001;
+    clock += 4999;
+    assert.equal((await check()).ok, false);
+    assert.equal(fetch.calls.length, 3, 'no new probes within the TTL');
+
+    clock += 1;
     assert.equal((await check()).ok, true);
+    assert.equal(fetch.calls.length, 6, 'one new round once the TTL has passed');
   });
 });

@@ -334,14 +334,12 @@ describe('extractWeb - output format', () => {
 
 describe('extractWeb - Readability fallback for thin content (P1.3)', () => {
   it('uses readability-fallback source when Readability returns too little', async () => {
-    // Page with content only in a generic div — Readability often returns <200 chars
+    // Under 200 chars of article HTML, so the cleaned body is converted instead.
     const html = `
       <html><head><title>Sparse Page</title></head>
       <body>
         <div>
-          <p>This is the actual content of the page that should be extracted.</p>
-          <p>Second paragraph with more content for the extraction pipeline.</p>
-          <p>Third paragraph to ensure enough content in the fallback result.</p>
+          <p>This is the actual content of the page.</p>
         </div>
       </body></html>
     `;
@@ -352,10 +350,10 @@ describe('extractWeb - Readability fallback for thin content (P1.3)', () => {
       text: async () => html,
     });
 
-    const result = await extractWeb('https://example.com/sparse', { fetch: fetcher });
+    // render: 'skip' keeps the thin result from triggering a Playwright attempt.
+    const result = await extractWeb('https://example.com/sparse', { fetch: fetcher, render: 'skip' });
     assert.ok(result.markdown.includes('actual content'), 'should include page content');
-    assert.ok(result.source === 'readability' || result.source === 'readability-fallback',
-      'source should be readability or readability-fallback');
+    assert.equal(result.source, 'readability-fallback');
   });
 });
 

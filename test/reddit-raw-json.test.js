@@ -58,9 +58,13 @@ describe('formatting with raw_json text', () => {
 
 describe('cleanRedditText cost', () => {
   it('stays linear on a crafted body (markers followed by as many blank lines)', () => {
-    const body = 'x' + '\n&#x200B;'.repeat(5000) + '\n'.repeat(5001) + 'y';
-    const t = Date.now();
+    // Linear takes a few ms at this size, a rescan per removal takes many
+    // seconds. The bound sits far from both, so machine load cannot flip it.
+    const n = 20000;
+    const body = 'x' + '\n&#x200B;'.repeat(n) + '\n'.repeat(n + 1) + 'y';
+    const t = performance.now();
     assert.equal(cleanRedditText(body), 'x\ny');
-    assert.ok(Date.now() - t < 100, `took ${Date.now() - t} ms`);
+    const ms = performance.now() - t;
+    assert.ok(ms < 2000, `took ${Math.round(ms)} ms`);
   });
 });
