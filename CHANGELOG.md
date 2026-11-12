@@ -13,6 +13,8 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ### Fixed
 
+- **Turning comments off had no effect on a recently pulled Reddit or Hacker News post.** A post stays cached for an hour, and within that hour a request with `comments=false` was served the cached copy including its comments, in the web app as well as on `/api`, `/api/stream` and MCP `read_url` (Reddit). The comments block is now dropped from the cached copy, without a new request to Reddit or Hacker News.
+
 Six bugs reported in #98, found while testing the docs against 3.19.0.
 
 - **`MARKITDOWN_YOUTUBE=false` turned the YouTube tier on.** Any non-empty value enabled it, including `false` and `0`, and `/api/config` reported `markitdownYoutube: true`. Only `true`, `1`, `yes` and `on` enable it now.

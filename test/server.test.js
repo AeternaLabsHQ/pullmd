@@ -1560,3 +1560,25 @@ describe('GET /api - rejected Reddit credentials (#98)', () => {
     assert.match(body.error, /401/);
   });
 });
+
+describe('GET /api - comments off on a cached Reddit post', () => {
+  const url = 'https://www.reddit.com/r/test/comments/abc/title/';
+  const withComments = '# Post\n\nBody\n\n---\n\n## Comments (1 of 1)\n\n**u/a**: hi';
+  for (const path of ['/api', '/api/stream']) {
+    it(`${path} serves the cached post without its comments`, async () => {
+      const cache = createCache(':memory:');
+      let calls = 0;
+      const app = createApp({ cache, extractPost: async () => { calls++; return withComments; } });
+      await request(app, `/api?url=${encodeURIComponent(url)}`);
+      const res = await request(app, `${path}?url=${encodeURIComponent(url)}&comments=false`);
+      assert.equal(calls, 1, 'second request is a cache hit');
+      assert.ok(res.body.includes('Body'));
+      assert.ok(!res.body.includes('## Comments'), res.body);
+      assert.ok(!res.body.includes('u/a'));
+      // and with comments on again, they are back
+      const again = await request(app, `${path}?url=${encodeURIComponent(url)}`);
+      assert.ok(again.body.includes('## Comments (1 of 1)'));
+      assert.equal(calls, 1);
+    });
+  }
+});
