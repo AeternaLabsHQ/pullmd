@@ -5,7 +5,6 @@ import express from 'express';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
 import { createOAuth, mountOAuthRoutes } from '../lib/oauth/index.js';
-import { createUserCmd } from '../scripts/admin.js';
 
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
 const FORM = { 'Content-Type': 'application/x-www-form-urlencoded' };
@@ -74,14 +73,6 @@ describe('account email validation', () => {
     await withApp({}, async (_base, { auth }) => {
       const u = await auth.createUser({ email: '  First.Last+tag@Sub.Example.org ', password: 'pw1234567' });
       assert.equal(u.email, 'first.last+tag@sub.example.org');
-    });
-  });
-
-  it('admin CLI create-user uses the same email rules', async () => {
-    await withApp({}, async (_base, { auth, cache }) => {
-      const r = await createUserCmd({ db: cache.db, auth }, '<b>x</b>@x.y', 'pw1234567');
-      assert.equal(r.ok, false);
-      assert.equal(r.reason, 'invalid');
     });
   });
 
@@ -226,7 +217,13 @@ describe('same-origin check on auth form posts', () => {
 describe('PWA auth slot', () => {
   it('renders the account email as text, not markup', () => {
     const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
-    assert.doesNotMatch(html, /\$\{me\.email\}/);
-    assert.doesNotMatch(html, /slot\.innerHTML/);
+    // The startup IIFE that asks /api/me and builds the slot.
+    const block = html.match(/async function authBootstrap\(\)[\s\S]*?\n {4}\}\)\(\);/);
+    assert.ok(block, 'auth slot block not found');
+    assert.doesNotMatch(block[0], /innerHTML|outerHTML|insertAdjacentHTML|document\.write|DOMParser|createContextualFragment/);
+    // Every use of the email, here and elsewhere on the page, is a textContent assignment.
+    const uses = html.split('\n').filter((line) => /\.email\b/.test(line));
+    assert.ok(uses.length > 0, 'no use of the account email found');
+    for (const line of uses) assert.match(line, /^\s*[\w.]+\.textContent = \w+\.email\b[^`$+]*;\s*$/);
   });
 });

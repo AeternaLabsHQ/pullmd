@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { createFileJobStore, readFileJobConfig } from '../lib/file-jobs.js';
 
@@ -388,10 +388,27 @@ describe('file job store', () => {
     assert.ok(store.create({ owner: null, clientKey: 'c' }));
   });
 
-  it('close stops the sweep timer so the process can exit', () => {
-    const store = createFileJobStore({ ttlMs: 60_000, maxBytes: 1_000, sweepIntervalMs: 10 });
+  it('the sweep timer drops expired jobs until close stops it', (t) => {
+    mock.timers.enable({ apis: ['setInterval'] });
+    t.after(() => mock.timers.reset());
+    const { clock, store } = setup({ sweepIntervalMs: 10 });
+    const expire = () => {
+      const id = store.create({ owner: null, clientKey: 'c' });
+      store.finish(id, RESULT);
+      clock.t += 60_001;
+    };
+
+    // stats() does not sweep, so only the timer can empty the store.
+    expire();
+    assert.equal(store.stats().jobs, 1);
+    mock.timers.tick(10);
+    assert.equal(store.stats().jobs, 0);
+
+    expire();
     store.close();
     store.close();
+    mock.timers.tick(100);
+    assert.equal(store.stats().jobs, 1, 'no sweep after close');
   });
 });
 

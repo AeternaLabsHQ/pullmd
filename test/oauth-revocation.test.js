@@ -57,6 +57,18 @@ describe('POST /oauth/revoke (RFC 7009)', () => {
       assert.equal(r.status, 200);
       const row = oauth.store.findRefreshToken(tokenHash);
       assert.ok(row.revoked_at);
+
+      const use = await fetch(`${base}/oauth/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token', refresh_token: token, client_id: client.client_id,
+        }).toString(),
+      });
+      assert.equal(use.status, 400);
+      const m = await use.json();
+      assert.equal(m.error, 'invalid_grant');
+      assert.equal(m.access_token, undefined);
     });
   });
 

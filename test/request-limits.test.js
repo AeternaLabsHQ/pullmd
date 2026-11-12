@@ -242,10 +242,18 @@ describe('login and signup rate limits', () => {
     });
   });
 
-  it('uses default limits when none are injected', () => {
+  it('defaults to 10 logins a minute and 5 signups an hour per client', () => {
     const { auth } = makeAuth('multi-user');
-    assert.equal(typeof auth.limits.login.check, 'function');
-    assert.equal(typeof auth.limits.signup.check, 'function');
+    const { login, signup } = auth.limits;
+
+    for (let i = 0; i < 10; i++) assert.equal(login.check('k'), true, `login attempt ${i + 1}`);
+    assert.equal(login.check('k'), false);
+    // The first attempt was made a moment ago, so the wait rounds up to the window.
+    assert.equal(login.retryAfterSeconds('k'), 60);
+
+    for (let i = 0; i < 5; i++) assert.equal(signup.check('k'), true, `signup attempt ${i + 1}`);
+    assert.equal(signup.check('k'), false);
+    assert.equal(signup.retryAfterSeconds('k'), 3600);
   });
 });
 

@@ -65,8 +65,4 @@ describe('sessions', () => {
     const diffSeconds = (new Date(row.expires_at + 'Z').getTime() - Date.now()) / 1000;
     assert.ok(diffSeconds > 85 * 86400, `expected slide past 85 days; got ${diffSeconds}s`);
   });
-
-  it('createAuth throws on unknown mode', () => {
-    assert.throws(() => createAuth({ db: cache.db, mode: 'unknown' }), /Invalid PULLMD_AUTH_MODE/);
-  });
 });

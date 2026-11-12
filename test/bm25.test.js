@@ -133,17 +133,46 @@ describe('scoreBm25 — query term dedupe', () => {
   });
 });
 
-describe('scoreBm25 — options', () => {
-  it('respects custom k1/b overrides and still returns finite scores', () => {
-    const docs = [['foo', 'bar'], ['foo', 'foo', 'foo', 'padding', 'padding']];
-    const scores = scoreBm25(['foo'], docs, { k1: 1.2, b: 0.5 });
-    for (const s of scores) assert.ok(Number.isFinite(s));
+describe('scoreBm25 - options', () => {
+  // tf(1 + k1) / (tf + k1 * norm) grows with k1 whenever tf > norm, so a doc
+  // of average length (norm = 1) with tf 4 must score higher at a higher k1.
+  it('a higher k1 lets repeated terms count for more', () => {
+    const docs = [['foo', 'foo', 'foo', 'foo'], ['bar', 'bar', 'bar', 'bar']];
+    const low = scoreBm25(['foo'], docs, { k1: 0.5 });
+    const high = scoreBm25(['foo'], docs, { k1: 3 });
+    assert.ok(high[0] > low[0], `k1=3 (${high[0]}) must beat k1=0.5 (${low[0]})`);
+  });
+
+  it('k1=0 ignores term frequency altogether', () => {
+    const docs = [['foo', 'pad', 'pad', 'pad'], ['foo', 'foo', 'foo', 'pad'], ['pad', 'pad', 'pad', 'pad']];
+    const scores = scoreBm25(['foo'], docs, { k1: 0 });
+    assert.ok(scores[0] > 0);
+    // idf * tf / tf, so equal up to float rounding.
+    assert.ok(Math.abs(scores[0] - scores[1]) < 1e-12, `${scores[0]} vs ${scores[1]}`);
+  });
+
+  it('b controls how hard a long doc is penalized', () => {
+    const shortDoc = ['foo', 'bar'];
+    const longDoc = ['foo', 'bar', 'pad', 'pad', 'pad', 'pad', 'pad', 'pad'];
+    const docs = [shortDoc, longDoc];
+
+    const none = scoreBm25(['foo'], docs, { b: 0 });
+    assert.equal(none[0], none[1], 'b=0 switches length normalization off');
+
+    const half = scoreBm25(['foo'], docs, { b: 0.5 });
+    const full = scoreBm25(['foo'], docs, { b: 1 });
+    assert.ok(half[0] > half[1]);
+    assert.ok(full[0] - full[1] > half[0] - half[1], 'gap widens with b');
+    assert.ok(full[1] < half[1], 'long doc drops as b rises');
+    assert.ok(full[0] > half[0], 'short doc gains as b rises');
   });
 
   it('defaults to k1=1.5, b=0.75 when opts omitted', () => {
     const docs = [['foo', 'bar'], ['foo', 'foo', 'foo', 'padding', 'padding']];
     const withDefaults = scoreBm25(['foo'], docs);
-    const withExplicitDefaults = scoreBm25(['foo'], docs, { k1: 1.5, b: 0.75 });
-    assert.deepEqual(withDefaults, withExplicitDefaults);
+    assert.deepEqual(withDefaults, scoreBm25(['foo'], docs, { k1: 1.5, b: 0.75 }));
+    // Each default is told apart from a neighbouring value.
+    assert.notDeepEqual(withDefaults, scoreBm25(['foo'], docs, { k1: 1.2, b: 0.75 }));
+    assert.notDeepEqual(withDefaults, scoreBm25(['foo'], docs, { k1: 1.5, b: 0.5 }));
   });
 });

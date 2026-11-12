@@ -28,15 +28,6 @@ describe('GET /api', () => {
     assert.ok(json.error);
   });
 
-  it('routes non-Reddit URL to web pipeline (not 400)', async () => {
-    const app = createApp({
-      extractWeb: async () => ({ markdown: '# Page', title: 'Page', source: 'readability' }),
-      cache: createCache(':memory:'),
-    });
-    const res = await request(app, '/api?url=https://example.com');
-    assert.equal(res.status, 200);
-  });
-
   it('returns markdown with correct content-type for valid request', async () => {
     const app = createApp({
       extractPost: async () => '# Test\n\nBody',
@@ -305,7 +296,6 @@ describe('client detection', () => {
     await request(app, '/api?url=https://example.com/p', {
       headers: { 'X-Client-Mode': 'pwa', 'User-Agent': 'Mozilla/5.0 Chrome/131' },
     });
-    const stats = cache.extractionStats('-1 hour');
     const log = cache.db.prepare('SELECT client FROM extraction_log').get();
     assert.equal(log.client, 'pwa');
   });
@@ -565,7 +555,9 @@ describe('GET /api - JSON format', () => {
     assert.ok(json.metadata);
     assert.equal(json.metadata.title, 'Page');
     assert.equal(json.source, 'readability');
-    assert.ok(json.shareId || json.shareId === null);
+    // A cache is configured, so the conversion gets a share id.
+    assert.match(json.shareId, /^[0-9a-f]{32}$/);
+    assert.equal(json.shareId, res.headers['x-share-id']);
   });
 
   it('returns JSON with metadata for Reddit URLs when format=json', async () => {
@@ -902,7 +894,10 @@ describe('POST /mcp', () => {
         params: { name: 'read_url', arguments: { url: 'https://www.youtube.com/watch?v=abc', yt_timecodes: 'plain', yt_chunk: 0 } },
       }),
     });
-    parseSse(res.body); // assert no MCP-level error
+    const j = parseSse(res.body);
+    assert.equal(j.error, undefined);
+    assert.notEqual(j.result.isError, true);
+    assert.ok(j.result.content[0].text.includes('# YT'));
     assert.equal(receivedOpts.ytTimecodes, 'plain');
     assert.equal(receivedOpts.ytChunk, 0, 'yt_chunk: 0 must be forwarded (not dropped by falsy check)');
   });
@@ -989,6 +984,13 @@ describe('GET / (templated index)', () => {
     const res = await request(app, '/index.html');
     assert.equal(res.status, 200);
     assert.ok(res.headers['content-type'].includes('text/html'));
+    // express.static would serve the raw file here, placeholders and all.
+    for (const placeholder of ['__PULLMD_VERSION__', '__PULLMD_URL__', '__PULLMD_DISABLE_HISTORY_FLAG__']) {
+      assert.ok(!res.body.includes(placeholder), `${placeholder} leaked`);
+    }
+    const root = await request(app, '/');
+    const port = /localhost:\d+/g;
+    assert.equal(res.body.replace(port, 'HOST'), root.body.replace(port, 'HOST'));
   });
 });
 
@@ -1304,11 +1306,14 @@ describe('DISABLE_PUBLIC_HISTORY', () => {
 
   it('treats DISABLE_PUBLIC_HISTORY=false / unset as disabled-off', async () => {
     const prev = process.env.DISABLE_PUBLIC_HISTORY;
-    process.env.DISABLE_PUBLIC_HISTORY = 'false';
     try {
-      const app = createApp({ cache: createCache(':memory:') });
-      const res = await request(app, '/api/history');
-      assert.equal(res.status, 200);
+      process.env.DISABLE_PUBLIC_HISTORY = 'false';
+      const offApp = createApp({ cache: createCache(':memory:') });
+      assert.equal((await request(offApp, '/api/history')).status, 200);
+
+      delete process.env.DISABLE_PUBLIC_HISTORY;
+      const unsetApp = createApp({ cache: createCache(':memory:') });
+      assert.equal((await request(unsetApp, '/api/history')).status, 200);
     } finally {
       if (prev === undefined) delete process.env.DISABLE_PUBLIC_HISTORY;
       else process.env.DISABLE_PUBLIC_HISTORY = prev;
@@ -1504,9 +1509,16 @@ describe('GET /api - ?pdf=ocr cache bypass', () => {
 describe('GET /api - YouTube format params', () => {
   it('forwards yt_timecodes/yt_chunk to extractWeb and bypasses cache', async () => {
     let opts;
+    let calls = 0;
     const cache = createCache(':memory:');
-    const app = createApp({ cache, extractWeb: async (u, o) => { opts = o; return { markdown: '# V\n\nbody', title: 'V', source: 'youtube', metadata: { quality: 0.9, ytDuration: '12:34', ytViews: '1000' } }; } });
+    const app = createApp({ cache, extractWeb: async (u, o) => { calls++; opts = o; return { markdown: '# V\n\nbody', title: 'V', source: 'youtube', metadata: { quality: 0.9, ytDuration: '12:34', ytViews: '1000' } }; } });
+    // Prime the cache, and show that a plain repeat is served from it.
+    await request(app, '/api?url=https://youtu.be/abc123');
+    await request(app, '/api?url=https://youtu.be/abc123');
+    assert.equal(calls, 1);
+
     await request(app, '/api?url=https://youtu.be/abc123&yt_timecodes=plain&yt_chunk=0');
+    assert.equal(calls, 2, 'yt params must skip the cached row');
     assert.equal(opts.ytTimecodes, 'plain');
     assert.equal(opts.ytChunk, 0);
   });

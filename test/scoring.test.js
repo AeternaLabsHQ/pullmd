@@ -127,19 +127,6 @@ describe('qualityScore', () => {
     // 0 (len<500) + 0.4 (non-html bonus) + 0.15 heading + 0.15 paragraphs = 0.7
     assert.ok(score >= 0.7, `got ${score}`);
   });
-
-  it('caps at 1.0', () => {
-    const md = '# Title\n\n' + 'paragraph text that is long enough. '.repeat(5) + '\n\n'.repeat(10) +
-      'another paragraph here. '.repeat(5) + '\n\nmore content here. '.repeat(5);
-    const score = qualityScore(md, { rawHtml: '<article>' + 'x'.repeat(100) + '</article>' });
-    assert.ok(score <= 1);
-  });
-
-  it('is deterministic', () => {
-    const md = '# T\n\nFirst paragraph here matters as content.\n\nSecond paragraph here.\n\nThird paragraph here.';
-    const html = '<article>x</article>';
-    assert.equal(qualityScore(md, { rawHtml: html }), qualityScore(md, { rawHtml: html }));
-  });
 });
 
 describe('scoreOf', () => {

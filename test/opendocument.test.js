@@ -344,12 +344,10 @@ describe('lib/zip.js', () => {
     const buf = makeZip([{ name: 'a.txt', data: 'hello world '.repeat(20), deflate: true }]);
     for (let len = 0; len < buf.length; len++) {
       const cut = buf.subarray(0, len);
-      try {
+      assert.throws(() => {
         const entries = readZipEntries(cut);
         readZipEntry(cut, 'a.txt', { entries });
-      } catch (e) {
-        assert.ok(e instanceof ZipError, `length ${len}: ${e}`);
-      }
+      }, ZipError, `length ${len}`);
     }
   });
 
@@ -411,11 +409,12 @@ describe('OpenDocument links', () => {
   const XL = 'xmlns:xlink="http://www.w3.org/1999/xlink"';
   const linkDoc = (href) => odf('text', `<office:text><text:p>Siehe <text:a ${XL} xlink:href="${href}">hier</text:a>.</text:p></office:text>`);
 
-  it('keeps web, mail, relative and anchor links', async () => {
+  it('keeps web, mail and relative links, drops the target of an in-document anchor', async () => {
     assert.match((await extractOpenDocument(linkDoc('https://example.com/a'), { filename: 'l.odt' })).markdown, /Siehe \[hier\]\(https:\/\/example\.com\/a\)\./);
     assert.match((await extractOpenDocument(linkDoc('mailto:a@example.com'), { filename: 'l.odt' })).markdown, /\[hier\]\(mailto:a@example\.com\)/);
     assert.match((await extractOpenDocument(linkDoc('../Anhang.odt'), { filename: 'l.odt' })).markdown, /\[hier\]\(\.\.\/Anhang\.odt\)/);
     assert.match((await extractOpenDocument(linkDoc('#Kapitel'), { filename: 'l.odt' })).markdown, /Siehe hier\./);
+    assert.doesNotMatch((await extractOpenDocument(linkDoc('#Kapitel'), { filename: 'l.odt' })).markdown, /\]\(|Kapitel/);
   });
 
   it('drops the target of script, data and file links', async () => {

@@ -4,9 +4,15 @@ import { RecipeSchema } from '../lib/recipes.js';
 import { loadRecipes } from '../lib/recipes.js';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fix = (rel) => path.join(here, 'fixtures/recipes', rel);
+// An explicit path to a missing file switches the user overlay off. Leaving
+// userPath out (or null) falls back to PULLMD_SITE_RECIPES or
+// ./data/site-recipes.json, which would tie the counts to the checkout.
+const NO_USER = fix('does-not-exist.json');
 
 describe('RecipeSchema', () => {
   it('accepts a minimal recipe with name + host', () => {
@@ -29,20 +35,25 @@ describe('RecipeSchema', () => {
     assert.equal(result.success, false);
   });
 
-  it('accepts all four preprocess actions', () => {
-    const recipe = {
-      name: 'r1', host: 'a.com',
-      preprocess: [
-        { action: 'remove-attr', selector: 'p', attr: 'aria-hidden' },
-        { action: 'remove-class', selector: 'p', class: 'paywall' },
-        { action: 'remove-element', selector: 'aside.ads' },
-        { action: 'unwrap', selector: 'span.wrapper' },
-      ],
-    };
-    assert.equal(RecipeSchema.safeParse(recipe).success, true);
+  it('accepts each of the seven preprocess actions', () => {
+    const actions = [
+      { action: 'remove-attr', selector: 'p', attr: 'aria-hidden' },
+      { action: 'remove-class', selector: 'p', class: 'paywall' },
+      { action: 'remove-element', selector: 'aside.ads' },
+      { action: 'unwrap', selector: 'span.wrapper' },
+      { action: 'replace-with-text', selector: '.yes', text: 'ja' },
+      { action: 'prepend-text', selector: 'td.pro', text: '+ ' },
+      { action: 'grid-to-table', selector: '#cmp' },
+    ];
+    for (const a of actions) {
+      const result = RecipeSchema.safeParse({ name: 'r1', host: 'a.com', preprocess: [a] });
+      assert.equal(result.success, true, `${a.action} should be accepted`);
+    }
+    const all = RecipeSchema.safeParse({ name: 'r1', host: 'a.com', preprocess: actions });
+    assert.equal(all.success, true);
   });
 
-  it('accepts replace-with-text and grid-to-table', () => {
+  it('accepts the attr form of replace-with-text and grid-to-table with columns', () => {
     const recipe = {
       name: 'r1', host: 'a.com',
       preprocess: [
@@ -116,9 +127,9 @@ describe('RecipeSchema', () => {
   });
 });
 
-describe('loadRecipes — default file only', () => {
+describe('loadRecipes - default file only', () => {
   it('loads recipes from the default file', () => {
-    const { recipes, status } = loadRecipes({ defaultPath: fix('default.json') });
+    const { recipes, status } = loadRecipes({ defaultPath: fix('default.json'), userPath: NO_USER });
     assert.equal(recipes.length, 2);
     assert.equal(recipes[0].name, 'fixture-paywall');
     assert.equal(status.loaded, 2);
@@ -128,19 +139,66 @@ describe('loadRecipes — default file only', () => {
   });
 
   it('returns empty + warning when default file is absent', () => {
-    const { recipes, status } = loadRecipes({ defaultPath: fix('does-not-exist.json') });
+    const { recipes, status } = loadRecipes({ defaultPath: NO_USER, userPath: NO_USER });
     assert.equal(recipes.length, 0);
     assert.equal(status.loaded, 0);
     assert.equal(status.sources.length, 0);
   });
+});
 
-  it('skips user file when not provided', () => {
-    const { status } = loadRecipes({ defaultPath: fix('default.json') });
-    assert.equal(status.sources.length, 1);
+describe('loadRecipes - user file not provided', () => {
+  // Runs in an empty temp cwd with the env override cleared, so the result
+  // does not depend on what the checkout holds.
+  function inTempCwd(fn) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pullmd-recipes-'));
+    const cwd = process.cwd();
+    const savedEnv = process.env.PULLMD_SITE_RECIPES;
+    delete process.env.PULLMD_SITE_RECIPES;
+    process.chdir(dir);
+    try {
+      return fn(dir);
+    } finally {
+      process.chdir(cwd);
+      if (savedEnv !== undefined) process.env.PULLMD_SITE_RECIPES = savedEnv;
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('loads only the default file when no overlay exists', () => {
+    inTempCwd(() => {
+      const { status } = loadRecipes({ defaultPath: fix('default.json') });
+      assert.equal(status.sources.length, 1);
+      assert.equal(status.loaded, 2);
+    });
+  });
+
+  it('picks up ./data/site-recipes.json from the working directory', () => {
+    inTempCwd((dir) => {
+      fs.mkdirSync(path.join(dir, 'data'));
+      fs.copyFileSync(fix('user.json'), path.join(dir, 'data', 'site-recipes.json'));
+      const { status } = loadRecipes({ defaultPath: fix('default.json') });
+      assert.equal(status.sources.length, 2);
+      assert.equal(status.loaded, 4);
+    });
+  });
+
+  it('prefers PULLMD_SITE_RECIPES over the working directory', () => {
+    inTempCwd((dir) => {
+      fs.mkdirSync(path.join(dir, 'data'));
+      fs.copyFileSync(fix('user.json'), path.join(dir, 'data', 'site-recipes.json'));
+      process.env.PULLMD_SITE_RECIPES = fix('invalid.json');
+      try {
+        const { status } = loadRecipes({ defaultPath: fix('default.json') });
+        assert.equal(status.sources[1].path, fix('invalid.json'));
+        assert.equal(status.rejected, 1);
+      } finally {
+        delete process.env.PULLMD_SITE_RECIPES;
+      }
+    });
   });
 });
 
-describe('loadRecipes — user overlay', () => {
+describe('loadRecipes - user overlay', () => {
   it('loads default + user, concatenates in order', () => {
     const { recipes } = loadRecipes({
       defaultPath: fix('default.json'),
@@ -187,13 +245,13 @@ describe('shipped site-recipes.default.json', () => {
   const shippedPath = path.resolve(here, '..', 'site-recipes.default.json');
 
   it('loads with zero rejections (every entry passes RecipeSchema)', () => {
-    const { recipes, status } = loadRecipes({ defaultPath: shippedPath, userPath: null });
+    const { recipes, status } = loadRecipes({ defaultPath: shippedPath, userPath: NO_USER });
     assert.equal(status.rejected, 0, 'a shipped recipe failed schema validation');
     assert.ok(recipes.length >= 1);
   });
 
   it('includes the sciencedaily lead-image recipe', () => {
-    const { recipes } = loadRecipes({ defaultPath: shippedPath, userPath: null });
+    const { recipes } = loadRecipes({ defaultPath: shippedPath, userPath: NO_USER });
     const sd = recipes.find((r) => r.name === 'sciencedaily-lead-image');
     assert.ok(sd, 'sciencedaily-lead-image recipe is present');
     assert.deepEqual(sd.preprocess, [{ action: 'unwrap', selector: '#text' }]);

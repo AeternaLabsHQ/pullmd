@@ -242,6 +242,10 @@ describe('auth routes — multi-user', () => {
         redirect: 'manual',
       });
       assert.equal(r.status, 400);
+      // The pre-check answers, not the UNIQUE-constraint fallback (create_failed).
+      const page = await r.text();
+      assert.match(page, /That email is already registered\./);
+      assert.doesNotMatch(page, /Could not create account/);
     });
   });
 
