@@ -160,3 +160,17 @@ describe('scoreOf', () => {
     assert.ok(structured <= 1);
   });
 });
+
+describe('metrics on a multi-megabyte single line (#98)', () => {
+  it('counts the paragraph without overflowing the regex stack', () => {
+    const md = 'lorem ipsum dolor sit amet '.repeat(400_000);
+    const m = metrics(md);
+    assert.equal(m.paragraphs, 1);
+    assert.equal(m.len, md.length);
+  });
+  it('still needs 40+ characters after the first for a paragraph', () => {
+    assert.equal(metrics('a'.repeat(40)).paragraphs, 0);
+    assert.equal(metrics('a'.repeat(41)).paragraphs, 1);
+    assert.equal(metrics('a'.repeat(50) + '\n\n' + 'b'.repeat(50)).paragraphs, 2);
+  });
+});
