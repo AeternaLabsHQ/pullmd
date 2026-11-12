@@ -91,7 +91,7 @@ There is no `PULLMD_LLM_MODEL`: the shared `PULLMD_LLM_*` settings cover the key
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `MARKITDOWN_YOUTUBE` | off | Any non-empty value, including `false`, turns on [YouTube transcripts](/guides/youtube). Set on the `pullmd` service. |
+| `MARKITDOWN_YOUTUBE` | off | `true`, `1`, `yes` or `on` turns on [YouTube transcripts](/guides/youtube). Any other value leaves them off. Set on the `pullmd` service. |
 | `MARKITDOWN_YT_TIMECODES` | `links` | `links`, `plain` or `none`. Set on the `markitdown` service. |
 | `MARKITDOWN_YT_CHUNK` | `30` | Transcript block length in seconds. `0` keeps each caption line. |
 | `MARKITDOWN_YT_LANGS` | first available | Preferred transcript languages, such as `de,en`. |
