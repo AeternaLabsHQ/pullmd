@@ -467,6 +467,7 @@ export function createApp(overrides = {}) {
           if (cached.share_id) res.set('X-Share-Id', cached.share_id);
           setFilenameHeader(res, { source: cached.source, title: outMeta.title, url, shareId: cached.share_id });
           if (ex) setExtractHeaders(res, ex);
+          cache.recordFetch(req.user?.id ?? null, cached.id);
           if (cache) cache.logExtraction({
             url, source: cached.source, quality: cachedQuality, markdownLen: baseMd.length,
             extractorReason: null, durationMs: Date.now() - t0, client, cached: true,
@@ -1090,6 +1091,7 @@ export function createApp(overrides = {}) {
                 shareId: cached.share_id,
               }),
             });
+            cache.recordFetch(req.user?.id ?? null, cached.id);
             cache.logExtraction({
               url, source: cached.source, quality: cachedQuality, markdownLen: (fm + baseMd).length,
               extractorReason: null, durationMs: Date.now() - t0, client, cached: true,
