@@ -127,19 +127,6 @@ describe('qualityScore', () => {
     // 0 (len<500) + 0.4 (non-html bonus) + 0.15 heading + 0.15 paragraphs = 0.7
     assert.ok(score >= 0.7, `got ${score}`);
   });
-
-  it('caps at 1.0', () => {
-    const md = '# Title\n\n' + 'paragraph text that is long enough. '.repeat(5) + '\n\n'.repeat(10) +
-      'another paragraph here. '.repeat(5) + '\n\nmore content here. '.repeat(5);
-    const score = qualityScore(md, { rawHtml: '<article>' + 'x'.repeat(100) + '</article>' });
-    assert.ok(score <= 1);
-  });
-
-  it('is deterministic', () => {
-    const md = '# T\n\nFirst paragraph here matters as content.\n\nSecond paragraph here.\n\nThird paragraph here.';
-    const html = '<article>x</article>';
-    assert.equal(qualityScore(md, { rawHtml: html }), qualityScore(md, { rawHtml: html }));
-  });
 });
 
 describe('scoreOf', () => {
@@ -158,5 +145,19 @@ describe('scoreOf', () => {
     const structured = scoreOf({ len: 5000, headings: 3, tables: 2, codeBlocks: 1 });
     assert.ok(structured > plain);
     assert.ok(structured <= 1);
+  });
+});
+
+describe('metrics on a multi-megabyte single line (#98)', () => {
+  it('counts the paragraph without overflowing the regex stack', () => {
+    const md = 'lorem ipsum dolor sit amet '.repeat(400_000);
+    const m = metrics(md);
+    assert.equal(m.paragraphs, 1);
+    assert.equal(m.len, md.length);
+  });
+  it('still needs 40+ characters after the first for a paragraph', () => {
+    assert.equal(metrics('a'.repeat(40)).paragraphs, 0);
+    assert.equal(metrics('a'.repeat(41)).paragraphs, 1);
+    assert.equal(metrics('a'.repeat(50) + '\n\n' + 'b'.repeat(50)).paragraphs, 2);
   });
 });

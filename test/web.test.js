@@ -334,14 +334,12 @@ describe('extractWeb - output format', () => {
 
 describe('extractWeb - Readability fallback for thin content (P1.3)', () => {
   it('uses readability-fallback source when Readability returns too little', async () => {
-    // Page with content only in a generic div — Readability often returns <200 chars
+    // Under 200 chars of article HTML, so the cleaned body is converted instead.
     const html = `
       <html><head><title>Sparse Page</title></head>
       <body>
         <div>
-          <p>This is the actual content of the page that should be extracted.</p>
-          <p>Second paragraph with more content for the extraction pipeline.</p>
-          <p>Third paragraph to ensure enough content in the fallback result.</p>
+          <p>This is the actual content of the page.</p>
         </div>
       </body></html>
     `;
@@ -352,10 +350,10 @@ describe('extractWeb - Readability fallback for thin content (P1.3)', () => {
       text: async () => html,
     });
 
-    const result = await extractWeb('https://example.com/sparse', { fetch: fetcher });
+    // render: 'skip' keeps the thin result from triggering a Playwright attempt.
+    const result = await extractWeb('https://example.com/sparse', { fetch: fetcher, render: 'skip' });
     assert.ok(result.markdown.includes('actual content'), 'should include page content');
-    assert.ok(result.source === 'readability' || result.source === 'readability-fallback',
-      'source should be readability or readability-fallback');
+    assert.equal(result.source, 'readability-fallback');
   });
 });
 
@@ -828,11 +826,13 @@ describe('extractWeb - media routing via Node LLM layer', () => {
     return async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
-      arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
+      // Not Buffer#buffer: a small Buffer lives in Node's shared pool, so that
+      // would hand over the whole pool, starting with some other test's bytes.
+      arrayBuffer: async () => Uint8Array.from(Buffer.from('JPEGBYTES')).buffer,
     });
   }
 
-  it('falls through to normal extraction when no vision provider is configured (captionFn returns null)', async () => {
+  it('links the image without calling markitdown when no vision provider is configured (captionFn returns null)', async () => {
     let called = false;
     const result = await extractWeb('https://example.com/photo.jpg', {
       fetch: imgFetch(),
@@ -840,7 +840,9 @@ describe('extractWeb - media routing via Node LLM layer', () => {
       markitdownClient: async () => { called = true; return { markdown: 'x', title: 'x' }; },
     });
     assert.equal(called, false, 'markitdown must not be called for an image when captionFn returns null');
-    assert.notEqual(result.source, 'markitdown');
+    assert.equal(result.source, 'media-link');
+    assert.ok(result.markdown.includes('![photo.jpg](https://example.com/photo.jpg)'));
+    assert.ok(!result.markdown.includes('JPEGBYTES'));
   });
 
   it('routes images to the vision adapter (source=image-caption) when captionFn is set', async () => {
@@ -852,13 +854,14 @@ describe('extractWeb - media routing via Node LLM layer', () => {
     assert.ok(result.markdown.includes('A caption of the photo.'));
   });
 
-  it('falls through to normal extraction when the vision provider throws (no 502)', async () => {
+  it('links the image when the vision provider throws (no 502)', async () => {
     const result = await extractWeb('https://example.com/photo.jpg', {
       fetch: imgFetch(),
       captionFn: async () => { throw new Error('rate limited (429)'); },
     });
-    assert.notEqual(result.source, 'image-caption');
-    assert.ok(result.source, 'extraction must resolve to some source, not reject');
+    assert.equal(result.source, 'media-link');
+    assert.ok(result.markdown.includes('![photo.jpg](https://example.com/photo.jpg)'));
+    assert.ok(!result.markdown.includes('rate limited'));
   });
 });
 
@@ -960,7 +963,9 @@ describe('extractWeb - LLM usage metadata', () => {
     return async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
-      arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
+      // Not Buffer#buffer: a small Buffer lives in Node's shared pool, so that
+      // would hand over the whole pool, starting with some other test's bytes.
+      arrayBuffer: async () => Uint8Array.from(Buffer.from('JPEGBYTES')).buffer,
     });
   }
   it('maps vision adapter usage/imageSize into metadata (source=image-caption)', async () => {
@@ -1083,6 +1088,81 @@ describe('extractWeb - media null-fallthrough single body read (regression)', ()
     const r = await extractWeb('https://example.com/clip.mp3', { fetch: onceFetch, transcribeFn: async () => null });
     assert.ok(r.markdown.startsWith('# '));
     if (sv === undefined) delete process.env.PULLMD_STT_API_KEY; else process.env.PULLMD_STT_API_KEY = sv;
+  });
+});
+
+describe('extractWeb - binary media without a description (#98)', () => {
+  const GIF = Buffer.from('GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;', 'latin1');
+  const MP3 = Buffer.from('ID3\x03\x00\x00\x00\x00\x00\x00\xff\xfb\x90\x00', 'latin1');
+  const fetchOf = (bytes, ct) => async () => ({
+    ok: true, status: 200,
+    headers: { get: (h) => (h.toLowerCase() === 'content-type' ? ct : null) },
+    arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+  });
+
+  it('links a GIF instead of returning its bytes as text', async () => {
+    const r = await extractWeb('https://example.com/img/anim.gif', { fetch: fetchOf(GIF, 'image/gif'), captionFn: async () => null });
+    assert.equal(r.source, 'media-link');
+    assert.ok(r.markdown.includes('![anim.gif](https://example.com/img/anim.gif)'));
+    assert.ok(!r.markdown.includes('GIF89a'));
+  });
+
+  it('links an MP3 when no speech-to-text provider is configured', async () => {
+    const r = await extractWeb('https://example.com/a%20b.mp3', { fetch: fetchOf(MP3, 'audio/mpeg'), transcribeFn: async () => null });
+    assert.equal(r.source, 'media-link');
+    assert.ok(r.markdown.includes('[a b.mp3](https://example.com/a%20b.mp3)'));
+    assert.ok(!r.markdown.includes('ID3'));
+  });
+
+  it('links the file when the provider fails', async () => {
+    const r = await extractWeb('https://example.com/x.ogg', { fetch: fetchOf(MP3, 'audio/ogg'), transcribeFn: async () => { throw new Error('timeout'); } });
+    assert.equal(r.source, 'media-link');
+  });
+
+  it('links video and other image types the LLM layer does not take', async () => {
+    const v = await extractWeb('https://example.com/v.mp4', { fetch: fetchOf(MP3, 'video/mp4') });
+    assert.equal(v.source, 'media-link');
+    assert.ok(v.markdown.includes('[v.mp4]('));
+    const i = await extractWeb('https://example.com/f.avif', { fetch: fetchOf(GIF, 'image/avif') });
+    assert.equal(i.source, 'media-link');
+    assert.ok(i.markdown.includes('![f.avif]('));
+  });
+
+  it('escapes parentheses in the link target', async () => {
+    const r = await extractWeb('https://example.com/a(1).gif', { fetch: fetchOf(GIF, 'image/gif'), captionFn: async () => null });
+    assert.ok(r.markdown.includes('(https://example.com/a%281%29.gif)'));
+  });
+});
+
+describe('extractFile - failed transcription is reported (#98)', () => {
+  it('names the transcription error when markitdown cannot convert the audio either', async () => {
+    const sv = process.env.PULLMD_STT_API_KEY; process.env.PULLMD_STT_API_KEY = 'k';
+    try {
+      await assert.rejects(
+        extractFile(Buffer.from('OggS'), {
+          filename: 'memo.ogg', contentType: 'audio/ogg',
+          transcribeFn: async () => { throw new Error('transcription timed out after 120 s'); },
+          markitdownClient: async () => null,
+        }),
+        (err) => /transcription timed out after 120 s/.test(err.message) && !/markitdown/.test(err.message),
+      );
+    } finally { if (sv === undefined) delete process.env.PULLMD_STT_API_KEY; else process.env.PULLMD_STT_API_KEY = sv; }
+  });
+
+  it('still returns the markitdown result when it can convert the file', async () => {
+    const r = await extractFile(Buffer.from('ID3'), {
+      filename: 'memo.mp3', contentType: 'audio/mpeg',
+      transcribeFn: async () => { throw new Error('transcription failed (500)'); },
+      markitdownClient: async () => ({ markdown: '# memo.mp3\n', title: 'memo.mp3' }),
+    });
+    assert.equal(r.source, 'markitdown');
+  });
+
+  it('keeps the markitdown error for files that never reached a model', async () => {
+    await assert.rejects(
+      extractFile(Buffer.from('PK'), { filename: 'x.docx', contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', markitdownClient: async () => null }),
+      /markitdown sidecar unavailable/,
+    );
   });
 });
 

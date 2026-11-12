@@ -69,7 +69,7 @@ The Claude Code skill was renamed from `web-reader` to `pullmd` in 3.0. Remove t
 Pin an exact version on every image to control when you upgrade:
 
 ```yaml
-image: aeternalabshq/pullmd:3.19.0
+image: aeternalabshq/pullmd:3.19.1
 ```
 
 Before a big upgrade, copy the `./data` folder. To roll back, pin the previous version and run `docker compose up -d`. 3.13 doesn't change the database schema, and 3.0 only adds a `metadata` column to the `conversions` table, which older versions ignore. Rolling back across them needs no restore. For other versions, check the changelog for schema changes first. To stay on the 2.x output format, use `aeternalabshq/pullmd:2`.

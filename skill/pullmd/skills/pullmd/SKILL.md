@@ -61,7 +61,7 @@ The response is `text/markdown` — ready to use as-is.
 
 **Response headers worth checking:**
 
-- `X-Source` — `reddit` · `hackernews` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `article-series` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `pdf-ocr`
+- `X-Source` — `reddit` · `hackernews` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `article-series` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `media-link` · `pdf-ocr`
 - `X-Quality` — `0.0–1.0` extraction confidence (low values mean the static extraction was thin or noisy)
 - `X-Share-Id` — 32-hex permalink, openable as `__PULLMD_URL__/s/<id>` (absent for `/api/html` — local conversions are never cached or shared)
 - `X-Suggested-Filename` — a ready-made filename for this conversion (e.g. `YT-some-talk-dQw4w9WgXcQ.md`); use it when you save the output to a file instead of inventing a name.

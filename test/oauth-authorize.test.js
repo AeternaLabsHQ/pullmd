@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
-import { createOAuth, mountOAuthRoutes } from '../lib/oauth/index.js';
+import { createOAuth, mountOAuthRoutes, HARDCODED_REDIRECT_ALLOWLIST } from '../lib/oauth/index.js';
 
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
 
@@ -66,7 +66,21 @@ describe('GET /oauth/authorize', () => {
       assert.equal(r.status, 200);
       const html = await r.text();
       assert.match(html, /Claude\.ai/);
-      assert.match(html, /mcp:full|PullMD/);
+      assert.match(html, /a@b\.c/, 'shows which account is granting access');
+      // The form has to carry the request on to /oauth/consent unchanged.
+      for (const [name, value] of [
+        ['client_id', client.client_id],
+        ['redirect_uri', 'https://claude.ai/api/mcp/auth_callback'],
+        ['code_challenge', 'abc'],
+        ['code_challenge_method', 'S256'],
+        ['state', 'xyz'],
+        ['scope', 'mcp:full'],
+      ]) {
+        assert.ok(
+          html.includes(`<input type="hidden" name="${name}" value="${value}">`),
+          `consent form must carry ${name}`,
+        );
+      }
     });
   });
 
@@ -117,16 +131,38 @@ describe('GET /oauth/authorize', () => {
   it('hard-coded claude.ai redirect URI works even without DCR (allowlist fallback)', async () => {
     // Clients hard-coded into HARDCODED_REDIRECT_ALLOWLIST should still validate
     // even if the DCR client doesn't list it (defence-in-depth bound).
-    const { app, sessionToken, client, oauth, cache } = await setup();
-    // Point client to a different URI to prove hardcoded is independent.
-    cache.db.prepare(`UPDATE oauth_clients SET redirect_uris = ? WHERE client_id = ?`)
-      .run(JSON.stringify(['https://claude.ai/api/mcp/auth_callback']), client.client_id);
+    const { app, sessionToken, oauth } = await setup();
+    // A client that registered only its own URI: the hard-coded entries are
+    // the only reason the claude.ai / claude.com callbacks validate for it.
+    const other = oauth.store.registerClient({
+      redirect_uris: ['https://app.example/cb'],
+      client_name: 'Other', token_endpoint_auth_method: 'none',
+    });
+    assert.deepEqual(HARDCODED_REDIRECT_ALLOWLIST, [
+      'https://claude.ai/api/mcp/auth_callback',
+      'https://claude.com/api/mcp/auth_callback',
+    ]);
     await withServer(app, async (base) => {
-      const url = `${base}/oauth/authorize?response_type=code&client_id=${client.client_id}` +
-        `&redirect_uri=${encodeURIComponent('https://claude.ai/api/mcp/auth_callback')}` +
-        `&code_challenge=abc&code_challenge_method=S256&state=xyz&scope=mcp:full`;
-      const r = await fetch(url, { headers: COOKIE(sessionToken) });
-      assert.equal(r.status, 200);
+      const authorize = (redirectUri) => fetch(
+        `${base}/oauth/authorize?response_type=code&client_id=${other.client_id}` +
+        `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+        `&code_challenge=abc&code_challenge_method=S256&state=xyz&scope=mcp:full`,
+        { headers: COOKIE(sessionToken), redirect: 'manual' },
+      );
+      for (const uri of HARDCODED_REDIRECT_ALLOWLIST) {
+        assert.equal((await authorize(uri)).status, 200, uri);
+      }
+      assert.equal((await authorize('https://app.example/cb')).status, 200, 'own registered URI');
+      // The fallback is an exact match, not a host or prefix match.
+      for (const uri of [
+        'https://claude.ai/api/mcp/auth_callback/',
+        'https://claude.ai/api/mcp/auth_callback?x=1',
+        'https://claude.ai/other',
+        'http://claude.ai/api/mcp/auth_callback',
+        'https://claude.ai.evil.example/api/mcp/auth_callback',
+      ]) {
+        assert.equal((await authorize(uri)).status, 400, uri);
+      }
     });
   });
 });

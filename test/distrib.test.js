@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { substituteUrl, substituteVars, renderHelp, renderIndex, buildSkillZip, getSkillZip, _resetCaches, _zipCacheSize, publicUrlFor } from '../lib/distrib.js';
 import { createApp } from '../server.js';
+import { readZipEntries, readZipEntry } from '../lib/zip.js';
 
 describe('substituteUrl', () => {
   it('replaces every placeholder', () => {
@@ -138,18 +139,24 @@ describe('renderIndex', () => {
 describe('buildSkillZip', () => {
   beforeEach(() => _resetCaches());
 
-  it('returns a non-empty buffer with the substituted URL embedded', async () => {
+  it('returns a zip whose files carry the substituted URL', async () => {
     const buf = await buildSkillZip('https://my.host');
     assert.ok(Buffer.isBuffer(buf));
-    assert.ok(buf.length > 100);
-    // ZIP signature
-    assert.equal(buf.slice(0, 4).toString('hex'), '504b0304');
-    // Substituted URL should appear in the deflate stream — check by re-extracting
-    // a known file via a tiny inline reader. Easiest: just look at raw bytes
-    // for the literal substring (works because plugin.json is small enough
-    // that DEFLATE may store it uncompressed, but to be safe, inflate one entry).
-    // Smoke check: placeholder must not survive substitution.
-    assert.equal(buf.indexOf(Buffer.from('__PULLMD_URL__')), -1, 'placeholder should not appear in zip');
+
+    const entries = readZipEntries(buf);
+    assert.deepEqual(entries.map((e) => e.name).sort(), [
+      'pullmd/.claude-plugin/plugin.json',
+      'pullmd/hooks/hooks.json',
+      'pullmd/skills/pullmd/SKILL.md',
+    ]);
+
+    const read = (name) => readZipEntry(buf, name, { entries }).toString('utf8');
+    for (const { name } of entries) {
+      assert.ok(!read(name).includes('__PULLMD_URL__'), `placeholder left in ${name}`);
+    }
+    // Both files hold the placeholder in the source tree.
+    assert.ok(read('pullmd/skills/pullmd/SKILL.md').includes('https://my.host/'));
+    assert.ok(read('pullmd/hooks/hooks.json').includes('https://my.host/'));
   });
 });
 

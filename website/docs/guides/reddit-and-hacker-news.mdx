@@ -104,7 +104,8 @@ PullMD reads Reddit through Reddit's Data API, with the credentials of an existi
 | `400` | `Unsupported Reddit page: PullMD reads Reddit posts and subreddits, not …` | The link isn't a post, gallery or subreddit page. The JSON also has `"code": "reddit_unsupported_page"`. |
 | `404` | `Post not found` | The post was deleted or the link is wrong. |
 | `502` | `Reddit rate limit. Try again later.` | Too many requests. Slow down. |
-| `502` | `Reddit blocked the request.` | No credentials are set, or Reddit refused them. Nothing is cached. |
-| `500` | `Internal server error` | Reddit rejected the credentials or returned another unexpected status. |
+| `502` | `Reddit rejected the configured API credentials (REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET), token request returned 401` | Reddit refused the client ID or secret. The status at the end is `401` or `403`. |
+| `502` | `Reddit blocked the request.` | No credentials are set, or Reddit refused the request. Nothing is cached. |
+| `500` | `Internal server error` | Reddit returned another unexpected status. |
 
 If the Hacker News API fails, PullMD reads the page as a normal web page, so a `502` from the page fetch can replace the API error.

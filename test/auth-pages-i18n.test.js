@@ -166,9 +166,10 @@ describe('PWA index.html: misconfig banner DOM', () => {
   });
 
   it('initialises body[data-lang] before first paint and on lang change', () => {
-    // pre-paint sets data-lang
-    assert.match(html, /document\.body\.setAttribute\(['"]data-lang['"]/);
-    // applyLang() mirrors lang to body
-    assert.match(html, /Mirror onto body so the parallel-lang CSS pattern/);
+    const sets = html.match(/document\.body\.setAttribute\(['"]data-lang['"],\s*\w+\)/g) || [];
+    assert.equal(sets.length, 2, 'one pre-paint, one in applyLang()');
+    const applyLang = html.match(/function applyLang\(\)\s*\{[\s\S]*?\n {6}\}/);
+    assert.ok(applyLang, 'applyLang() not found');
+    assert.match(applyLang[0], /document\.body\.setAttribute\(['"]data-lang['"],\s*current\)/);
   });
 });

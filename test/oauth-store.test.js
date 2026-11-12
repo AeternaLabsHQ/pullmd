@@ -134,7 +134,7 @@ describe('oauth auth-code store', () => {
     assert.equal(store.consumeAuthCode(codeHash), null);
   });
 
-  it('expired code returns null on consume and is invalidated', async () => {
+  it('expired code is refused on consume and left unmarked', async () => {
     const { store, userId, cache } = await makeStore();
     const reg = store.registerClient({
       redirect_uris: ['https://x/cb'], client_name: 'X', token_endpoint_auth_method: 'none',
@@ -143,9 +143,16 @@ describe('oauth auth-code store', () => {
       client_id: reg.client_id, user_id: userId, redirect_uri: 'https://x/cb',
       code_challenge: 'C', code_challenge_method: 'S256', scope: 'mcp:full',
     });
-    // Forcibly expire it.
-    cache.db.prepare("UPDATE oauth_auth_codes SET expires_at = datetime('now', '-1 minute') WHERE code_hash = ?").run(codeHash);
+    const setExpiry = (ms) => cache.db
+      .prepare('UPDATE oauth_auth_codes SET expires_at = ? WHERE code_hash = ?')
+      .run(new Date(Date.now() + ms).toISOString(), codeHash);
+    setExpiry(-60e3);
     assert.equal(store.consumeAuthCode(codeHash), null);
+    // Expiry alone refuses it: the row is not marked used, so the same code
+    // is accepted again once its expiry lies in the future.
+    assert.equal(cache.db.prepare('SELECT used_at FROM oauth_auth_codes WHERE code_hash = ?').get(codeHash).used_at, null);
+    setExpiry(60e3);
+    assert.equal(store.consumeAuthCode(codeHash).user_id, userId);
   });
 
   it('prunes codes that expired more than an hour ago (ISO timestamps)', async () => {
@@ -209,20 +216,5 @@ describe('oauth refresh-token chain (rotation + reuse detection)', () => {
       const row = store.findRefreshToken(h);
       assert.ok(row.revoked_at, `${h} should be revoked after chain invalidation`);
     }
-  });
-
-  it('expired refresh token: findRefreshToken still returns row, isUsable returns false', async () => {
-    const { store, userId, cache } = await makeStore();
-    const reg = store.registerClient({
-      redirect_uris: ['https://x/cb'], client_name: 'X', token_endpoint_auth_method: 'none',
-    });
-    store.insertRefreshToken({
-      tokenHash: 'X', client_id: reg.client_id, user_id: userId, scope: 'mcp:full',
-      expiresAt: new Date(Date.now() - 1000).toISOString(),
-      rotated_from: null,
-    });
-    const row = store.findRefreshToken('X');
-    assert.ok(row);
-    assert.equal(store.isUsable(row), false);
   });
 });

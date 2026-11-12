@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseBlocks, buildSectionTree } from '../lib/markdown-sections.js';
+import { parseBlocks, buildSectionTree, stripCommentsSection } from '../lib/markdown-sections.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -420,5 +420,21 @@ describe('buildSectionTree', () => {
     const orders = sections.map(s => s.order);
     assert.deepEqual(orders, [...orders].sort((a, b) => a - b));
     assert.equal(new Set(orders).size, orders.length);
+  });
+});
+
+describe('stripCommentsSection', () => {
+  const post = '# Post\n\nBody text.';
+  it('drops the appended comments block (en and de)', () => {
+    assert.equal(stripCommentsSection(`${post}\n\n---\n\n## Comments (2 of 5)\n\n**a**: hi\n\n**b**: yo`), post);
+    assert.equal(stripCommentsSection(`${post}\n\n---\n\n## Kommentare (1 von 1)\n\n**a**: hallo`), post);
+  });
+  it('leaves markdown without a comments block unchanged', () => {
+    assert.equal(stripCommentsSection(post), post);
+    assert.equal(stripCommentsSection('# P\n\n## Comments\n\nnot the block'), '# P\n\n## Comments\n\nnot the block');
+  });
+  it('cuts at the last block, so a body quoting the heading stays', () => {
+    const body = '# P\n\nquote:\n\n---\n\n## Comments (1 of 1)\n\nold';
+    assert.equal(stripCommentsSection(`${body}\n\n---\n\n## Comments (3 of 3)\n\nreal`), body);
   });
 });

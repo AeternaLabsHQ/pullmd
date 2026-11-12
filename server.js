@@ -1,5 +1,6 @@
 import express from 'express';
 import { extractPost, normalizeRedditUrl, RedditUnsupportedPageError } from './lib/reddit.js';
+import { RedditAuthError } from './lib/reddit-auth.js';
 import { extractHn, normalizeHnUrl } from './lib/hackernews.js';
 import { extractWeb, extractHtml, extractFile } from './lib/web.js';
 import { createCache, readCacheRetentionDays } from './lib/cache.js';
@@ -24,8 +25,10 @@ import { createStatusChecker } from './lib/status.js';
 import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
 import { createFileJobStore } from './lib/file-jobs.js';
+import { isYoutubeEnabled } from './lib/youtube.js';
 import path from 'node:path';
 import fs from 'node:fs';
+import { stripCommentsSection } from './lib/markdown-sections.js';
 
 function isRedditUrl(url) {
   try {
@@ -425,7 +428,8 @@ export function createApp(overrides = {}) {
         const structuredCached = isRedditUrl(url) || isHnUrl(url);
         const hasComments = cached.markdown.includes('\n## Kommentare') || cached.markdown.includes('\n## Comments');
         if ((!structuredCached || !wantComments || hasComments) && !cachedRowLacksImages(url, cached, imagesMode)) {
-          const baseMd = cached.markdown;
+          // A row cached with comments serves a request without them too (#98 follow-up).
+          const baseMd = structuredCached && !wantComments ? stripCommentsSection(cached.markdown) : cached.markdown;
           const cachedQuality = qualityScore(baseMd);
           const titleMatchCached = baseMd.match(/^#\s+(.+)$/m);
           // Serve the full metadata persisted at extraction time (image/og:image,
@@ -466,6 +470,7 @@ export function createApp(overrides = {}) {
           if (cached.share_id) res.set('X-Share-Id', cached.share_id);
           setFilenameHeader(res, { source: cached.source, title: outMeta.title, url, shareId: cached.share_id });
           if (ex) setExtractHeaders(res, ex);
+          cache.recordFetch(req.user?.id ?? null, cached.id);
           if (cache) cache.logExtraction({
             url, source: cached.source, quality: cachedQuality, markdownLen: baseMd.length,
             extractorReason: null, durationMs: Date.now() - t0, client, cached: true,
@@ -564,6 +569,10 @@ export function createApp(overrides = {}) {
       } catch (err) {
         if (err instanceof RedditUnsupportedPageError) {
           return res.status(400).json({ error: err.message, code: err.code });
+        }
+        if (err instanceof RedditAuthError) {
+          console.error('Reddit credentials rejected:', err.message);
+          return res.status(502).json({ error: err.message });
         }
         if (err.message.includes('not found') || err.message.includes('Not found')) {
           return res.status(404).json({ error: 'Post not found' });
@@ -1068,7 +1077,8 @@ export function createApp(overrides = {}) {
           const hasComments = cached.markdown.includes('\n## Kommentare') || cached.markdown.includes('\n## Comments');
           if ((!structuredCached || !wantComments || hasComments) && !cachedRowLacksImages(url, cached, imagesMode)) {
             emit('fetching', { url, cached: true });
-            const baseMd = cached.markdown;
+            // A row cached with comments serves a request without them too (#98 follow-up).
+            const baseMd = structuredCached && !wantComments ? stripCommentsSection(cached.markdown) : cached.markdown;
             const cachedQuality = qualityScore(baseMd);
             const titleMatchCached = baseMd.match(/^#\s+(.+)$/m);
             const fm = wantFrontmatter
@@ -1089,6 +1099,7 @@ export function createApp(overrides = {}) {
                 shareId: cached.share_id,
               }),
             });
+            cache.recordFetch(req.user?.id ?? null, cached.id);
             cache.logExtraction({
               url, source: cached.source, quality: cachedQuality, markdownLen: (fm + baseMd).length,
               extractorReason: null, durationMs: Date.now() - t0, client, cached: true,
@@ -1291,7 +1302,7 @@ export function createApp(overrides = {}) {
       vision: !!(process.env.PULLMD_VISION_API_KEY || process.env.PULLMD_LLM_API_KEY),
       stt: !!(process.env.PULLMD_STT_API_KEY || process.env.PULLMD_LLM_API_KEY),
       pdfOcr: !!process.env.PULLMD_PDF_OCR_API_KEY,
-      markitdownYoutube: !!process.env.MARKITDOWN_YOUTUBE,
+      markitdownYoutube: isYoutubeEnabled(),
     });
   });
 

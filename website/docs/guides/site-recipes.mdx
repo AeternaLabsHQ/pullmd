@@ -110,7 +110,7 @@ A recipe with an unknown field is rejected.
 
 ## When a recipe does nothing
 
-Recipes apply to web pages, and to HTML you send to `POST /api/html` with `url` set. Check the `X-Source` header of the result: a recipe runs only when it's `readability`, `readability-fallback`, `trafilatura`, `playwright`, `coverage-guard`, `article-series` or `recipe-content`. Results from `cloudflare`, `reddit`, `hackernews`, `youtube`, `markitdown`, `pdf-ocr`, `image-caption` or `audio-transcript` never reach the recipe step.
+Recipes apply to web pages, and to HTML you send to `POST /api/html` with `url` set. Check the `X-Source` header of the result: a recipe runs only when it's `readability`, `readability-fallback`, `trafilatura`, `playwright`, `coverage-guard`, `article-series` or `recipe-content`. Results from `cloudflare`, `reddit`, `hackernews`, `youtube`, `markitdown`, `pdf-ocr`, `image-caption`, `audio-transcript` or `media-link` never reach the recipe step.
 
 When you force a render, write selectors against the rendered page in your browser's inspector. The page source can differ.
 

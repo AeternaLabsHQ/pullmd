@@ -1,0 +1,50 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['website/**', '.github/workflows/docs.yml']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['website/**', '.github/workflows/docs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # Same install as the Dockerfile: prebuilt native bindings, no scripts.
+      - run: npm ci --ignore-scripts
+      - run: node --test
+
+  sidecars:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      # These four are standalone by design (no pytest, no sidecar deps).
+      # trafilatura-sidecar/test_extract.py needs the built image and is not run here.
+      - name: markitdown-sidecar
+        working-directory: markitdown-sidecar
+        run: |
+          python3 test_limits.py
+          python3 test_youtube.py
+      - name: playwright-sidecar
+        working-directory: playwright-sidecar
+        run: |
+          python3 test_ssrf.py
+          python3 test_ua_metadata.py

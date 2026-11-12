@@ -89,6 +89,31 @@ describe('MCP list_recent scope (multi-user)', () => {
     });
   });
 
+  it('records a cache hit in the second user\'s history (#98)', async () => {
+    let calls = 0;
+    const counting = async () => { calls++; return extractWeb(); };
+    const { auth, cache, oauth, alice, bob } = await bootMultiUser();
+    const app = createApp({ cache, auth, oauth, extractWeb: counting });
+    const aliceKey = { Authorization: `Bearer ${auth.createApiKey(alice.id).fullKey}` };
+    const bobKey = { Authorization: `Bearer ${auth.createApiKey(bob.id).fullKey}` };
+    await withServer(app, async (base) => {
+      assert.ok(!(await callTool(base, 'read_url', { url: 'https://example.com/shared' }, aliceKey)).isError);
+      assert.ok(!(await callTool(base, 'read_url', { url: 'https://example.com/shared' }, bobKey)).isError);
+      assert.equal(calls, 1, 'second read is a cache hit');
+      assert.deepEqual(await listRecentUrls(base, bobKey), ['https://example.com/shared']);
+
+      // GET /api and GET /api/stream cache hits as well
+      const bobCookie = { Cookie: `pullmd_session=${auth.createSession(bob.id).token}` };
+      cache.put({ url: 'https://example.com/rest', title: 'r', markdown: '# r', source: 'readability', user_id: alice.id });
+      cache.put({ url: 'https://example.com/sse', title: 's', markdown: '# s', source: 'readability', user_id: alice.id });
+      assert.equal((await fetch(`${base}/api?url=${encodeURIComponent('https://example.com/rest')}`, { headers: bobCookie })).status, 200);
+      await (await fetch(`${base}/api/stream?url=${encodeURIComponent('https://example.com/sse')}`, { headers: bobCookie })).text();
+      assert.equal(calls, 1, 'REST and SSE reads are cache hits');
+      const hist = (await (await fetch(`${base}/api/history`, { headers: bobCookie })).json()).map((it) => it.url).sort();
+      assert.deepEqual(hist, ['https://example.com/rest', 'https://example.com/shared', 'https://example.com/sse']);
+    });
+  });
+
   it('only returns the caller\'s own conversions (session cookie)', async () => {
     const { app, auth, cache, alice, bob } = await bootMultiUser();
     cache.put({ url: 'https://example.com/a', title: 'a', markdown: '# a', source: 's', user_id: alice.id });

@@ -408,14 +408,13 @@ describe('transcribeImages', () => {
     const captionFn = (buf, { signal }) => {
       calls.push(1);
       return new Promise((resolve, reject) => {
-        const t = setTimeout(() => resolve({ markdown: 'late', usage: USAGE }), 100);
+        // Far beyond the deadline: without the abort this would succeed.
+        const t = setTimeout(() => resolve({ markdown: 'late', usage: USAGE }), 5_000);
         signal.addEventListener('abort', () => { clearTimeout(t); reject(signal.reason); }, { once: true });
       });
     };
     const fetchFn = makeFetch();
-    const t0 = Date.now();
     const r = await transcribeImages([A, B], { captionFn, fetchFn, ssrfOpts, deadlineMs: 50 });
-    assert.ok(Date.now() - t0 < 90);
     assert.equal(calls.length, 1);
     assert.deepEqual(fetchFn.calls, [A.url]);
     assert.equal(r.transientMiss, true);

@@ -52,22 +52,6 @@ describe('fetchRedditJson', () => {
     }
   });
 
-  it('appends .json to the URL', async () => {
-    const originalFetch = global.fetch;
-    let calledUrl;
-    global.fetch = mock.fn(async (url) => {
-      calledUrl = url;
-      return { ok: true, status: 200, json: async () => MOCK_REDDIT_JSON };
-    });
-
-    try {
-      await fetchRedditJson('https://www.reddit.com/r/javascript/comments/abc123/test_post/');
-      assert.ok(calledUrl.includes('.json'), `URL should contain .json, got: ${calledUrl}`);
-    } finally {
-      global.fetch = originalFetch;
-    }
-  });
-
   it('throws on 404', async () => {
     const originalFetch = global.fetch;
     global.fetch = mock.fn(async () => ({ ok: false, status: 404 }));

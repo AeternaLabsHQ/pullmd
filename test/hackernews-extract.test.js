@@ -31,9 +31,14 @@ describe('fetchAlgoliaSearch', () => {
     const hits = await fetchAlgoliaSearch('/', { fetchImpl: fakeFetch(200, { hits: [{ objectID: '9' }] }) });
     assert.equal(hits[0].objectID, '9');
   });
-  it('defaults unknown listing to front_page without throwing', async () => {
-    const hits = await fetchAlgoliaSearch('/bogus', { fetchImpl: fakeFetch(200, { hits: [] }) });
+  it('queries the front_page tag for an unknown listing', async () => {
+    let requested;
+    const fetchImpl = async (url) => { requested = url; return { ok: true, status: 200, json: async () => ({ hits: [] }) }; };
+    const hits = await fetchAlgoliaSearch('/bogus', { fetchImpl });
     assert.deepEqual(hits, []);
+    const u = new URL(requested);
+    assert.equal(u.pathname.split('/').pop(), 'search');
+    assert.equal(u.searchParams.get('tags'), 'front_page');
   });
 });
 

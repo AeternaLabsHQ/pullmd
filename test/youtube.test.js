@@ -1,6 +1,20 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { isYoutubeUrl, normalizeYoutubeWatchUrl } from '../lib/youtube.js';
+import { isYoutubeUrl, isYoutubeEnabled, normalizeYoutubeWatchUrl } from '../lib/youtube.js';
+
+describe('isYoutubeEnabled', () => {
+  it('is on only for true/1/yes/on', () => {
+    for (const v of ['true', 'TRUE', '1', 'yes', 'on', ' true ']) {
+      assert.equal(isYoutubeEnabled({ MARKITDOWN_YOUTUBE: v }), true, v);
+    }
+  });
+  it('is off when unset, empty or a false value (#98)', () => {
+    assert.equal(isYoutubeEnabled({}), false);
+    for (const v of ['', 'false', 'FALSE', '0', 'no', 'off']) {
+      assert.equal(isYoutubeEnabled({ MARKITDOWN_YOUTUBE: v }), false, v);
+    }
+  });
+});
 
 describe('isYoutubeUrl', () => {
   it('matches watch, youtu.be, shorts, mobile', () => {

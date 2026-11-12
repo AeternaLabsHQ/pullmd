@@ -17,9 +17,9 @@ describe('GFM output quality', () => {
       <article><pre><code class="language-ts">const x: number = 1;</code></pre></article>
     </body></html>`;
     const result = await extractWeb('https://example.com/code', { fetch: mockFetch(html) });
-    // Readability strips class attributes, so language hint may not survive; check fenced block and content
-    assert.ok(result.markdown.includes('```'), 'should have fenced code block');
-    assert.ok(result.markdown.includes('const x: number = 1;'));
+    // The page is too short for Readability, so the cleaned-body fallback
+    // converts it and the language class on <code> survives as the fence info.
+    assert.ok(result.markdown.includes('```ts\nconst x: number = 1;\n```'), result.markdown);
   });
 
   it('converts HTML tables to GFM tables', async () => {
@@ -32,7 +32,8 @@ describe('GFM output quality', () => {
     assert.ok(result.markdown.includes('---'), 'should have table separator');
   });
 
-  it('converts task lists', async () => {
+  // Checkbox inputs do not survive the pipeline; pin that so a change is noticed.
+  it('renders task-list items as plain bullets without checkbox state', async () => {
     const html = `<html><head><title>Tasks</title></head><body>
       <article><ul>
         <li><input type="checkbox" checked> Done</li>
@@ -40,7 +41,7 @@ describe('GFM output quality', () => {
       </ul></article>
     </body></html>`;
     const result = await extractWeb('https://example.com/tasks', { fetch: mockFetch(html) });
-    assert.ok(result.markdown.includes('[x]') || result.markdown.includes('Done'), 'should have checked task');
-    assert.ok(result.markdown.includes('[ ]') || result.markdown.includes('Todo'), 'should have unchecked task');
+    assert.ok(result.markdown.endsWith('- Done\n- Todo'), result.markdown);
+    assert.doesNotMatch(result.markdown, /\[[ x]\]/);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { redditFetch, getToken, clearTokenCache, isAuthConfigured, getUserAgent } from '../lib/reddit-auth.js';
+import { redditFetch, getToken, clearTokenCache, isAuthConfigured, getUserAgent, RedditAuthError } from '../lib/reddit-auth.js';
 
 describe('reddit-auth', () => {
   beforeEach(() => clearTokenCache());
@@ -46,12 +46,6 @@ describe('reddit-auth', () => {
       assert.equal(t1, 'tok-abc');
       assert.equal(t2, 'tok-abc');
       assert.equal(callCount, 1, 'token cached, only fetched once');
-    });
-
-    it('throws on token endpoint failure', async () => {
-      const fakeFetch = async () => ({ ok: false, status: 401 });
-      const env = { REDDIT_CLIENT_ID: 'cid', REDDIT_CLIENT_SECRET: 'sec' };
-      await assert.rejects(() => getToken({ env, fetchFn: fakeFetch }), /401/);
     });
   });
 
@@ -99,6 +93,20 @@ describe('reddit-auth', () => {
       const env = { REDDIT_CLIENT_ID: 'cid', REDDIT_CLIENT_SECRET: 'sec' };
       await redditFetch('https://example.com/foo', {}, { env, fetchFn: fakeFetch });
       assert.equal(calledUrl, 'https://example.com/foo');
+    });
+  });
+
+  describe('rejected credentials (#98)', () => {
+    const env = { REDDIT_CLIENT_ID: 'bad', REDDIT_CLIENT_SECRET: 'bad' };
+    for (const status of [401, 403]) {
+      it(`throws RedditAuthError on a ${status} from the token endpoint`, async () => {
+        const fetchFn = async () => ({ ok: false, status, json: async () => ({}) });
+        await assert.rejects(() => getToken({ env, fetchFn }), (err) => err instanceof RedditAuthError && err.status === status);
+      });
+    }
+    it('keeps the generic error for other statuses', async () => {
+      const fetchFn = async () => ({ ok: false, status: 500, json: async () => ({}) });
+      await assert.rejects(() => getToken({ env, fetchFn }), (err) => !(err instanceof RedditAuthError) && /failed: 500/.test(err.message));
     });
   });
 });

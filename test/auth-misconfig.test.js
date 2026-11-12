@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createCache } from '../lib/cache.js';
-import { createAuth, detectAuthMisconfig, formatBootstrapError, openPaidTiersWarning } from '../lib/auth.js';
+import { createAuth, formatBootstrapError, openPaidTiersWarning } from '../lib/auth.js';
 
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
 
@@ -10,34 +10,6 @@ function captureWarn(fn) {
   const result = fn((...args) => lines.push(args.join(' ')));
   return { result, lines };
 }
-
-describe('detectAuthMisconfig', () => {
-  it('returns false when no PULLMD_AUTH_TOKEN is set', () => {
-    assert.equal(detectAuthMisconfig({}), false);
-    assert.equal(detectAuthMisconfig({ PULLMD_AUTH_MODE: 'disabled' }), false);
-    assert.equal(detectAuthMisconfig({ PULLMD_AUTH_MODE: 'multi-user' }), false);
-  });
-
-  it('returns true when PULLMD_AUTH_TOKEN is set but mode is disabled', () => {
-    assert.equal(detectAuthMisconfig({ PULLMD_AUTH_TOKEN: 'tok', PULLMD_AUTH_MODE: 'disabled' }), true);
-  });
-
-  it('returns true when PULLMD_AUTH_TOKEN is set but mode is missing', () => {
-    assert.equal(detectAuthMisconfig({ PULLMD_AUTH_TOKEN: 'tok' }), true);
-  });
-
-  it('returns true when PULLMD_AUTH_TOKEN is set but mode is unknown junk', () => {
-    assert.equal(detectAuthMisconfig({ PULLMD_AUTH_TOKEN: 'tok', PULLMD_AUTH_MODE: 'wat' }), true);
-  });
-
-  it('returns false when PULLMD_AUTH_TOKEN is set and mode is single-admin', () => {
-    assert.equal(detectAuthMisconfig({ PULLMD_AUTH_TOKEN: 'tok', PULLMD_AUTH_MODE: 'single-admin' }), false);
-  });
-
-  it('returns false when PULLMD_AUTH_TOKEN is set and mode is multi-user', () => {
-    assert.equal(detectAuthMisconfig({ PULLMD_AUTH_TOKEN: 'tok', PULLMD_AUTH_MODE: 'multi-user' }), false);
-  });
-});
 
 describe('createAuth: isMisconfigured + console warning', () => {
   it('exposes isMisconfigured=true and logs the banner when token+disabled', () => {
@@ -71,6 +43,26 @@ describe('createAuth: isMisconfigured + console warning', () => {
     );
     assert.equal(auth.isMisconfigured, false);
     assert.equal(lines.length, 0);
+  });
+
+  it('does NOT log or flag in multi-user mode, with or without the token', () => {
+    for (const env of [{ PULLMD_AUTH_TOKEN: 'legacy-tok' }, {}]) {
+      const cache = createCache(':memory:');
+      const { result: auth, lines } = captureWarn((logger) =>
+        createAuth({ db: cache.db, mode: 'multi-user', env, argon2Opts: fastOpts, warnLogger: logger })
+      );
+      assert.equal(auth.isMisconfigured, false);
+      assert.equal(lines.length, 0);
+    }
+  });
+
+  it('flags a token when the mode is left at its default', () => {
+    const cache = createCache(':memory:');
+    const { result: auth, lines } = captureWarn((logger) =>
+      createAuth({ db: cache.db, env: { PULLMD_AUTH_TOKEN: 'legacy-tok' }, argon2Opts: fastOpts, warnLogger: logger })
+    );
+    assert.equal(auth.isMisconfigured, true);
+    assert.match(lines.join('\n'), /UNAUTHENTICATED/);
   });
 
   it('does NOT log or flag when there is no token at all', () => {

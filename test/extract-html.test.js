@@ -14,16 +14,11 @@ const ARTICLE_HTML = `
 `;
 
 describe('extractHtml - basic conversion (no URL)', () => {
-  it('converts HTML and performs no fetch', async () => {
-    let fetchCalls = 0;
-    const result = await extractHtml(ARTICLE_HTML, {
-      filename: 'saved-article.html',
-      extractor: 'readability',
-      fetch: async () => { fetchCalls++; throw new Error('must not fetch'); },
-    });
+  it('converts HTML with the readability extractor', async () => {
+    const result = await extractHtml(ARTICLE_HTML, { filename: 'saved-article.html', extractor: 'readability' });
     assert.ok(result.markdown.includes('Main content paragraph'));
     assert.equal(result.title, 'Saved Article');
-    assert.equal(fetchCalls, 0, 'extractHtml must not fetch anything');
+    assert.equal(result.source, 'readability');
   });
 
   it('uses the filename in the header and renders no link line', async () => {
@@ -72,6 +67,32 @@ describe('extractHtml - with original URL', () => {
     assert.ok(!withUrl.markdown.includes('SUBSCRIBE NOW BANNER'));
     const withoutUrl = await extractHtml(html, { recipes });
     assert.ok(withoutUrl.markdown.includes('SUBSCRIBE NOW BANNER'), 'no url → recipes must not apply');
+  });
+});
+
+describe('extractHtml - never fetches the page', () => {
+  // TRAFILATURA_URL is read at module load, so a fresh import is needed to
+  // have a sidecar configured. That makes the injected fetch live: the only
+  // call allowed is the POST to the sidecar, never a request for the page.
+  it('calls only the Trafilatura sidecar even when a URL is given', async () => {
+    const saved = process.env.TRAFILATURA_URL;
+    process.env.TRAFILATURA_URL = 'http://mock-trafilatura/extract';
+    const calls = [];
+    try {
+      const { extractHtml: extractHtmlFresh } = await import(`../lib/web.js?extract-html=${Date.now()}`);
+      const result = await extractHtmlFresh(ARTICLE_HTML, {
+        url: 'https://www.example.com/post',
+        fetch: async (url, opts) => {
+          calls.push({ url: String(url), method: opts?.method });
+          return { ok: true, status: 200, text: async () => '' };
+        },
+      });
+      assert.ok(result.markdown.includes('Main content paragraph'));
+    } finally {
+      if (saved === undefined) delete process.env.TRAFILATURA_URL;
+      else process.env.TRAFILATURA_URL = saved;
+    }
+    assert.deepEqual(calls, [{ url: 'http://mock-trafilatura/extract', method: 'POST' }]);
   });
 });
 
