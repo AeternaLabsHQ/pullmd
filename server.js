@@ -28,6 +28,7 @@ import { createFileJobStore } from './lib/file-jobs.js';
 import { isYoutubeEnabled } from './lib/youtube.js';
 import path from 'node:path';
 import fs from 'node:fs';
+import { stripCommentsSection } from './lib/markdown-sections.js';
 
 function isRedditUrl(url) {
   try {
@@ -427,7 +428,8 @@ export function createApp(overrides = {}) {
         const structuredCached = isRedditUrl(url) || isHnUrl(url);
         const hasComments = cached.markdown.includes('\n## Kommentare') || cached.markdown.includes('\n## Comments');
         if ((!structuredCached || !wantComments || hasComments) && !cachedRowLacksImages(url, cached, imagesMode)) {
-          const baseMd = cached.markdown;
+          // A row cached with comments serves a request without them too (#98 follow-up).
+          const baseMd = structuredCached && !wantComments ? stripCommentsSection(cached.markdown) : cached.markdown;
           const cachedQuality = qualityScore(baseMd);
           const titleMatchCached = baseMd.match(/^#\s+(.+)$/m);
           // Serve the full metadata persisted at extraction time (image/og:image,
@@ -1075,7 +1077,8 @@ export function createApp(overrides = {}) {
           const hasComments = cached.markdown.includes('\n## Kommentare') || cached.markdown.includes('\n## Comments');
           if ((!structuredCached || !wantComments || hasComments) && !cachedRowLacksImages(url, cached, imagesMode)) {
             emit('fetching', { url, cached: true });
-            const baseMd = cached.markdown;
+            // A row cached with comments serves a request without them too (#98 follow-up).
+            const baseMd = structuredCached && !wantComments ? stripCommentsSection(cached.markdown) : cached.markdown;
             const cachedQuality = qualityScore(baseMd);
             const titleMatchCached = baseMd.match(/^#\s+(.+)$/m);
             const fm = wantFrontmatter
