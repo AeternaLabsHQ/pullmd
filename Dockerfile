@@ -3,7 +3,13 @@
 # them at runtime, so no compiler toolchain is needed. --ignore-scripts keeps npm
 # from compiling better-sqlite3 anyway (its binding.gyp triggers an implicit
 # node-gyp rebuild) and stops dependencies from running install scripts.
-FROM node:22-alpine AS builder
+#
+# The resulting node_modules is the same on every platform (the prebuilds for
+# all of them ship inside the packages), so this stage runs on the build
+# machine's own platform. In the multi-arch CI build that keeps npm out of
+# QEMU, where it sporadically crashed with "Illegal instruction" and hung the
+# arm64 build until the job was cancelled.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 WORKDIR /app
 

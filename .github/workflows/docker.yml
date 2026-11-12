@@ -17,6 +17,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # A normal run takes 1-2 minutes. Fail a hung build instead of waiting for
+    # GitHub's 6-hour default.
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write
