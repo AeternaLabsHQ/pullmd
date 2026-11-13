@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Security
+
+- **Reddit short-link resolution now connects to the address the SSRF check validated**, like every other outbound request, instead of resolving the host a second time.
+
 ### Fixed
 
 - **An image description or PDF OCR that timed out reported "This operation was aborted".** The error names the timeout now, like transcription does: `captioning timed out after 60 s` and `pdf ocr timed out after 120 s`. A cancellation by the caller keeps its own error.

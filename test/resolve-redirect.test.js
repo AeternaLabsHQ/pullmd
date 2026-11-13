@@ -9,46 +9,31 @@ describe('resolveRedditUrl', () => {
   });
 
   it('follows redirects for redd.it short links', async () => {
-    const originalFetch = global.fetch;
-    global.fetch = mock.fn(async (url, opts) => ({
+    const fetch = mock.fn(async (url, opts) => ({
       status: 302,
       headers: new Map([['location', 'https://www.reddit.com/r/javascript/comments/abc123/real_post/']]),
     }));
 
-    try {
-      const result = await resolveRedditUrl('https://redd.it/abc123');
-      assert.equal(result, 'https://www.reddit.com/r/javascript/comments/abc123/real_post/');
-    } finally {
-      global.fetch = originalFetch;
-    }
+    const result = await resolveRedditUrl('https://redd.it/abc123', { fetch });
+    assert.equal(result, 'https://www.reddit.com/r/javascript/comments/abc123/real_post/');
   });
 
   it('follows redirects for /s/ share links', async () => {
-    const originalFetch = global.fetch;
-    global.fetch = mock.fn(async (url, opts) => ({
+    const fetch = mock.fn(async (url, opts) => ({
       status: 302,
       headers: new Map([['location', 'https://www.reddit.com/r/javascript/comments/xyz789/shared_post/']]),
     }));
 
-    try {
-      const result = await resolveRedditUrl('https://www.reddit.com/r/javascript/s/AbCdEf123');
-      assert.equal(result, 'https://www.reddit.com/r/javascript/comments/xyz789/shared_post/');
-    } finally {
-      global.fetch = originalFetch;
-    }
+    const result = await resolveRedditUrl('https://www.reddit.com/r/javascript/s/AbCdEf123', { fetch });
+    assert.equal(result, 'https://www.reddit.com/r/javascript/comments/xyz789/shared_post/');
   });
 
   it('throws on failed redirect resolution', async () => {
-    const originalFetch = global.fetch;
-    global.fetch = mock.fn(async () => ({ status: 404, headers: new Map() }));
+    const fetch = mock.fn(async () => ({ status: 404, headers: new Map() }));
 
-    try {
-      await assert.rejects(
-        () => resolveRedditUrl('https://redd.it/nonexistent'),
-        { message: /failed to resolve/i }
-      );
-    } finally {
-      global.fetch = originalFetch;
-    }
+    await assert.rejects(
+      () => resolveRedditUrl('https://redd.it/nonexistent', { fetch }),
+      { message: /failed to resolve/i }
+    );
   });
 });
