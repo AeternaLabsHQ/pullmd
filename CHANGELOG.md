@@ -13,6 +13,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ### Fixed
 
+- **Task-list checkboxes lost their state.** An HTML task list (`<li><input type="checkbox" checked> Done</li>`, as GitHub renders it) came out as plain bullets. It converts to `- [x] Done` and `- [ ] Todo` now, including a checkbox inside a leading `<label>` or `<p>`. Other form inputs are still dropped, and `format=text` keeps the `[x]` / `[ ]` markers.
 - **An extractor that failed with something other than an `Error` produced an HTML error page.** A Reddit failure carrying no message (a plain string or no value at all) made `/api` answer with Express' HTML `500` and a stack trace instead of the JSON error. It returns `{ "error": "Internal server error" }` now, and the same guard covers the other extraction and upload error paths.
 - **`PULLMD_AUTH_TOKEN` was also stored as an unusable API key.** In single-admin mode the token was inserted into the key table, where it could never match, and a token starting with `pmd_` kept working after it was removed from the environment. The token is no longer stored, an existing entry is removed at startup, and the token itself authenticates as before.
 
