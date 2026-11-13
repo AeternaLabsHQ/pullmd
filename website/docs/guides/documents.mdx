@@ -138,7 +138,7 @@ MarkItDown reads the text layer of a PDF, which works for prose but loses the st
   </Step>
 </Steps>
 
-When OCR runs, `X-Source` is `pdf-ocr` and the frontmatter gains `pdf_pages`. If the provider fails or no key is set, PullMD uses the standard conversion instead; the request doesn't fail. On `/api/stream`, the `status` event for the `extracting` stage then names the failure in `note`, for example `pdf-ocr failed: pdf ocr timed out after 120 s`. A PDF over 50 MB returns `502`, with or without OCR.
+When OCR runs, `X-Source` is `pdf-ocr` and the frontmatter gains `pdf_pages`. If the provider fails or no key is set, PullMD uses the standard conversion instead; the request doesn't fail. When the provider fails, the `status` event for the `extracting` stage on `/api/stream` carries the reason in `note`, for example `pdf-ocr failed: pdf ocr timed out after 120 s`. A PDF over 50 MB returns `502`, with or without OCR.
 
 <Note title="OCR key">
   OCR doesn't use the shared `PULLMD_LLM_API_KEY`, because OCR providers are usually different from chat-model providers. Set `PULLMD_PDF_OCR_API_KEY` explicitly.
