@@ -65,15 +65,16 @@ describe('auth modes', () => {
     assert.equal(cache.db.prepare("SELECT COUNT(*) c FROM users").get().c, 1);
   });
 
-  it('legacy PULLMD_AUTH_TOKEN gets registered as admin\'s API key', async () => {
+  // The env token authenticates through lookupLegacyToken (constant-time env
+  // comparison); it is not stored as an api_keys row.
+  const adminEnv = { PULLMD_ADMIN_EMAIL: 'a@b.c', PULLMD_ADMIN_PASSWORD: 'pw1234567' };
+  const sha256 = (v) => createHash('sha256').update(v).digest('hex');
+
+  it('legacy PULLMD_AUTH_TOKEN authenticates as admin without an api_keys row', async () => {
     const cache = createCache(':memory:');
     const auth = createAuth({
       db: cache.db, mode: 'single-admin',
-      env: {
-        PULLMD_ADMIN_EMAIL: 'a@b.c',
-        PULLMD_ADMIN_PASSWORD: 'pw1234567',
-        PULLMD_AUTH_TOKEN: 'legacy-token-abc',
-      },
+      env: { ...adminEnv, PULLMD_AUTH_TOKEN: 'legacy-token-abc' },
       ...fastOpts,
     });
     await auth.runMigration();
@@ -81,14 +82,47 @@ describe('auth modes', () => {
     assert.ok(user, 'legacy token should resolve to admin');
     assert.equal(user.email, 'a@b.c');
     assert.equal(auth.lookupLegacyToken('wrong-token'), null);
+    assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM api_keys').get().c, 0);
+  });
 
-    const keys = cache.db.prepare('SELECT user_id, key_hash, key_prefix, label FROM api_keys').all();
-    assert.deepEqual(keys, [{
-      user_id: user.id,
-      key_hash: createHash('sha256').update('legacy-token-abc').digest('hex'),
-      key_prefix: 'legacy-token',
-      label: 'legacy PULLMD_AUTH_TOKEN',
-    }]);
+  it('runMigration removes a legacy api_keys row left by an earlier version', async () => {
+    const cache = createCache(':memory:');
+    const env = { ...adminEnv, PULLMD_AUTH_TOKEN: 'legacy-token-abc' };
+    const auth = createAuth({ db: cache.db, mode: 'single-admin', env, ...fastOpts });
+    await auth.runMigration();
+    const adminId = cache.db.prepare('SELECT id FROM users').get().id;
+    const insert = cache.db.prepare('INSERT INTO api_keys (user_id, key_hash, key_prefix, label) VALUES (?, ?, ?, ?)');
+    insert.run(adminId, sha256('legacy-token-abc'), 'legacy-token', 'legacy PULLMD_AUTH_TOKEN');
+    insert.run(adminId, sha256('pmd_other'), 'pmd_other', 'my script');
+
+    await auth.runMigration();
+    await auth.runMigration();
+
+    const labels = cache.db.prepare('SELECT label FROM api_keys').all().map((r) => r.label);
+    assert.deepEqual(labels, ['my script']);
+    assert.ok(auth.lookupLegacyToken('legacy-token-abc'), 'the env token itself keeps working');
+  });
+
+  it('a pmd_-prefixed legacy token stops authenticating once the env var is gone', async () => {
+    const cache = createCache(':memory:');
+    const token = 'pmd_' + 'a'.repeat(32);
+    const adminId = (await (async () => {
+      const first = createAuth({ db: cache.db, mode: 'single-admin', env: adminEnv, ...fastOpts });
+      await first.runMigration();
+      return cache.db.prepare('SELECT id FROM users').get().id;
+    })());
+    // State an earlier version produced: the env token stored as a key row.
+    cache.db.prepare('INSERT INTO api_keys (user_id, key_hash, key_prefix, label) VALUES (?, ?, ?, ?)')
+      .run(adminId, sha256(token), token.slice(0, 12), 'legacy PULLMD_AUTH_TOKEN');
+    assert.ok(createAuth({ db: cache.db, mode: 'single-admin', env: adminEnv, ...fastOpts }).lookupApiKey(token),
+      'precondition: the stale row authenticates');
+
+    // Operator removed PULLMD_AUTH_TOKEN and restarts.
+    const restarted = createAuth({ db: cache.db, mode: 'single-admin', env: adminEnv, ...fastOpts });
+    await restarted.runMigration();
+
+    assert.equal(restarted.lookupApiKey(token), null);
+    assert.equal(restarted.lookupLegacyToken(token), null);
   });
 
   it('legacy lookup is disabled in multi-user mode', async () => {

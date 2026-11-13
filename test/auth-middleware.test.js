@@ -142,6 +142,19 @@ describe('auth middleware', () => {
     });
   });
 
+  it('single-admin: a pmd_-prefixed legacy token still authenticates via the env var', async () => {
+    const token = 'pmd_' + 'b'.repeat(32);
+    const { app, auth, cache } = makeApp('single-admin', { PULLMD_AUTH_TOKEN: token });
+    await auth.runMigration();
+    assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM api_keys').get().c, 0);
+    await withServer(app, async (base) => {
+      const r = await fetch(base + '/whoami', { headers: { Authorization: `Bearer ${token}` } });
+      assert.equal((await r.json()).user.email, 'a@b.c');
+      const bad = await fetch(base + '/whoami', { headers: { Authorization: `Bearer ${token}x` } });
+      assert.equal((await bad.json()).user, null);
+    });
+  });
+
   it('multi-user: legacy token is rejected', async () => {
     const { app, auth } = makeApp('multi-user', { PULLMD_AUTH_TOKEN: 'mylegacy' });
     await auth.runMigration();
