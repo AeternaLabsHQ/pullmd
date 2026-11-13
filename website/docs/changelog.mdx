@@ -7,9 +7,20 @@ description: Highlights of recent PullMD releases. The full history is in CHANGE
 
 Highlights of recent releases. Every change, with issue links, is in [CHANGELOG.md](https://github.com/AeternaLabsHQ/pullmd/blob/main/CHANGELOG.md). Before upgrading across 3.0 or 3.13, read [Upgrading](/self-hosting/upgrading).
 
+## 3.19.2
+
+November 13, 2026 · <Badge tone="brand">Latest</Badge>
+
+- HTML task lists keep their state: a checked item converts to `- [x]`, an unchecked one to `- [ ]`.
+- Outlook `.msg` files that store their text in a code page (Cyrillic, Central European, Shift-JIS and others) convert with the right characters instead of garbled text.
+- An image description that times out on an upload reports `captioning timed out after 60 s` instead of "This operation was aborted". See [Troubleshooting](/troubleshooting).
+- `PULLMD_AUTH_TOKEN` is no longer stored as an API key. If your token started with `pmd_` and you removed the variable, read [Upgrading](/self-hosting/upgrading).
+- Resolving a Reddit short link connects to the address the [SSRF check](/self-hosting/ssrf-protection) validated.
+- An extraction that fails without an error message answers with a JSON error instead of an HTML error page.
+
 ## 3.19.1
 
-November 12, 2026 · <Badge tone="brand">Latest</Badge>
+November 12, 2026
 
 - `comments=false` drops the comments from a [Reddit or Hacker News](/guides/reddit-and-hacker-news) post that is still cached, in the web app, on `/api` and `/api/stream`, and for Reddit on MCP `read_url`.
 - `MARKITDOWN_YOUTUBE=false` and `MARKITDOWN_YOUTUBE=0` leave the YouTube tier off. Only `true`, `1`, `yes` and `on` turn it on.

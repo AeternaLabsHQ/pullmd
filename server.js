@@ -920,7 +920,7 @@ export function createApp(overrides = {}) {
           return;
         }
         console.error('File conversion error:', err);
-        fileJobs.fail(id, { error: capJobError(`Failed to convert file: ${err?.message}`), httpStatus: 502 });
+        fileJobs.fail(id, { error: capJobError(`Failed to convert file: ${errMessage(err)}`), httpStatus: 502 });
       }
     })().catch((err) => {
       // Only reachable if fail() itself threw; the pending timeout settles the job.

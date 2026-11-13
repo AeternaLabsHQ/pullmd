@@ -51,7 +51,9 @@ answer against the address policy and, since 3.18.2, opens the socket to
 exactly the address it checked; a name that rebinds between check and
 connect (DNS rebinding) is no longer followed there. This gap was disclosed
 with the guard in [PR #42](https://github.com/AeternaLabsHQ/pullmd/pull/42)
-and was an accepted residual until then.
+and was an accepted residual until then. Reddit short-link resolution
+(`redd.it`, `/s/` share links) used a plain fetch after the check until
+3.19.2 and is pinned the same way since.
 
 The Playwright sidecar applies the same address policy to every request
 Chromium makes (since 3.15.2, [GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77)),

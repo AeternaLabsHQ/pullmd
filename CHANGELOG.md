@@ -11,9 +11,11 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+## [3.19.2] - 2026-11-13
+
 ### Security
 
-- **Reddit short-link resolution now connects to the address the SSRF check validated**, like every other outbound request, instead of resolving the host a second time.
+- **Reddit short-link resolution now connects to the address the SSRF check validated**, like the page and image fetches, instead of resolving the host a second time.
 
 ### Fixed
 
