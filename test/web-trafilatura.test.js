@@ -1,5 +1,6 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { publicLookup } from './helpers/fake-dns.js';
 
 const ORIGINAL_TRAFILATURA_URL = process.env.TRAFILATURA_URL;
 
@@ -32,7 +33,7 @@ describe('extractWeb with trafilatura sidecar', () => {
       };
     };
 
-    const result = await extractWeb('https://example.com/promptbook', { fetch: fakeFetch });
+    const result = await extractWeb('https://example.com/promptbook', { fetch: fakeFetch, lookup: publicLookup });
     assert.equal(result.source, 'trafilatura');
     assert.ok(result.markdown.includes('High-quality content'));
     assert.ok(result.metadata.quality > 0);
@@ -56,7 +57,7 @@ describe('extractWeb with trafilatura sidecar', () => {
       };
     };
 
-    const result = await extractWeb('https://example.com/article', { fetch: fakeFetch });
+    const result = await extractWeb('https://example.com/article', { fetch: fakeFetch, lookup: publicLookup });
     assert.equal(result.source, 'readability');
     assert.ok(result.markdown.includes('Real article content'));
   });
@@ -74,7 +75,7 @@ describe('extractWeb with trafilatura sidecar', () => {
       text: async () => articleHtml,
     });
 
-    const result = await extractWeb('https://example.com/article', { fetch: fakeFetch });
+    const result = await extractWeb('https://example.com/article', { fetch: fakeFetch, lookup: publicLookup });
     assert.equal(result.source, 'readability');
     assert.ok(result.markdown.length > 0);
 
@@ -108,7 +109,7 @@ describe('extractWeb with trafilatura sidecar', () => {
       };
     };
 
-    const result = await extractWeb('https://example.com/page', { fetch: fakeFetch, recipes });
+    const result = await extractWeb('https://example.com/page', { fetch: fakeFetch, recipes, lookup: publicLookup });
     assert.equal(result.source, 'trafilatura');
     assert.ok(sidecarPayload, 'sidecar must have been called');
     assert.equal(sidecarPayload.html.includes('SELECT-REMOVE-MARKER'), false,
@@ -144,7 +145,7 @@ describe('extractWeb with trafilatura sidecar', () => {
       };
     };
 
-    const result = await extractWeb('https://example.com/page', { fetch: fakeFetch, recipes });
+    const result = await extractWeb('https://example.com/page', { fetch: fakeFetch, recipes, lookup: publicLookup });
     assert.equal(result.source, 'trafilatura', 'extraction must survive the invalid selector');
     assert.equal(sidecarPayload.html.includes('VALID-SELECTOR-MARKER'), false,
       'valid selectors after an invalid one must still apply');
@@ -177,7 +178,7 @@ describe('extractWeb with trafilatura sidecar', () => {
       };
     };
 
-    const result = await extractWeb('https://example.com/page', { fetch: fakeFetch, recipes });
+    const result = await extractWeb('https://example.com/page', { fetch: fakeFetch, recipes, lookup: publicLookup });
     assert.equal(result.metadata.recipeFields?.author, 'Jane Doe',
       'frontmatter extraction runs before select.remove strips the element');
     assert.equal(result.markdown.includes('Jane Doe'), false,

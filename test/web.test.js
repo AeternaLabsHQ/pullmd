@@ -1,6 +1,7 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWeb, extractFile, extractHtml } from '../lib/web.js';
+import { extractFile, extractHtml } from '../lib/web.js';
+import { extractWeb, publicLookup } from './helpers/fake-dns.js';
 import { matchRecipesAgainst } from '../lib/recipes.js';
 
 // Single-fetch: extractWeb makes exactly ONE request per call.
@@ -199,7 +200,7 @@ describe('extractWeb - extractor override (#17)', () => {
         if (typeof url === 'string' && url.includes('trafilatura-test')) trafiCalls++;
         return { ok: true, headers: { get: () => 'text/html; charset=utf-8' }, text: async () => baseHtml };
       };
-      const result = await ew('https://example.com/x', { fetch: fakeFetch, extractor: 'readability' });
+      const result = await ew('https://example.com/x', { fetch: fakeFetch, extractor: 'readability', lookup: publicLookup });
       assert.equal(result.source, 'readability');
       assert.equal(trafiCalls, 0, 'Trafilatura sidecar must not be called');
       assert.match(result.metadata.extractorReason, /forced via extractor=readability/);
@@ -220,7 +221,7 @@ describe('extractWeb - extractor override (#17)', () => {
         }
         return { ok: true, headers: { get: () => 'text/html; charset=utf-8' }, text: async () => baseHtml };
       };
-      const result = await ew('https://example.com/x', { fetch: fakeFetch, extractor: 'trafilatura' });
+      const result = await ew('https://example.com/x', { fetch: fakeFetch, extractor: 'trafilatura', lookup: publicLookup });
       assert.equal(result.source, 'trafilatura');
       assert.ok(result.markdown.includes('Trafilatura body paragraph'), 'Trafilatura output must be the chosen one');
       assert.match(result.metadata.extractorReason, /forced via extractor=trafilatura/);
@@ -240,7 +241,7 @@ describe('extractWeb - extractor override (#17)', () => {
         }
         return { ok: true, headers: { get: () => 'text/html; charset=utf-8' }, text: async () => baseHtml };
       };
-      const result = await ew('https://example.com/x', { fetch: fakeFetch, extractor: 'trafilatura' });
+      const result = await ew('https://example.com/x', { fetch: fakeFetch, extractor: 'trafilatura', lookup: publicLookup });
       assert.match(result.source, /^readability/);
       assert.match(result.metadata.extractorReason, /unavailable, fell back/);
     } finally {

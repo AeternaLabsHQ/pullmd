@@ -7,7 +7,7 @@ import {
   DEFAULT_MAX_FETCH_BYTES,
   ResponseTooLargeError,
 } from '../lib/fetch-body.js';
-import { extractWeb } from '../lib/web.js';
+import { extractWeb } from './helpers/fake-dns.js';
 
 const MB = 1024 * 1024;
 

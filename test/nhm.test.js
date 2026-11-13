@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWeb } from '../lib/web.js';
+import { extractWeb } from './helpers/fake-dns.js';
 
 function mockFetch(html) {
   return async () => ({

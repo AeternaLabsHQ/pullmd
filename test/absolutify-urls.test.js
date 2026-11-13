@@ -1,6 +1,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWeb, extractHtml } from '../lib/web.js';
+import { extractHtml } from '../lib/web.js';
+import { extractWeb, publicLookup } from './helpers/fake-dns.js';
 
 // Relative URLs in the source HTML must be resolved against the page URL
 // before extraction, so markdown image/link targets work outside the
@@ -108,7 +109,7 @@ describe('relative URL resolution (trafilatura path)', () => {
       return htmlResponse(html);
     };
 
-    await extractWebFresh('https://www.sciencedaily.com/releases/article.htm', { fetch: fakeFetch });
+    await extractWebFresh('https://www.sciencedaily.com/releases/article.htm', { fetch: fakeFetch, lookup: publicLookup });
 
     assert.ok(sidecarBody, 'sidecar should have been called');
     assert.ok(sidecarBody.html.includes('https://www.sciencedaily.com/images/helmet.webp'),

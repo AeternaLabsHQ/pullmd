@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { RecipeSchema, mergeRecipes } from '../lib/recipes.js';
-import { extractHtml, extractWeb } from '../lib/web.js';
+import { extractHtml } from '../lib/web.js';
+import { extractWeb } from './helpers/fake-dns.js';
 
 const block = (over = {}) => ({
   title: 'Trend',

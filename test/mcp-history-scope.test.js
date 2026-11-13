@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
 import { createOAuth } from '../lib/oauth/index.js';
-import { createApp } from '../server.js';
+import { createApp } from './helpers/fake-dns.js';
 
 // MCP list_recent follows the same scoping rules as GET /api/history:
 // signed-in callers see their own conversions, anonymous callers (auth off)

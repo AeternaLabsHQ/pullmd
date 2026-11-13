@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createApp } from '../server.js';
+import { createApp } from './helpers/fake-dns.js';
 import { createCache } from '../lib/cache.js';
 import { buildFixtureApp, FIXTURE_URL, GOLDEN_REQUESTS, normalize } from './fixtures/query-extract/golden/capture.mjs';
 

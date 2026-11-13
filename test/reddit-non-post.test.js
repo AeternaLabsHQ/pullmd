@@ -1,7 +1,7 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractPost, RedditUnsupportedPageError } from '../lib/reddit.js';
-import { createApp } from '../server.js';
+import { createApp } from './helpers/fake-dns.js';
 
 // Reddit URLs that are neither a post nor a subreddit front page (rules,
 // wiki, user profiles, ...) used to crash with "Cannot read properties of
