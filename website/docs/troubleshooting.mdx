@@ -47,7 +47,7 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     Uploads over 25 MB return `413`. A URL whose body exceeds `PULLMD_MAX_FETCH_BYTES` (50 MB by default) returns `502` with `response larger than the 50 MB limit`.
   </Accordion>
   <Accordion title="502 for an audio or image upload">
-    When the model fails on an upload and the MarkItDown sidecar can't convert the file either, the error names the model step. `Failed to convert file: transcription timed out after 120 s` means the speech-to-text provider didn't answer within 120 seconds. `Failed to convert file: transcription failed (…)` and `Failed to convert file: captioning failed (…)` carry the provider's status code. Check the provider and the `PULLMD_STT_*` or `PULLMD_VISION_*` settings. See [Images and audio](/guides/images-and-audio).
+    When the model fails on an upload and the MarkItDown sidecar can't convert the file either, the error names the model step. `Failed to convert file: transcription timed out after 120 s` means the speech-to-text provider didn't answer within 120 seconds. `Failed to convert file: captioning timed out after 60 s` means the same for the vision provider, after 60 seconds. `Failed to convert file: transcription failed (…)` and `Failed to convert file: captioning failed (…)` carry the provider's status code. Check the provider and the `PULLMD_STT_*` or `PULLMD_VISION_*` settings. See [Images and audio](/guides/images-and-audio).
   </Accordion>
   <Accordion title="Upload interrupted, or Network error: server unreachable after switching apps">
     ```text
