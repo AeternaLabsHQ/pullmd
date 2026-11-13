@@ -123,6 +123,8 @@ cd pullmd
 npm install
 npm start      # http://localhost:3000
 npm test       # runs offline: real DNS lookups and outbound connections fail
+npx playwright install chromium   # once, for the browser tests
+npm run test:e2e                  # browser tests of the web app
 ```
 
 The cache is created at `./data/cache.db`. Set `TRAFILATURA_URL`, `PLAYWRIGHT_URL` and `MARKITDOWN_URL` to use sidecar containers you run separately. Here `PORT` sets the port the server listens on.
