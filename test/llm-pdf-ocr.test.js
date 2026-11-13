@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { ocrPdf } from '../lib/llm/pdf-ocr.js';
 
@@ -56,6 +56,31 @@ describe('ocrPdf', () => {
       () => ocrPdf({ buffer: Buffer.from('%PDF'), fetch: async () => ({ ok: false, status: 429, text: async () => 'rate limited' }) }),
       /pdf ocr failed \(429\): rate limited/
     );
+    restore(s);
+  });
+});
+
+describe('ocrPdf - provider timeout (#98)', () => {
+  const hanging = async (url, opts) => new Promise((_, reject) => {
+    opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })));
+  });
+
+  it('names the timeout when the provider never answers', async () => {
+    const s = save(); process.env.PULLMD_PDF_OCR_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const p = ocrPdf({ buffer: Buffer.from('%PDF'), fetch: hanging });
+      mock.timers.tick(120000);
+      await assert.rejects(p, /pdf ocr timed out after 120 s/);
+    } finally { mock.timers.reset(); restore(s); }
+  });
+
+  it('keeps the abort error when the caller cancelled', async () => {
+    const s = save(); process.env.PULLMD_PDF_OCR_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    const ctrl = new AbortController();
+    const p = ocrPdf({ buffer: Buffer.from('%PDF'), fetch: hanging, signal: ctrl.signal });
+    ctrl.abort();
+    await assert.rejects(p, (err) => err.name === 'AbortError');
     restore(s);
   });
 });
