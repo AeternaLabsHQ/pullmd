@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Fixed
+
+- **An extractor that failed with something other than an `Error` produced an HTML error page.** A Reddit failure carrying no message (a plain string or no value at all) made `/api` answer with Express' HTML `500` and a stack trace instead of the JSON error. It returns `{ "error": "Internal server error" }` now, and the same guard covers the other extraction and upload error paths.
+
 ## [3.19.1] - 2026-11-12
 
 ### Fixed

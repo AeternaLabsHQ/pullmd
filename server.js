@@ -30,6 +30,12 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { stripCommentsSection } from './lib/markdown-sections.js';
 
+// Extractors can throw non-Errors (a string, undefined); `err.message` would
+// then throw inside the catch block and bypass the JSON error response.
+function errMessage(err) {
+  return String(err?.message ?? err);
+}
+
 function isRedditUrl(url) {
   try {
     normalizeRedditUrl(url);
@@ -206,7 +212,7 @@ export function createApp(overrides = {}) {
     try {
       return suggestFilename({ ...opts, datePrefixFormat: filenameDatePrefix, now: new Date() });
     } catch (err) {
-      console.warn('Suggested-filename generation failed:', err.message);
+      console.warn('Suggested-filename generation failed:', errMessage(err));
       return null;
     }
   }
@@ -344,7 +350,7 @@ export function createApp(overrides = {}) {
         markdown = await refreshShareEntry(entry, client, llmBudget.forRequest(req));
       } catch (err) {
         // Source is unreachable / failed — serve the stale snapshot.
-        console.warn('Share-link refresh failed for', entry.url, '—', err.message);
+        console.warn('Share-link refresh failed for', entry.url, '—', errMessage(err));
       }
     }
 
@@ -567,6 +573,7 @@ export function createApp(overrides = {}) {
         res.set('Content-Type', 'text/markdown; charset=utf-8');
         return res.send(markdown);
       } catch (err) {
+        const message = errMessage(err);
         if (err instanceof RedditUnsupportedPageError) {
           return res.status(400).json({ error: err.message, code: err.code });
         }
@@ -574,13 +581,13 @@ export function createApp(overrides = {}) {
           console.error('Reddit credentials rejected:', err.message);
           return res.status(502).json({ error: err.message });
         }
-        if (err.message.includes('not found') || err.message.includes('Not found')) {
+        if (message.includes('not found') || message.includes('Not found')) {
           return res.status(404).json({ error: 'Post not found' });
         }
-        if (err.message.includes('Rate limited') || err.message.includes('429')) {
+        if (message.includes('Rate limited') || message.includes('429')) {
           return res.status(502).json({ error: 'Reddit rate limit. Try again later.' });
         }
-        if (err.message.includes('403') || err.message.includes('Blocked')) {
+        if (message.includes('403') || message.includes('Blocked')) {
           return res.status(502).json({ error: 'Reddit blocked the request.' });
         }
         console.error('API error:', err);
@@ -657,7 +664,7 @@ export function createApp(overrides = {}) {
         res.set('Content-Type', 'text/markdown; charset=utf-8');
         return res.send(markdown);
       } catch (err) {
-        console.warn(`[hn] ${url} failed (${err.message}); falling back to web pipeline`);
+        console.warn(`[hn] ${url} failed (${errMessage(err)}); falling back to web pipeline`);
         // fall through to the generic web pipeline below
       }
     }
@@ -746,7 +753,7 @@ export function createApp(overrides = {}) {
         return res.status(502).json({ error: err.message, code: 'bot_challenge', vendor: err.vendor });
       }
       console.error('Web extraction error:', err);
-      return res.status(502).json({ error: `Failed to extract page: ${err.message}` });
+      return res.status(502).json({ error: `Failed to extract page: ${errMessage(err)}` });
     }
   });
 
@@ -830,7 +837,7 @@ export function createApp(overrides = {}) {
       return res.send(finalMd);
     } catch (err) {
       console.error('Local HTML extraction error:', err);
-      return res.status(500).json({ error: `Failed to extract HTML: ${err.message}` });
+      return res.status(500).json({ error: `Failed to extract HTML: ${errMessage(err)}` });
     }
   });
 
@@ -975,12 +982,12 @@ export function createApp(overrides = {}) {
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       return res.send(outMd);
     } catch (err) {
-      if (err.status === 422) {
+      if (err?.status === 422) {
         return res.status(422).json({ error: err.message });
       }
       console.error('File conversion error:', err);
       // 502: the markitdown sidecar is an upstream dependency (same as the web /api path).
-      return res.status(502).json({ error: `Failed to convert file: ${err.message}` });
+      return res.status(502).json({ error: `Failed to convert file: ${errMessage(err)}` });
     }
   });
 
@@ -1180,7 +1187,7 @@ export function createApp(overrides = {}) {
           if (cache) cache.logExtraction({ url, source: 'hackernews', quality, markdownLen: baseMd.length, extractorReason: null, durationMs: Date.now() - t0, client, cached: false });
           return res.end();
         } catch (err) {
-          console.warn(`[hn] stream ${url} failed (${err.message}); falling back to web`);
+          console.warn(`[hn] stream ${url} failed (${errMessage(err)}); falling back to web`);
           // fall through to the web path below
         }
       }

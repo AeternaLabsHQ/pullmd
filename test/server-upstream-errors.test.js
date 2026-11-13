@@ -120,6 +120,31 @@ describe('GET /api - Reddit extractor errors', () => {
     assert.deepEqual(errorLog.mock.calls[0].arguments, ['API error:', boom]);
   });
 
+  // A thrown non-Error must not turn the JSON error into Express' HTML 500.
+  const nonErrors = [
+    { label: 'a string', value: 'boom' },
+    { label: 'undefined', value: undefined },
+    { label: 'null', value: null },
+    { label: 'an object without a message', value: { code: 42 } },
+  ];
+  for (const c of nonErrors) {
+    it(`a thrown value (${c.label}) -> JSON 500`, async (t) => {
+      t.mock.method(console, 'error', () => {});
+      const app = createApp({ extractPost: async () => { throw c.value; } });
+      const res = await request(app, api(REDDIT_URL));
+      assert.equal(res.status, 500);
+      assert.match(res.headers['content-type'], /application\/json/);
+      assert.deepEqual(JSON.parse(res.body), { error: 'Internal server error' });
+    });
+  }
+
+  it('a thrown string still matches the status wording', async () => {
+    const app = createApp({ extractPost: async () => { throw 'Reddit API returned 403'; } });
+    const res = await request(app, api(REDDIT_URL));
+    assert.equal(res.status, 502);
+    assert.deepEqual(JSON.parse(res.body), { error: 'Reddit blocked the request.' });
+  });
+
   it('a failed refetch keeps serving nothing new but leaves an earlier cache row alone', async (t) => {
     t.mock.method(console, 'error', () => {});
     const cache = createCache(':memory:');
@@ -233,6 +258,17 @@ describe('GET /api - Hacker News branch', () => {
     assert.ok(hnWarnings[0].includes(HN_URL) && hnWarnings[0].includes('Algolia returned 503'));
   });
 
+  it('falls through to the web pipeline when the HN extractor throws undefined', async (t) => {
+    t.mock.method(console, 'warn', () => {});
+    const app = createApp({
+      extractHn: async () => { throw undefined; },
+      extractWeb: async () => ({ markdown: '# Web', title: 'Web', source: 'readability', metadata: {} }),
+    });
+    const res = await request(app, api(HN_URL));
+    assert.equal(res.status, 200);
+    assert.equal(res.body, '# Web');
+  });
+
   it('does not call the web pipeline when the HN extractor succeeds', async () => {
     let webCalled = 0;
     const app = createApp({ extractHn: hnOk, extractWeb: async () => { webCalled++; return { markdown: 'x', title: 'x', source: 'readability' }; } });
@@ -241,5 +277,16 @@ describe('GET /api - Hacker News branch', () => {
     assert.match(res.headers['content-type'], /^text\/markdown/);
     assert.equal(res.body, HN_MD);
     assert.equal(webCalled, 0);
+  });
+});
+
+describe('GET /api - web extractor throwing a non-Error', () => {
+  it('-> JSON 502 instead of an HTML 500', async (t) => {
+    t.mock.method(console, 'error', () => {});
+    const app = createApp({ extractWeb: async () => { throw undefined; } });
+    const res = await request(app, api('https://news.ycombinator.com/other'));
+    assert.equal(res.status, 502);
+    assert.match(res.headers['content-type'], /application\/json/);
+    assert.match(JSON.parse(res.body).error, /^Failed to extract page: /);
   });
 });
