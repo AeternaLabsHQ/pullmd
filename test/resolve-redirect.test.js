@@ -1,6 +1,6 @@
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveRedditUrl } from '../lib/reddit.js';
+import { resolveRedditUrl } from './helpers/fake-dns.js';
 
 describe('resolveRedditUrl', () => {
   it('returns normalized URL directly for standard URLs', async () => {

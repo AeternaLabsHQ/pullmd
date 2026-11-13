@@ -2,7 +2,7 @@ import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { formatPost, extractPost } from '../lib/reddit.js';
 import { mergeMediaFrontmatter, KNOWN_FRONTMATTER_FIELDS } from '../lib/frontmatter.js';
-import { createApp } from '../server.js';
+import { createApp } from './helpers/fake-dns.js';
 import { createCache } from '../lib/cache.js';
 
 // v3 clean body for Reddit: the inline meta line (**r/sub** · u/user · N ↑ · …)

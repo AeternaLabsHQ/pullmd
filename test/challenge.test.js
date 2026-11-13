@@ -2,8 +2,7 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { BotChallengeError, challengeVendorFromHeaders, challengeVendorFromBody } from '../lib/challenge.js';
-import { extractWeb } from '../lib/web.js';
-import { createApp } from '../server.js';
+import { extractWeb, createApp } from './helpers/fake-dns.js';
 
 function headersOf(map) {
   return { get: (h) => map[h.toLowerCase()] ?? null };

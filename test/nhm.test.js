@@ -1,7 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWeb, htmlFragmentToMarkdown } from '../lib/web.js';
+import { htmlFragmentToMarkdown } from '../lib/web.js';
 import { stripMarkdown } from '../lib/strip-markdown.js';
+import { extractWeb } from './helpers/fake-dns.js';
 
 function mockFetch(html) {
   return async () => ({

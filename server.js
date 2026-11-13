@@ -165,6 +165,8 @@ export function createApp(overrides = {}) {
   const extractWebFn = overrides.extractWeb || extractWeb;
   const extractHtmlFn = overrides.extractHtml || extractHtml;
   const extractFileFn = overrides.extractFile || extractFile;
+  // DNS lookup for the SSRF guard; unset = the real resolver (tests inject one).
+  const lookup = overrides.lookup;
   const cache = overrides.cache || null;
   const auth = overrides.auth || null;
   const oauth = overrides.oauth || null;
@@ -291,6 +293,7 @@ export function createApp(overrides = {}) {
     isHnUrl,
     llmBudget,
     disablePublicHistory,
+    lookup,
   });
   // CORS first so OPTIONS preflight short-circuits before `gate` would 401.
   app.use('/mcp', oauthCors);
@@ -321,6 +324,7 @@ export function createApp(overrides = {}) {
       client,
       userId: null,
       llmAllowed,
+      lookup,
     });
     return r.markdown;
   }
@@ -409,7 +413,7 @@ export function createApp(overrides = {}) {
     const { imagesMode } = imagesCheck;
 
     try {
-      await assertUrlAllowed(url);
+      await assertUrlAllowed(url, { lookup });
     } catch (err) {
       if (err instanceof SsrfError) {
         return res.status(403).json({ error: `URL not allowed: ${err.message}` });
@@ -509,6 +513,7 @@ export function createApp(overrides = {}) {
           lang: reqLang,
           withMeta: true,
           ...redditImageOptions(imagesMode, llmBudget.forRequest(req), imageStoreFrom(cache)),
+          ...(lookup && { ssrfOpts: { lookup } }),
         });
         // Test doubles may return a bare string; production returns { markdown, meta }.
         const baseMd = typeof r === 'string' ? r : r.markdown;
@@ -678,6 +683,7 @@ export function createApp(overrides = {}) {
         ytChunk: validYtChunk,
         pdfOcr: pdf === 'ocr',
         llmAllowed: llmBudget.forRequest(req),
+        ...(lookup && { lookup }),
       });
 
       let shareId = null;
@@ -1070,7 +1076,7 @@ export function createApp(overrides = {}) {
       // Headers are already flushed, so a rejection surfaces as an SSE error
       // event via the catch below instead of a 403.
       try {
-        await assertUrlAllowed(url);
+        await assertUrlAllowed(url, { lookup });
       } catch (err) {
         if (err instanceof SsrfError) throw new Error(`URL not allowed: ${err.message}`);
         throw err;
@@ -1128,6 +1134,7 @@ export function createApp(overrides = {}) {
           lang: reqLang,
           withMeta: true,
           ...redditImageOptions(imagesMode, llmBudget.forRequest(req), imageStoreFrom(cache)),
+          ...(lookup && { ssrfOpts: { lookup } }),
         });
         // Test doubles may return a bare string; production returns { markdown, meta }.
         const baseMd = typeof r === 'string' ? r : r.markdown;
@@ -1201,6 +1208,7 @@ export function createApp(overrides = {}) {
         ytChunk: validYtChunk,
         pdfOcr: pdf === 'ocr',
         llmAllowed: llmBudget.forRequest(req),
+        ...(lookup && { lookup }),
         emit,
         signal: ac.signal,
       });

@@ -11,7 +11,7 @@
   },
   "scripts": {
     "start": "node --max-http-header-size=65536 server.js",
-    "test": "node --test"
+    "test": "node --import ./test/helpers/no-network.js --test"
   },
   "dependencies": {
     "@kenjiuno/decompressrtf": "^0.1.4",
