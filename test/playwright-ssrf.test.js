@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderViaSidecar } from '../lib/playwright-client.js';
+import { renderViaSidecar } from './helpers/fake-dns.js';
 import { SsrfError } from '../lib/ssrf.js';
 
 test('renderViaSidecar refuses a blocked URL before calling the sidecar', async () => {

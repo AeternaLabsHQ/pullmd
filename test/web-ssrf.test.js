@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractWeb } from '../lib/web.js';
+import { extractWeb } from './helpers/fake-dns.js';
 import { SsrfError } from '../lib/ssrf.js';
 
 test('extractWeb refuses a metadata-IP URL without fetching', async () => {

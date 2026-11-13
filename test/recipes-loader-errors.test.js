@@ -177,3 +177,37 @@ describe('loadRecipes - entries inside a readable user file', () => {
     assert.deepEqual(warnings(), []);
   });
 });
+
+describe('loadRecipes - userPath option', () => {
+  const overlay = JSON.stringify([{ name: 'overlay-only', host: 'overlay.example.com', extractor: 'readability' }]);
+
+  async function withEnvOverlay(fn) {
+    const saved = process.env.PULLMD_SITE_RECIPES;
+    process.env.PULLMD_SITE_RECIPES = userFile('env-overlay.json', overlay);
+    try { return await fn(); } finally {
+      if (saved === undefined) delete process.env.PULLMD_SITE_RECIPES;
+      else process.env.PULLMD_SITE_RECIPES = saved;
+    }
+  }
+
+  it('an explicit null disables the user overlay, even with PULLMD_SITE_RECIPES set', async (t) => {
+    capture(t);
+    await withEnvOverlay(() => {
+      const state = loadRecipes({ defaultPath, userPath: null });
+      assert.equal(state.status.sources.length, 1);
+      assert.equal(state.status.sources[0].path, defaultPath);
+      assert.ok(!state.recipes.some((r) => r.name === 'overlay-only'));
+    });
+  });
+
+  it('an absent userPath keeps the default search (PULLMD_SITE_RECIPES)', async (t) => {
+    capture(t);
+    await withEnvOverlay(() => {
+      const state = loadRecipes({ defaultPath });
+      assert.equal(state.status.sources.length, 2);
+      assert.ok(state.recipes.some((r) => r.name === 'overlay-only'));
+      const explicitUndefined = loadRecipes({ defaultPath, userPath: undefined });
+      assert.equal(explicitUndefined.status.sources.length, 2);
+    });
+  });
+});

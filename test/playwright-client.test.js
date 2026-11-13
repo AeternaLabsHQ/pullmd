@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderViaSidecar } from '../lib/playwright-client.js';
+import { renderViaSidecar } from './helpers/fake-dns.js';
 
 describe('renderViaSidecar', () => {
   let originalEnv;
@@ -87,7 +87,6 @@ describe('renderViaSidecar — recipe-driven options', () => {
       return { ok: true, text: async () => '<html></html>' };
     };
     process.env.PLAYWRIGHT_URL = 'http://sidecar.test/';
-    const { renderViaSidecar } = await import('../lib/playwright-client.js');
     await renderViaSidecar('https://example.com/', {
       fetch: mockFetch,
       waitFor: '.x',
@@ -107,7 +106,6 @@ describe('renderViaSidecar — recipe-driven options', () => {
       return { ok: true, text: async () => '<html></html>' };
     };
     process.env.PLAYWRIGHT_URL = 'http://sidecar.test/';
-    const { renderViaSidecar } = await import('../lib/playwright-client.js');
     await renderViaSidecar('https://example.com/', { fetch: mockFetch });
     assert.deepEqual(Object.keys(captured), ['url']);
   });
@@ -119,7 +117,6 @@ describe('renderViaSidecar — recipe-driven options', () => {
       return { ok: true, text: async () => '<html></html>' };
     };
     process.env.PLAYWRIGHT_URL = 'http://sidecar.test/';
-    const { renderViaSidecar } = await import('../lib/playwright-client.js');
     await renderViaSidecar('https://example.com/', {
       fetch: mockFetch,
       userAgent: 'Mozilla/5.0 (Test) Test/1.0',

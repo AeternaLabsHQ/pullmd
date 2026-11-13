@@ -11,7 +11,8 @@ import {
   containerLabel,
   guardReason,
 } from '../lib/coverage-guard.js';
-import { extractHtml, extractWeb } from '../lib/web.js';
+import { extractHtml } from '../lib/web.js';
+import { extractWeb } from './helpers/fake-dns.js';
 import { RecipeSchema } from '../lib/recipes.js';
 
 const bodyOf = (inner) => parseHTML(`<html><body>${inner}</body></html>`).document.querySelector('body');

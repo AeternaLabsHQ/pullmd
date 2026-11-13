@@ -12,13 +12,13 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createApp } from '../../../../server.js';
+import { createApp } from '../../../helpers/fake-dns.js';
 import { createCache } from '../../../../lib/cache.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pageMd = readFileSync(join(here, '../page.md'), 'utf8');
 
-// example.com: resolves publicly, passes the SSRF guard (like existing tests).
+// example.com: the fake lookup answers with a public address, so it passes the SSRF guard.
 export const FIXTURE_URL = 'https://example.com/acme-sync';
 
 export function buildFixtureApp() {

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp } from '../server.js';
+import { createApp } from './helpers/fake-dns.js';
 import { createCache } from '../lib/cache.js';
 
 // Same harness shape as server-query-extract.test.js.

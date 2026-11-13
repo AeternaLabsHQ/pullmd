@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createApp } from '../server.js';
+import { createApp } from './helpers/fake-dns.js';
 
 // Minimal app with no cache and a fetch that must never be called for blocked URLs.
 function makeApp() {

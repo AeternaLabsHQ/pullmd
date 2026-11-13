@@ -729,13 +729,16 @@ Recipe tests live in `test/recipes-*.test.js` and `test/jsonld.test.js`, with
 fixtures under `test/fixtures/recipes/`. Run the whole suite with:
 
 ```bash
-node --test
+npm test
 ```
+
+The suite runs offline: a real DNS lookup or outbound connection fails the
+test file, so feed recipes HTML instead of fetching pages.
 
 Run a single file while iterating:
 
 ```bash
-node --test test/recipes-frontmatter.test.js
+npm test -- test/recipes-frontmatter.test.js
 ```
 
 A contributed recipe that exercises non-trivial behavior (frontmatter
@@ -759,7 +762,7 @@ Before opening a PR that adds a built-in recipe:
       needs (don't match more URLs than necessary).
 - [ ] One concern per recipe where practical (split unrelated fixes; they merge).
 - [ ] A test accompanies the recipe when it exercises non-trivial behavior
-      (mirror `test/recipes-frontmatter.test.js`). `node --test` passes.
+      (mirror `test/recipes-frontmatter.test.js`). `npm test` passes.
 - [ ] A one-line note in `CHANGELOG.md` under the current unreleased section.
 - [ ] This guide is left untouched unless your change alters recipe *semantics*
       (new field, new action, changed matching) — in which case update it here too.

@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { captionImage } from '../lib/llm/vision.js';
 
@@ -173,6 +173,31 @@ describe('captionImage', () => {
     assert.equal(sent[0].max_tokens, 2000);
     assert.equal(sent[1].max_completion_tokens, 5500, '5000 + (2000 - 1500) keeps the reasoning headroom');
     assert.equal(sent[1].max_tokens, undefined);
+    restore(s);
+  });
+});
+
+describe('captionImage - provider timeout (#98)', () => {
+  const hanging = async (url, opts) => new Promise((_, reject) => {
+    opts.signal.addEventListener('abort', () => reject(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })));
+  });
+
+  it('names the timeout when the provider never answers', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    mock.timers.enable({ apis: ['setTimeout'] });
+    try {
+      const p = captionImage(PNG, { mimetype: 'image/png', fetch: hanging });
+      mock.timers.tick(60000);
+      await assert.rejects(p, /captioning timed out after 60 s/);
+    } finally { mock.timers.reset(); restore(s); }
+  });
+
+  it('keeps the abort error when the caller cancelled', async () => {
+    const s = save(); process.env.PULLMD_VISION_API_KEY = 'k'; delete process.env.PULLMD_LLM_API_KEY;
+    const ctrl = new AbortController();
+    const p = captionImage(PNG, { mimetype: 'image/png', fetch: hanging, signal: ctrl.signal });
+    ctrl.abort();
+    await assert.rejects(p, (err) => err.name === 'AbortError');
     restore(s);
   });
 });

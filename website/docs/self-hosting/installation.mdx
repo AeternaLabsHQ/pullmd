@@ -75,7 +75,7 @@ The Playwright sidecar saves the most space: it adds about 3.7 GB of browser bin
 `:latest` follows the newest release. To upgrade only when you choose, pin a version on all four images, for example:
 
 ```yaml
-image: aeternalabshq/pullmd:3.19.1
+image: aeternalabshq/pullmd:3.19.2
 ```
 
 `aeternalabshq/pullmd:2` stays on the last 2.x release. See [Upgrading](/self-hosting/upgrading).
@@ -83,7 +83,7 @@ image: aeternalabshq/pullmd:3.19.1
 The downloaded compose file uses `:latest` on every image. To pin all four to one version, replace the tag:
 
 ```bash
-sed -i.bak 's/:latest/:3.19.1/' docker-compose.yml
+sed -i.bak 's/:latest/:3.19.2/' docker-compose.yml
 ```
 
 ## Run a second instance
@@ -108,7 +108,7 @@ To start the server image with `docker run`, set `CACHE_DB` and mount a folder f
 docker run -d --name pullmd -p 3000:3000 \
   -e CACHE_DB=/data/cache.db \
   -v "$PWD/data:/data" \
-  aeternalabshq/pullmd:3.19.1
+  aeternalabshq/pullmd:3.19.2
 ```
 
 The server listens on port `3000` inside the container. Without the sidecars, `GET /api/status` reports each one as `not-configured`, and Readability is the only HTML extractor. To use sidecar containers, set `TRAFILATURA_URL`, `PLAYWRIGHT_URL` and `MARKITDOWN_URL`, as in the compose file. To turn on sign-in, add `-e PULLMD_AUTH_MODE=single-admin -e PULLMD_ADMIN_EMAIL=<email> -e PULLMD_ADMIN_PASSWORD=<password>`, as described in [Authentication](/self-hosting/authentication).
@@ -122,7 +122,9 @@ git clone https://github.com/AeternaLabsHQ/pullmd.git
 cd pullmd
 npm install
 npm start      # http://localhost:3000
-npm test       # node --test
+npm test       # runs offline: real DNS lookups and outbound connections fail
+npx playwright install chromium   # once, for the browser tests
+npm run test:e2e                  # browser tests of the web app
 ```
 
 The cache is created at `./data/cache.db`. Set `TRAFILATURA_URL`, `PLAYWRIGHT_URL` and `MARKITDOWN_URL` to use sidecar containers you run separately. Here `PORT` sets the port the server listens on.

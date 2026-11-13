@@ -1,6 +1,6 @@
 ---
 title: Upgrading
-description: Update PullMD, what to check when upgrading across 3.18, 3.17, 3.16, 3.15.2, 3.13 and 3.0, and how to roll back.
+description: Update PullMD, what to check when upgrading across 3.19.2, 3.18, 3.17, 3.16, 3.15.2, 3.13 and 3.0, and how to roll back.
 ---
 
 # Upgrading
@@ -13,6 +13,10 @@ docker compose up -d
 ```
 
 This updates all four containers to the version your compose file names (`:latest` by default). The database upgrades itself on start. Read the [changelog](/changelog) first, and the notes below if you're crossing one of these versions.
+
+## To 3.19.2 or later: a removed `PULLMD_AUTH_TOKEN` stops working
+
+PullMD no longer stores `PULLMD_AUTH_TOKEN` as an API key and deletes the stored copy on start. This matters only if your token started with `pmd_` and you have since removed the variable: clients that still send that token are no longer signed in. Set the variable again, or create an API key on `/settings`. See [Authentication](/self-hosting/authentication).
 
 ## To 3.18 or later: CSV, JSON and XML uploads
 
@@ -69,7 +73,7 @@ The Claude Code skill was renamed from `web-reader` to `pullmd` in 3.0. Remove t
 Pin an exact version on every image to control when you upgrade:
 
 ```yaml
-image: aeternalabshq/pullmd:3.19.1
+image: aeternalabshq/pullmd:3.19.2
 ```
 
 Before a big upgrade, copy the `./data` folder. To roll back, pin the previous version and run `docker compose up -d`. 3.13 doesn't change the database schema, and 3.0 only adds a `metadata` column to the `conversions` table, which older versions ignore. Rolling back across them needs no restore. For other versions, check the changelog for schema changes first. To stay on the 2.x output format, use `aeternalabshq/pullmd:2`.

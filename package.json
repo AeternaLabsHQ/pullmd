@@ -1,6 +1,6 @@
 {
   "name": "pullmd",
-  "version": "3.19.1",
+  "version": "3.19.2",
   "type": "module",
   "main": "server.js",
   "license": "AGPL-3.0-or-later",
@@ -11,7 +11,8 @@
   },
   "scripts": {
     "start": "node --max-http-header-size=65536 server.js",
-    "test": "node --test"
+    "test": "node --import ./test/helpers/no-network.js --test",
+    "test:e2e": "node --test --test-concurrency=2 --test-timeout=120000 \"e2e/**/*.e2e.js\""
   },
   "dependencies": {
     "@kenjiuno/decompressrtf": "^0.1.4",
@@ -30,5 +31,8 @@
     "postal-mime": "^4.2.0",
     "undici": "^7.30.0",
     "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.0"
   }
 }

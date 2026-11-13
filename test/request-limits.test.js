@@ -1,14 +1,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { createApp, parseTrustProxy } from '../server.js';
+import { parseTrustProxy } from '../server.js';
+import { createApp } from './helpers/fake-dns.js';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
 import { createOAuthStore } from '../lib/oauth/store.js';
 import { createRateLimiter } from '../lib/oauth/rate-limit.js';
 import { createLlmBudget } from '../lib/llm/budget.js';
 import { createForwardedHeaderNotice } from '../lib/proxy-notice.js';
-import { extractWeb, extractFile } from '../lib/web.js';
+import { extractFile } from '../lib/web.js';
+import { extractWeb } from './helpers/fake-dns.js';
 
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
 

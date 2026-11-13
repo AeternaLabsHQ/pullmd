@@ -144,4 +144,4 @@ Login allows 10 attempts a minute and signup 5 an hour, per client address. Over
 
 ## Legacy token
 
-`PULLMD_AUTH_TOKEN` is a single shared bearer token from v1. It works only in `single-admin` mode, maps to the admin, appears on `/settings` as an API key labeled `legacy PULLMD_AUTH_TOKEN`, and will be removed in a future major release. Use API keys. Setting it while auth is `disabled` does nothing, and `/api/config` reports `authMisconfigured: true`.
+`PULLMD_AUTH_TOKEN` is a single shared bearer token from v1. It works only in `single-admin` mode, maps to the admin, and will be removed in a future major release. PullMD compares it with the environment variable and doesn't store it, so it isn't listed among the API keys on `/settings` and stops working once you remove the variable. Use API keys. Setting it while auth is `disabled` does nothing, and `/api/config` reports `authMisconfigured: true`.
