@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import {
-  inspectMarkup, isTooComplex, loadHtml, MAX_NESTING_DEPTH, MAX_DEPTH_SUM, MAX_HTML_ELEMENTS, MAX_TEXT_NODES, WEB_HTML_LIMITS,
+  inspectMarkup, isTooComplex, loadHtml, serializeHtml, MAX_NESTING_DEPTH, MAX_DEPTH_SUM, MAX_HTML_ELEMENTS, MAX_TEXT_NODES, WEB_HTML_LIMITS,
 } from '../lib/parse-guard.js';
 import { htmlFragmentToMarkdown, extractHtml } from '../lib/web.js';
 
@@ -43,6 +43,14 @@ describe('inspectMarkup', () => {
     assert.equal(inspectMarkup('<style>a > b {}</style><textarea>&lt;</textarea>').textNodes, 2);
     assert.equal(inspectMarkup('<svg><title><<<</title></svg>').textNodes, 4);
     assert.throws(() => inspectMarkup('<p>' + '&lt;'.repeat(1000) + '</p>', { maxTextNodes: 500 }), assertTooComplex);
+  });
+
+  it('names the exceeded budget in err.limit, with the same message', () => {
+    const limitOf = (fn) => { try { fn(); } catch (err) { assertTooComplex(err); return err.limit; } return null; };
+    assert.equal(limitOf(() => inspectMarkup('<div>'.repeat(300))), 'depth');
+    assert.equal(limitOf(() => inspectMarkup('<a/>'.repeat(20), { xml: true, maxElements: 10 })), 'elements');
+    assert.equal(limitOf(() => inspectMarkup('<div>'.repeat(200) + '<a></a>'.repeat(100), { maxDepthSum: 20_000 })), 'depthSum');
+    assert.equal(limitOf(() => inspectMarkup('<p>' + '&lt;'.repeat(1000) + '</p>', { maxTextNodes: 500 })), 'textNodes');
   });
 
   it('rejects flat documents over the element budget', () => {
@@ -140,6 +148,53 @@ describe('extractHtml - raw-text contexts in foreign content', () => {
       const t0 = performance.now();
       try {
         const r = await extractHtml(prefix + '<div>'.repeat(10_000), { extractor: 'readability' });
+        assert.equal(typeof r.markdown, 'string');
+      } catch (err) {
+        assertTooComplex(err);
+      }
+      assert.ok(performance.now() - t0 < 2000, `took ${performance.now() - t0} ms`);
+    });
+  }
+});
+
+describe('serializeHtml', () => {
+  for (const tag of ['noscript', 'iframe', 'noembed', 'noframes', 'xmp']) {
+    it(`keeps escaped text inside <${tag}> escaped`, () => {
+      const out = serializeHtml(loadHtml(`<p>x</p><${tag}>&lt;img src=x onerror=alert(1)&gt;</${tag}>`));
+      assert.ok(out.includes(`<${tag}>&lt;img src=x onerror=alert(1)&gt;</${tag}>`), out);
+      assert.ok(!out.includes('<img'), out);
+    });
+  }
+
+  it('keeps escaped text inside <plaintext> escaped', () => {
+    const out = serializeHtml(loadHtml('<p>x</p><plaintext>&lt;b&gt;'));
+    assert.ok(out.includes('<plaintext>&lt;b&gt;</plaintext>'), out);
+  });
+
+  it('leaves script, style and xmp untouched and escapes normal text once', () => {
+    const out = serializeHtml(loadHtml('<script>if (a < b && c) x()</script><style>a > b {}</style><xmp><b></xmp><p>&lt;x&gt; &amp;</p>'));
+    assert.ok(out.includes('<xmp><b></xmp>'), out);
+    assert.ok(out.includes('<script>if (a < b && c) x()</script>'), out);
+    assert.ok(out.includes('<style>a > b {}</style>'), out);
+    assert.ok(out.includes('<p>&lt;x&gt; &amp;</p>'), out);
+  });
+
+  it('does not change the tree it serializes', () => {
+    const $ = loadHtml('<noscript>&lt;b&gt;</noscript>');
+    serializeHtml($);
+    assert.equal($('noscript').text(), '<b>');
+  });
+});
+
+// Elements dom-serializer writes back unescaped: their decoded text must not
+// turn into markup for linkedom after preprocess().
+describe('extractHtml - escaped markup inside unencoded elements', () => {
+  for (const tag of ['noscript', 'iframe', 'noembed', 'noframes', 'plaintext']) {
+    it(`<${tag}> + 20k escaped <div> answers fast, 422 or a result`, async () => {
+      const t0 = performance.now();
+      const close = tag === 'plaintext' ? '' : `</${tag}>`;
+      try {
+        const r = await extractHtml(`<p>x</p><${tag}>` + '&lt;div&gt;'.repeat(20_000) + close, { extractor: 'readability' });
         assert.equal(typeof r.markdown, 'string');
       } catch (err) {
         assertTooComplex(err);

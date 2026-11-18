@@ -206,3 +206,11 @@ describe('applyPreprocessActions — grid-to-table', () => {
     assert.ok(out.includes('<td>&lt;script&gt;</td>'));
   });
 });
+
+describe('applyPreprocessActions - escaped text in unencoded elements', () => {
+  it('keeps <img onerror> inside <iframe> as text', () => {
+    const out = applyPreprocessActions('<p class="a">x</p><iframe>&lt;img src=x onerror=alert(1)&gt;</iframe>', [{ action: 'remove-class', selector: 'p', class: 'a' }]);
+    assert.ok(!out.includes('<img'), out);
+    assert.ok(out.includes('&lt;img src=x onerror=alert(1)&gt;'), out);
+  });
+});

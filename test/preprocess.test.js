@@ -127,3 +127,11 @@ describe('preprocess — robustness', () => {
     assert.doesNotThrow(() => preprocess(html));
   });
 });
+
+describe('preprocess - escaped text in unencoded elements', () => {
+  it('keeps <img onerror> inside <noscript> as text in the cleaned HTML', () => {
+    const out = preprocess('<p>x</p><noscript>&lt;img src=x onerror=alert(1)&gt;</noscript>');
+    assert.ok(!out.includes('<img'), out);
+    assert.ok(out.includes('&lt;img src=x onerror=alert(1)&gt;'), out);
+  });
+});

@@ -296,7 +296,8 @@ describe('GET /api - document too complex', () => {
   it('-> JSON 422 with the error code', async (t) => {
     t.mock.method(console, 'error', () => {});
     const cache = createCache(':memory:');
-    const app = createApp({ cache, extractWeb: async () => { throw unprocessable('Document is nested too deeply or has too many elements', 'document_too_complex'); } });
+    // `limit` (the exceeded budget) must not reach the response.
+    const app = createApp({ cache, extractWeb: async () => { throw Object.assign(unprocessable('Document is nested too deeply or has too many elements', 'document_too_complex'), { limit: 'textNodes' }); } });
     const res = await request(app, api('https://news.ycombinator.com/other'));
     assert.equal(res.status, 422);
     assert.match(res.headers['content-type'], /application\/json/);
