@@ -4,6 +4,9 @@ import { extractFile, extractHtml } from '../lib/web.js';
 import { extractWeb, publicLookup } from './helpers/fake-dns.js';
 import { matchRecipesAgainst } from '../lib/recipes.js';
 
+// Buffer.from(small).buffer is the shared 8 KB pool; slice to exactly the bytes.
+const bytesOf = (s) => { const b = Buffer.from(s); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
+
 // Single-fetch: extractWeb makes exactly ONE request per call.
 // The Accept header includes text/markdown preference.
 function mockFetch(response) {
@@ -791,7 +794,7 @@ describe('extractWeb - markitdown document routing', () => {
     const octetFetch = async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'application/octet-stream' : null) },
-      arrayBuffer: async () => Buffer.from('DOCX').buffer,
+      arrayBuffer: async () => bytesOf('DOCX'),
     });
     let called = false;
     const markitdownClient = async () => { called = true; return { markdown: 'docx text content', title: 'D' }; };
@@ -811,7 +814,7 @@ describe('extractWeb - markitdown document routing', () => {
     const htmlFetch = async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
-      arrayBuffer: async () => Buffer.from('<html><head><title>T</title></head><body><article><p>Plenty of real article body text that is well over the two hundred character minimum so Readability keeps it as the main content of the page for sure.</p></article></body></html>').buffer,
+      arrayBuffer: async () => bytesOf('<html><head><title>T</title></head><body><article><p>Plenty of real article body text that is well over the two hundred character minimum so Readability keeps it as the main content of the page for sure.</p></article></body></html>'),
     });
     let called = false;
     const result = await extractWeb('https://example.com/page', { fetch: htmlFetch, markitdownClient: async () => { called = true; return { markdown: 'x', title: 'x' }; } });
@@ -915,7 +918,7 @@ describe('extractWeb - YouTube routing', () => {
     return async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
-      arrayBuffer: async () => Buffer.from('<html><head><title>Vid - YouTube</title></head><body>p</body></html>').buffer,
+      arrayBuffer: async () => bytesOf('<html><head><title>Vid - YouTube</title></head><body>p</body></html>'),
     });
   }
 

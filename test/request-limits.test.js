@@ -12,6 +12,9 @@ import { createForwardedHeaderNotice } from '../lib/proxy-notice.js';
 import { extractFile } from '../lib/web.js';
 import { extractWeb } from './helpers/fake-dns.js';
 
+// Buffer.from(small).buffer is the shared 8 KB pool; slice to exactly the bytes.
+const bytesOf = (s) => { const b = Buffer.from(s); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
+
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
 
 async function withServer(app, fn) {
@@ -285,7 +288,7 @@ describe('paid media tier budget', () => {
   const imgFetch = () => async () => ({
     ok: true, status: 200,
     headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
-    arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
+    arrayBuffer: async () => bytesOf('JPEGBYTES'),
   });
 
   it('extractWeb skips the caption provider and marks the result non-cacheable when the budget is used up', async () => {
@@ -442,7 +445,7 @@ describe('share refresh while the paid tier budget is used up', () => {
       fetch: async () => ({
         ok: true, status: 200,
         headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
-        arrayBuffer: async () => Buffer.from('JPEGBYTES').buffer,
+        arrayBuffer: async () => bytesOf('JPEGBYTES'),
       }),
       captionFn: async () => ({ markdown: 'caption', usage: null }),
       llmAllowed: () => false,
