@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server.js';
+import { Readability } from '@mozilla/readability';
 import { createCache } from '../lib/cache.js';
 import { loadRecipes } from '../lib/recipes.js';
 import fs from 'node:fs';
@@ -218,6 +219,31 @@ describe('POST /api/html - escaped markup in <head><title> with a url', () => {
     assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
     assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
   });
+});
+
+// See the matching extractHtml test in parse-guard.test.js: the spy proves
+// the 422 comes before Readability.parse(); the wall-clock bound is loose
+// enough for a parallel suite run (standalone under 5 s).
+describe('POST /api/html - escaped markup in a body <title>', () => {
+  for (const n of [150_000, 199_000]) {
+    it(`${n / 1000}k escaped <div> answers without a 500, rejected before Readability`, async () => {
+      const app = createApp({});
+      const html = '<html><body><p>x</p><title>T&lt;/title&gt;' + '&lt;div&gt;'.repeat(n) + '</title></body></html>';
+      const parse = Readability.prototype.parse;
+      let calls = 0;
+      Readability.prototype.parse = function (...args) { calls++; return parse.apply(this, args); };
+      const t0 = Date.now();
+      let res;
+      try {
+        res = await post(app, '/api/html?extractor=readability', html);
+      } finally {
+        Readability.prototype.parse = parse;
+      }
+      assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
+      if (res.status === 422) assert.equal(calls, 0, 'Readability.parse() ran before the 422');
+      assert.ok(Date.now() - t0 < 15_000, `took ${Date.now() - t0} ms`);
+    });
+  }
 });
 
 describe('POST /api/html - size limit', () => {

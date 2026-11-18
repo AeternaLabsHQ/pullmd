@@ -206,3 +206,16 @@ describe('extractHtml integration', () => {
     assert.equal(r.source, 'readability');
   });
 });
+
+// linkedom writes the decoded text of a <title> back unescaped, so the
+// innerHTML of a nested article can be far more markup than it parsed from.
+describe('seriesToMarkdown - escaped markup in a nested <title>', () => {
+  it('rejects the re-parse fast instead of building it', () => {
+    const { document } = parseHTML('<html><body><article><p>a</p><article><p>b</p><title>T&lt;/title&gt;'
+      + '&lt;div&gt;'.repeat(199_000) + '</title></article></article></body></html>');
+    const t0 = performance.now();
+    assert.throws(() => seriesToMarkdown([document.querySelector('article')], (h) => h),
+      (err) => err.status === 422 && err.code === 'document_too_complex');
+    assert.ok(performance.now() - t0 < 2000, `took ${performance.now() - t0} ms`);
+  });
+});
