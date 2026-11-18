@@ -318,6 +318,20 @@ describe('OpenDocument errors', () => {
     assert.ok(grown < 300, `RSS grew by ${grown.toFixed(0)} MB`);
   });
 
+  for (const [name, unit] of [['processing instructions between text', 'x<?a?>'], ['comments', '<!---->']]) {
+    it(`rejects a content.xml flooded with ${name}, not only with elements`, async () => {
+      // About 32 MB inflated with almost no elements: every one is a DOM node.
+      const buf = odf('text', `<office:text><text:p>${unit.repeat(Math.floor(32_000_000 / unit.length))}</text:p></office:text>`);
+      assert.ok(buf.length < 100 * 1024);
+      const rss0 = process.memoryUsage().rss;
+      const t0 = Date.now();
+      await assert.rejects(() => extractOpenDocument(buf, { filename: 'flut.odt' }), is422('document_too_complex'));
+      assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+      const grown = (process.memoryUsage().rss - rss0) / 1024 / 1024;
+      assert.ok(grown < 300, `RSS grew by ${grown.toFixed(0)} MB`);
+    });
+  }
+
   it('rejects an oversized meta.xml', async () => {
     const meta = `<?xml version="1.0"?><office:document-meta ${NS}><office:meta>${' '.repeat(1024 * 1024)}</office:meta></office:document-meta>`;
     const buf = odf('text', '<office:text><text:p>a</text:p></office:text>', [{ name: 'meta.xml', data: meta, deflate: true }]);

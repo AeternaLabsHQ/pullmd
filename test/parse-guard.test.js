@@ -61,6 +61,27 @@ describe('inspectMarkup', () => {
     assert.equal(limitOf(() => inspectMarkup('<p>' + '&lt;'.repeat(1000) + '</p>', { maxTextNodes: 500 })), 'textNodes');
   });
 
+  it('counts every DOM node: elements, text, comments, processing instructions and CDATA', () => {
+    const nodesOf = (m, o) => inspectMarkup(m, o).nodes;
+    assert.equal(nodesOf('<a><b>x</b></a>'), 3);
+    assert.equal(nodesOf('<p>a &lt; b</p>'), 3);                           // element + text split in two
+    assert.equal(nodesOf('<r><!-- c --><!----></r>', { xml: true }), 3);
+    assert.equal(nodesOf('<?xml version="1.0"?><r><?pi x?></r>', { xml: true }), 3);
+    assert.equal(nodesOf('<!DOCTYPE html><p>x</p>'), 3);                   // directive counts too
+    assert.equal(nodesOf('<r><![CDATA[x y]]></r>', { xml: true }), 3);  // element + CDATA + its text
+    assert.equal(nodesOf('<p><![CDATA[x]]></p>'), 2);                       // HTML reads CDATA as a comment
+    assert.equal(nodesOf('x<?a?>'.repeat(10), { xml: true }), 20);
+    // A flood without elements stays inside every other budget.
+    const flood = '<r>' + '<!---->'.repeat(1000) + '</r>';
+    assert.equal(inspectMarkup(flood, { xml: true, maxElements: 10 }).elements, 1);
+    const limitOf = (fn) => { try { fn(); } catch (err) { assertTooComplex(err); return err.limit; } return null; };
+    assert.equal(limitOf(() => inspectMarkup(flood, { xml: true, maxNodes: 500 })), 'nodes');
+    assert.equal(limitOf(() => inspectMarkup('<r>' + '<?a?>'.repeat(1000) + '</r>', { xml: true, maxNodes: 500 })), 'nodes');
+    assert.equal(limitOf(() => inspectMarkup('<r>' + 'x<?a?>'.repeat(300) + '</r>', { xml: true, maxNodes: 500 })), 'nodes');
+    assert.equal(limitOf(() => inspectMarkup('<r>' + '<![CDATA[x]]>'.repeat(300) + '</r>', { xml: true, maxNodes: 500 })), 'nodes');
+    assert.equal(limitOf(() => inspectMarkup(flood, { xml: true, maxNodes: 1001 })), null);
+  });
+
   it('rejects flat documents over the element budget', () => {
     assert.throws(() => inspectMarkup('<a></a>'.repeat(MAX_HTML_ELEMENTS + 1), WEB_HTML_LIMITS), assertTooComplex);
   });
