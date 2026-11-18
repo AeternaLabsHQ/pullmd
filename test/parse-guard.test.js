@@ -196,6 +196,18 @@ describe('raw-input check - raw-text elements in foreign content', () => {
     assert.equal(inspectMarkup('<svg><title>' + '<div>'.repeat(10)).elements, 2);
   });
 
+  // The content of a raw-text element is still foreign content, so a raw-text
+  // element nested in it is measured too.
+  for (const prefix of ['<svg><style><title>', '<svg><style><textarea>', '<svg><script><style><title>']) {
+    for (const n of [20_000, 40_000]) {
+      it(`${prefix} + ${n / 1000}k <div> is rejected on depth in under 1 s`, () => {
+        const t0 = performance.now();
+        assert.throws(() => loadHtml(prefix + '<div>'.repeat(n)), (err) => assertTooComplex(err) && err.limit === 'depthSum');
+        assert.ok(performance.now() - t0 < 1000, `took ${performance.now() - t0} ms`);
+      });
+    }
+  }
+
   it('a nested chain of raw-text elements is cut off', () => {
     assert.throws(() => inspectMarkup('<svg><title>'.repeat(20), RAW_HTML_LIMITS), assertTooComplex);
   });
