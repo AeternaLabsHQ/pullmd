@@ -359,13 +359,28 @@ describe('OpenDocument errors', () => {
     await assert.rejects(() => extractOpenDocument(buf, { filename: 'meta.odt' }), is422('document_too_large'));
   });
 
+  it('converts a style-heavy styles.xml (5,000 LibreOffice-shaped styles)', async () => {
+    // About 33 nodes per style as LibreOffice writes a paragraph style with
+    // paragraph and text properties: 165,000 nodes in all.
+    const style = (i) => `<style:style style:name="Corp_${i}" style:display-name="Corp ${i}" style:family="paragraph" style:parent-style-name="Standard" style:next-style-name="Text_20_body" style:class="text">`
+      + '<style:paragraph-properties fo:margin-left="0.5cm" fo:margin-right="0cm" fo:margin-top="0.423cm" fo:margin-bottom="0.212cm" style:contextual-spacing="false" fo:line-height="115%" fo:text-align="start" fo:keep-with-next="always"/>'
+      + `<style:text-properties fo:color="#1f3864" style:font-name="Liberation Sans" fo:font-size="${10 + (i % 8)}pt" fo:font-weight="bold" style:font-name-asian="Noto Sans CJK SC" style:font-size-asian="12pt" style:font-weight-asian="bold" style:font-name-complex="Noto Sans Devanagari" style:font-size-complex="12pt" style:font-weight-complex="bold"/>`
+      + '</style:style>';
+    const ns = `${NS} xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"`;
+    const styles = `<?xml version="1.0"?><office:document-styles ${ns}><office:styles>${Array.from({ length: 5000 }, (_, i) => style(i)).join('')}</office:styles></office:document-styles>`;
+    const buf = odf('text', '<office:text><text:p text:style-name="Corp_7">Styled text</text:p></office:text>', [{ name: 'styles.xml', data: styles, deflate: true }]);
+    const r = await extractOpenDocument(buf, { filename: 'corp.odt' });
+    assert.match(r.markdown, /Styled text/);
+  });
+
   it('checks styles.xml and meta.xml before parsing them', async () => {
     const plain = '<office:text><text:p>a</text:p></office:text>';
     const deep = '<a>'.repeat(300) + '</a>'.repeat(300);
     const part = (name, root, inner) => ({ name, data: `<?xml version="1.0"?><${root} ${NS}>${inner}</${root}>`, deflate: true });
     for (const extra of [
-      part('styles.xml', 'office:document-styles', '<a/>'.repeat(100_001)),
+      part('styles.xml', 'office:document-styles', '<a/>'.repeat(250_001)),
       part('styles.xml', 'office:document-styles', deep),
+      part('meta.xml', 'office:document-meta', '<a/>'.repeat(100_001)),
       part('meta.xml', 'office:document-meta', deep),
     ]) {
       await assert.rejects(() => extractOpenDocument(odf('text', plain, [extra]), { filename: 'p.odt' }), is422('document_too_complex'), extra.name);
