@@ -225,12 +225,12 @@ describe('extractHtml - escaped markup in <head><title> with a url', () => {
 // The same title serialization inside <body>: Readability caches
 // body.innerHTML and re-parses it with linkedom's innerHTML setter on each
 // retry pass, so that string is checked before Readability runs. The spy
-// proves the order: a 422 must come before Readability.parse(). Standalone
-// these answer in under 5 s; the remaining time is the first parse of about
-// 400k text nodes (inside MAX_TEXT_NODES), so the wall-clock bound is loose
-// enough for a parallel suite run.
+// proves the order: a 422 must come before Readability.parse(). 99k stays
+// just under MAX_TEXT_NODES for the first parse (about 198k text nodes), so it
+// reaches the check of the serialized body; 150k and 199k stop at the first
+// parse.
 describe('extractHtml - escaped markup in a body <title>', () => {
-  for (const n of [150_000, 199_000]) {
+  for (const n of [99_000, 150_000, 199_000]) {
     it(`${n / 1000}k escaped <div> is rejected before Readability runs`, async () => {
       const html = '<html><body><p>x</p><title>T&lt;/title&gt;' + '&lt;div&gt;'.repeat(n) + '</title></body></html>';
       const parse = Readability.prototype.parse;
@@ -246,7 +246,7 @@ describe('extractHtml - escaped markup in a body <title>', () => {
       } finally {
         Readability.prototype.parse = parse;
       }
-      assert.ok(performance.now() - t0 < 15_000, `took ${performance.now() - t0} ms`);
+      assert.ok(performance.now() - t0 < 5000, `took ${performance.now() - t0} ms`);
     });
   }
 });
