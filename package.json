@@ -35,5 +35,8 @@
   },
   "devDependencies": {
     "playwright": "^1.65.0"
+  },
+  "overrides": {
+    "htmlparser2": "10.1.0"
   }
 }

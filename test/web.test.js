@@ -510,12 +510,25 @@ describe('extractWeb orchestrator with playwright fallback', () => {
     }
   });
 
-  it('rejects an over-nested rendered page instead of keeping the static result', async () => {
+  it('keeps the static result when the automatic render returns an over-nested page', async () => {
+    process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
+    let sidecarCalls = 0;
+    const result = await extractWeb('https://example.com', {
+      fetch: fetchWith(soupHtml()),
+      renderClient: async () => { sidecarCalls++; return '<html><body>' + '<div>'.repeat(100_000) + '</body></html>'; },
+    });
+    assert.equal(sidecarCalls, 1);
+    assert.notEqual(result.source, 'playwright');
+    assert.match(result.metadata.extractorReason, /playwright fallback failed: Document is nested too deeply/);
+  });
+
+  it('rejects an over-nested rendered page when the render was forced', async () => {
     process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
     let sidecarCalls = 0;
     await assert.rejects(
       extractWeb('https://example.com', {
-        fetch: fetchWith(soupHtml()),
+        fetch: fetchWith(cleanHtml()),
+        render: 'force',
         renderClient: async () => { sidecarCalls++; return '<html><body>' + '<div>'.repeat(100_000) + '</body></html>'; },
       }),
       (err) => err.code === 'document_too_complex',
@@ -1275,5 +1288,39 @@ describe('PDF-OCR routing (opt-in)', () => {
       ocrFn: async () => ({ markdown: 'ocr body', usage: { model: 'mistral-ocr-latest' }, pdfPages: 1 }),
     });
     assert.equal(r.source, 'pdf-ocr');
+  });
+});
+
+// Every HTML parse in the pipeline runs on htmlparser2, which adds no implied
+// html/head/body; loadHtml() adds them so fragments still reach Readability.
+describe('extractHtml - documents without a <body> tag', () => {
+  const P = '<p>' + 'Main content paragraph that needs to be long enough for Readability. '.repeat(5) + '</p>';
+
+  it('a fragment with a leading <title>', async () => {
+    const r = await extractHtml(`<title>Frag</title><article><h1>H</h1>${P}${P}</article>`, { extractor: 'readability' });
+    assert.equal(r.title, 'Frag');
+    assert.equal(r.source, 'readability');
+    assert.match(r.markdown, /^# Frag\n\n## H\n\nMain content paragraph/);
+  });
+
+  it('<html lang> with a head but no body', async () => {
+    const r = await extractHtml(`<html lang="de"><head><title>NoBody</title></head><article>${P}${P}</article></html>`, { extractor: 'readability' });
+    assert.equal(r.title, 'NoBody');
+    assert.equal(r.source, 'readability');
+    assert.equal(r.metadata.language, 'de');
+    assert.ok(r.metadata.contentLength > 600);
+  });
+
+  it('a fragment with an inlined data: image keeps its alt text', async () => {
+    const r = await extractHtml(`<article>${P}<img src="data:image/png;base64,AA" alt="pic">${P}</article>`, { extractor: 'readability' });
+    assert.equal(r.source, 'readability');
+    assert.match(r.markdown, /\n\npic\n\n/);
+    assert.ok(!r.markdown.includes('data:'));
+  });
+
+  it('many flat top-level elements stay linear and hit the element budget', async () => {
+    const t0 = Date.now();
+    await assert.rejects(extractHtml('<a></a>'.repeat(200_000)), (err) => err.code === 'document_too_complex');
+    assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
   });
 });

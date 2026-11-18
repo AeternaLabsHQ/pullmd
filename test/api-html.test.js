@@ -174,6 +174,18 @@ describe('POST /api/html - over-nested markup (real extractHtml path)', () => {
   });
 });
 
+describe('POST /api/html - raw-text contexts in foreign content', () => {
+  for (const prefix of ['<svg><title>', '<svg><style>', '<svg><script>', '<math><mtext><textarea>']) {
+    it(`${prefix} + 10k <div> answers fast and never 500`, async () => {
+      const app = createApp({});
+      const t0 = Date.now();
+      const res = await post(app, '/api/html?extractor=readability', prefix + '<div>'.repeat(10_000));
+      assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+      assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
+    });
+  }
+});
+
 describe('POST /api/html - size limit', () => {
   it('413 with a friendly bilingual JSON error for bodies over 10 MB', async () => {
     const app = createApp({ extractHtml: async () => FAKE_RESULT });
