@@ -64,6 +64,14 @@ with `403` and a JSON body `{"detail":{"code":"ssrf_blocked","url":...,"reason":
 a blocked subresource is dropped and the render continues. Service workers are
 disabled.
 
+The guard covers the whole browser context, not just the page being rendered,
+so requests from workers and from any page the site opens itself are checked
+too. The renderer only reads the main document: `window.open` returns `null`,
+links and forms aimed at another window (`target="_blank"` and the like) do
+nothing, any other page that still appears gets no network at all, and
+`SharedWorker` is switched off in Chromium. Dedicated workers keep working
+under the same address policy.
+
 Exceptions come from pullmd: it forwards its `PULLMD_ALLOWED_HOSTS` in the
 render request as `allowedHosts` (same grammar: CIDRs, bare IPs, exact
 hostnames). Setting `PULLMD_ALLOWED_HOSTS` on the sidecar container works as a
