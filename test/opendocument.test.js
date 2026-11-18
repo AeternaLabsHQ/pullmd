@@ -148,7 +148,15 @@ describe('OpenDocument text (.odt)', () => {
   it('rejects absurdly deep nesting with 422 instead of crashing', async () => {
     const deep = '<text:span>'.repeat(30000) + 'x' + '</text:span>'.repeat(30000);
     const buf = odf('text', `<office:text><text:p>${deep}</text:p></office:text>`);
-    await assert.rejects(() => extractOpenDocument(buf, { filename: 'tief.odt' }), is422('not_opendocument'));
+    await assert.rejects(() => extractOpenDocument(buf, { filename: 'tief.odt' }), is422('document_too_complex'));
+  });
+
+  it('rejects deeply nested spans quickly', async () => {
+    const deep = '<text:span>'.repeat(200_000) + 'x' + '</text:span>'.repeat(200_000);
+    const buf = odf('text', `<office:text><text:p>${deep}</text:p></office:text>`);
+    const t0 = Date.now();
+    await assert.rejects(() => extractOpenDocument(buf, { filename: 'tief.odt' }), is422('document_too_complex'));
+    assert.ok(Date.now() - t0 < 1500, `took ${Date.now() - t0} ms`);
   });
 
   it('falls back to the filename stem', async () => {
@@ -297,6 +305,23 @@ describe('OpenDocument errors', () => {
     const r = await extractOpenDocument(odf('text', body, [], auto), { filename: 's.odt' });
     assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
     assert.match(r.markdown, /\*\*x {200000}y\*\*/);
+  });
+
+  it('rejects a content.xml with too many elements', async () => {
+    const buf = odf('text', `<office:text>${'<text:p/>'.repeat(1_600_000)}</office:text>`);
+    // The extraction runs synchronously, so RSS after it is at least what a
+    // DOM built on the way would have left behind (the heap does not shrink
+    // back right away).
+    const rss0 = process.memoryUsage().rss;
+    await assert.rejects(() => extractOpenDocument(buf, { filename: 'viele.odt' }), is422('document_too_complex'));
+    const grown = (process.memoryUsage().rss - rss0) / 1024 / 1024;
+    assert.ok(grown < 300, `RSS grew by ${grown.toFixed(0)} MB`);
+  });
+
+  it('rejects an oversized meta.xml', async () => {
+    const meta = `<?xml version="1.0"?><office:document-meta ${NS}><office:meta>${' '.repeat(1024 * 1024)}</office:meta></office:document-meta>`;
+    const buf = odf('text', '<office:text><text:p>a</text:p></office:text>', [{ name: 'meta.xml', data: meta, deflate: true }]);
+    await assert.rejects(() => extractOpenDocument(buf, { filename: 'meta.odt' }), is422('document_too_large'));
   });
 
   it('fails cleanly on a zip bomb', async () => {
