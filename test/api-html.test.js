@@ -247,9 +247,8 @@ describe('POST /api/html - escaped markup in <head><title> with a url', () => {
 });
 
 // See the matching extractHtml test in parse-guard.test.js: the spy proves
-// the 422 comes before Readability.parse(). All three stop at the first parse
-// (99k by MAX_CHILD_NODES, 150k and 199k by MAX_TEXT_NODES too); the <br> case
-// below stays inside the budgets and converts the neutralised title as text.
+// the 422 comes before Readability.parse(). All three stop at the raw-input
+// check (99k by MAX_CHILD_NODES, 150k and 199k by MAX_TEXT_NODES too).
 describe('POST /api/html - escaped markup in a body <title>', () => {
   convertInProcess();
 
@@ -274,18 +273,37 @@ describe('POST /api/html - escaped markup in a body <title>', () => {
   }
 });
 
+// 79k stop at the raw-input check. 45k stay inside the budgets and take
+// tens of seconds (linkedom writes the title text back as markup for
+// Readability), so they end at the conversion time limit.
 describe('POST /api/html - body <title> behind <br> runs', () => {
-  for (const [n, expected] of [[45_000, 200], [79_000, 422]]) {
-    it(`${n / 1000}k escaped <br> answers ${expected} fast, never 500`, async () => {
+  const page = (n) => '<html><body>' + '<span>a<br><br>'.repeat(125) + '<title>T&lt;/title&gt;' + '&lt;br&gt;'.repeat(n)
+    + '</title>' + '</span>'.repeat(125) + '</body></html>';
+
+  it('79k escaped <br> answer 422 document_too_complex fast', async () => {
+    const app = createApp({});
+    const t0 = Date.now();
+    const res = await post(app, '/api/html?extractor=readability', page(79_000));
+    assert.equal(res.status, 422, res.body.slice(0, 200));
+    assert.equal(JSON.parse(res.body).code, 'document_too_complex');
+    assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+  });
+
+  it('45k escaped <br> end within the conversion time limit, never 500', async () => {
+    const saved = process.env.PULLMD_CONVERT_TIMEOUT_MS;
+    process.env.PULLMD_CONVERT_TIMEOUT_MS = '2000';
+    try {
       const app = createApp({});
-      const html = '<html><body>' + '<span>a<br><br>'.repeat(125) + '<title>T&lt;/title&gt;' + '&lt;br&gt;'.repeat(n)
-        + '</title>' + '</span>'.repeat(125) + '</body></html>';
       const t0 = Date.now();
-      const res = await post(app, '/api/html?extractor=readability', html);
-      assert.equal(res.status, expected, `${res.status} ${res.body.slice(0, 200)}`);
-      assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
-    });
-  }
+      const res = await post(app, '/api/html?extractor=readability', page(45_000));
+      assert.ok(Date.now() - t0 < 4000, `took ${Date.now() - t0} ms`);
+      assert.equal(res.status, 422, res.body.slice(0, 200));
+      assert.equal(JSON.parse(res.body).code, 'conversion_timeout');
+    } finally {
+      if (saved === undefined) delete process.env.PULLMD_CONVERT_TIMEOUT_MS;
+      else process.env.PULLMD_CONVERT_TIMEOUT_MS = saved;
+    }
+  });
 });
 
 describe('POST /api/html - many siblings and a stack overflow inside Readability', () => {

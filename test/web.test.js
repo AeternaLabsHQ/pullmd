@@ -1291,8 +1291,8 @@ describe('PDF-OCR routing (opt-in)', () => {
   });
 });
 
-// Every HTML parse in the pipeline runs on htmlparser2, which adds no implied
-// html/head/body; loadHtml() adds them so fragments still reach Readability.
+// Fragments without html/head/body: parse5 in preprocess() adds the implied
+// elements, so the content still reaches Readability.
 describe('extractHtml - documents without a <body> tag', () => {
   const P = '<p>' + 'Main content paragraph that needs to be long enough for Readability. '.repeat(5) + '</p>';
 

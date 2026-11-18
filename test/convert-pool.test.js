@@ -41,10 +41,9 @@ function lagMeter(intervalMs = 20) {
 
 const LOREM = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(8);
 const wrap = (b) => `<!DOCTYPE html><html><head><title>T</title></head><body><article><h1>H</h1><p>${LOREM}</p>${b}<p>${LOREM}</p></article></body></html>`;
-// The C1 family: escaped markup in a <title> inside the body. The bare
-// body <title> is fast on this branch; inside a nested <head> it still
-// takes about 38 s at 4000 repeats (in-process, this branch), well within the
-// input budgets.
+// The C1 family: escaped markup in a <title> inside the body, which linkedom
+// writes back as markup for Readability and node-html-markdown. About 80 s
+// in-process at 5000 repeats (18 s at 3000), well within the input budgets.
 const C1_BOMB = wrap(`<div><head><title>${'&lt;div&gt;x'.repeat(5000)}</title></head></div>`);
 
 const ARTICLE = `<!DOCTYPE html><html><head><title>Ein Artikel</title>
@@ -125,6 +124,22 @@ describe('conversion pool - lib/web.js through worker threads', () => {
         assert.equal(err.message, 'Document took too long to convert');
         return true;
       });
+      const elapsed = Date.now() - t0;
+      const maxLag = lag.stop();
+      assert.ok(elapsed < 3000, `took ${elapsed} ms`);
+      assert.ok(maxLag < 200, `main loop lagged ${maxLag.toFixed(0)} ms`);
+    });
+  });
+
+  // Readability's _replaceBrs wraps the siblings of each <br> run in <p>
+  // while the title text it re-parses holds 45k <br>: inside every budget.
+  it('stops a body <title> with escaped <br> behind <br> runs at the time limit', async () => {
+    const html = '<html><body>' + '<span>a<br><br>'.repeat(125) + '<title>T&lt;/title&gt;' + '&lt;br&gt;'.repeat(45_000)
+      + '</title>' + '</span>'.repeat(125) + '</body></html>';
+    await withEnv({ PULLMD_CONVERT_TIMEOUT_MS: '2000', PULLMD_CONVERT_WORKERS: undefined }, async () => {
+      const lag = lagMeter();
+      const t0 = Date.now();
+      await assert.rejects(() => extractHtml(html, { extractor: 'readability', recipes: [] }), (err) => err.code === 'conversion_timeout');
       const elapsed = Date.now() - t0;
       const maxLag = lag.stop();
       assert.ok(elapsed < 3000, `took ${elapsed} ms`);

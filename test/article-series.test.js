@@ -257,8 +257,9 @@ describe('seriesToMarkdown - nested article chains', () => {
     assert.ok(performance.now() - t0 < 15000, `took ${performance.now() - t0} ms`);
   });
 
-  // A body <title> inside a nested article is text after parseHtmlDocument, so
-  // nothing in the series path can turn it back into markup.
+  // A body <title> inside a nested article: its escaped text would turn into
+  // markup at each innerHTML round-trip. 99k of them stop at the raw-input
+  // check (198k child nodes of the title).
   it('a nested <title> with escaped markup converts fast, 200 or 422', async () => {
     const html = '<html><body>' + [1, 2, 3].map((n) => `<article><a href="/u/ann">Ann</a><p>post ${n} ${'words '.repeat(20)}</p>`
       + (n === 1 ? '<article><p>b</p><title>T&lt;/title&gt;' + '&lt;div&gt;'.repeat(99_000) + '</title></article>' : '') + '</article>').join('')
