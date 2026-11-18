@@ -86,6 +86,39 @@ describe('POST /oauth/revoke (RFC 7009)', () => {
     });
   });
 
+  it('/oauth/revoke ignores another client\'s token', async () => {
+    const { app, oauth, userId, client } = await setup();
+    const other = oauth.store.registerClient({
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+      client_name: 'Other', token_endpoint_auth_method: 'none',
+    });
+    const exp = new Date(Date.now() + 30 * 86400e3).toISOString();
+    const { token, tokenHash } = oauth.tokens.generateRefreshToken();
+    oauth.store.insertRefreshToken({
+      tokenHash, client_id: client.client_id, user_id: userId, scope: 'mcp:full',
+      expiresAt: exp, rotated_from: null,
+    });
+    await withServer(app, async (base) => {
+      const r = await fetch(`${base}/oauth/revoke`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token, client_id: other.client_id }).toString(),
+      });
+      assert.equal(r.status, 200);
+      assert.equal(oauth.store.findRefreshToken(tokenHash).revoked_at, null);
+
+      const use = await fetch(`${base}/oauth/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token', refresh_token: token, client_id: client.client_id,
+        }).toString(),
+      });
+      assert.equal(use.status, 200);
+      assert.ok((await use.json()).access_token);
+    });
+  });
+
   it('revoke without client_id → 400', async () => {
     const { app } = await setup();
     await withServer(app, async (base) => {

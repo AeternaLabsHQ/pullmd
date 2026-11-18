@@ -7,6 +7,8 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
+import express from 'express';
+import { createOAuth, mountOAuthRoutes } from '../lib/oauth/index.js';
 
 // Runs scripts/admin.js as a child process against a temp database and checks
 // exit code, output and the effect in the database. Passwords always arrive on
@@ -114,6 +116,44 @@ describe('admin CLI - reset-password', () => {
     await withDb(({ db }) => {
       assert.equal(db.prepare('SELECT COUNT(*) c FROM sessions').get().c, 0, 'existing sessions must be logged out');
       assert.equal(db.prepare('SELECT COUNT(*) c FROM users').get().c, 1);
+    });
+  });
+
+  it('resetPassword revokes refresh tokens', async () => {
+    const user = await seedUser();
+    const oauthEnv = { OAUTH_JWT_SECRET: 'x'.repeat(48), PUBLIC_URL: 'https://pullmd.test' };
+    const { token, tokenHash, clientId } = await withDb(({ db, auth }) => {
+      const oauth = createOAuth({ db, auth, env: oauthEnv });
+      const client = oauth.store.registerClient({
+        redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+        client_name: 'C1', token_endpoint_auth_method: 'none',
+      });
+      const rt = oauth.tokens.generateRefreshToken();
+      oauth.store.insertRefreshToken({
+        tokenHash: rt.tokenHash, client_id: client.client_id, user_id: user.id, scope: 'mcp:full',
+        expiresAt: new Date(Date.now() + 86400e3).toISOString(), rotated_from: null,
+      });
+      return { token: rt.token, tokenHash: rt.tokenHash, clientId: client.client_id };
+    });
+
+    const r = await run(['reset-password', 'user@x.y'], `${NEW_PW}\n`);
+    assert.equal(r.code, 0, r.stderr);
+
+    await withDb(async ({ db, auth }) => {
+      const oauth = createOAuth({ db, auth, env: oauthEnv });
+      assert.ok(oauth.store.findRefreshToken(tokenHash).revoked_at, 'the refresh token must be revoked');
+      const app = express();
+      mountOAuthRoutes(app, oauth);
+      const server = app.listen(0);
+      try {
+        const res = await fetch(`http://127.0.0.1:${server.address().port}/oauth/token`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: token, client_id: clientId }).toString(),
+        });
+        assert.equal(res.status, 400);
+        assert.equal((await res.json()).error, 'invalid_grant');
+      } finally { server.close(); }
     });
   });
 

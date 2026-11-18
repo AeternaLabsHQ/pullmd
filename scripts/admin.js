@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { createCache } from '../lib/cache.js';
 import { createAuth, hashPassword } from '../lib/auth.js';
+import { createOAuthStore } from '../lib/oauth/store.js';
 
 export function listUsers({ db }) {
   return db.prepare(`
@@ -18,6 +19,9 @@ export async function resetPassword({ db, auth }, email, newPassword) {
   const hash = await hashPassword(newPassword, auth._argon2Opts);
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, u.id);
   db.prepare("DELETE FROM sessions WHERE user_id = ?").run(u.id);
+  // OAuth clients connected under the old password lose their refresh
+  // tokens too. API keys stay: the user lists and revokes them in /settings.
+  createOAuthStore({ db }).revokeAllForUser(u.id);
   return true;
 }
 

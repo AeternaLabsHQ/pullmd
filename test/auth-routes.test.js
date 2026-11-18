@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
+import { createOAuthStore } from '../lib/oauth/store.js';
 
 const fastOpts = { timeCost: 1, memoryCost: 1024, parallelism: 1 };
 
@@ -390,5 +391,86 @@ describe('auth routes — disabled', () => {
       const r = await fetch(base + '/api/me');
       assert.equal(r.status, 404);
     });
+  });
+});
+
+describe('settings - connected apps', () => {
+  it('settings lists connected apps and revokes one', async () => {
+    await withApp('multi-user', async (base, { auth, cache }) => {
+      const store = createOAuthStore({ db: cache.db });
+      const me = cache.db.prepare("SELECT id FROM users").get().id;
+      const other = (await auth.createUser({ email: 'other@x.y', password: 'otherpass1' })).id;
+      const reg = (name) => store.registerClient({
+        redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+        client_name: name, token_endpoint_auth_method: 'none',
+      }).client_id;
+      const c1 = reg('Alpha <b>App</b>');
+      const c2 = reg('Beta App');
+      const exp = new Date(Date.now() + 86400e3).toISOString();
+      let n = 0;
+      const grant = (user_id, client_id) => {
+        const tokenHash = 'h' + (n++);
+        store.insertRefreshToken({ tokenHash, client_id, user_id, scope: 'mcp:full', expiresAt: exp });
+        return tokenHash;
+      };
+      const mineC1 = grant(me, c1);
+      const mineC2 = grant(me, c2);
+      const otherC1 = grant(other, c1);
+
+      const { token } = auth.createSession(me);
+      const cookie = `pullmd_session=${token}`;
+      const page = await (await fetch(base + '/settings', { headers: { Cookie: cookie, Accept: 'text/html' } })).text();
+      assert.match(page, /Alpha &lt;b&gt;App&lt;\/b&gt;/, 'client name must be escaped');
+      assert.doesNotMatch(page, /Alpha <b>App<\/b>/);
+      assert.match(page, /Beta App/);
+      assert.match(page, /Connected apps/);
+      assert.match(page, /Verbundene Apps/);
+
+      const foreign = await fetch(base + `/settings/apps/${c1}/revoke`, {
+        method: 'POST',
+        headers: { Cookie: cookie, Origin: 'https://evil.example', 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'text/html' },
+        body: '', redirect: 'manual',
+      });
+      assert.equal(foreign.status, 403);
+      assert.equal(store.findRefreshToken(mineC1).revoked_at, null);
+
+      const r = await fetch(base + `/settings/apps/${c1}/revoke`, {
+        method: 'POST',
+        headers: { Cookie: cookie, Origin: base, 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'text/html' },
+        body: '', redirect: 'manual',
+      });
+      assert.equal(r.status, 302);
+      assert.equal(r.headers.get('location'), '/settings');
+      assert.ok(store.findRefreshToken(mineC1).revoked_at, 'own C1 grant must be revoked');
+      assert.equal(store.findRefreshToken(mineC2).revoked_at, null, 'own C2 grant stays');
+      assert.equal(store.findRefreshToken(otherC1).revoked_at, null, "the other user's C1 grant stays");
+
+      const after = await (await fetch(base + '/settings', { headers: { Cookie: cookie, Accept: 'text/html' } })).text();
+      assert.doesNotMatch(after, /Alpha &lt;b&gt;/);
+      assert.match(after, /Beta App/);
+    });
+  });
+
+  it('listGrantsForUser skips revoked and expired grants', async () => {
+    const cache = createCache(':memory:');
+    const store = createOAuthStore({ db: cache.db });
+    const u = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES ('a@x.y', 'x')").run().lastInsertRowid;
+    const reg = (name) => store.registerClient({
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+      client_name: name, token_endpoint_auth_method: 'none',
+    }).client_id;
+    const live = reg('Live');
+    const expired = reg('Expired');
+    const revoked = reg('Revoked');
+    const future = new Date(Date.now() + 86400e3).toISOString();
+    store.insertRefreshToken({ tokenHash: 'a', client_id: live, user_id: u, scope: 's', expiresAt: future });
+    store.insertRefreshToken({ tokenHash: 'b', client_id: expired, user_id: u, scope: 's', expiresAt: new Date(Date.now() - 1000).toISOString() });
+    store.insertRefreshToken({ tokenHash: 'c', client_id: revoked, user_id: u, scope: 's', expiresAt: future });
+    store.revokeRefreshToken('c');
+    const grants = store.listGrantsForUser(u);
+    assert.deepEqual(grants.map((g) => g.client_name), ['Live']);
+    assert.ok(grants[0].created_at && grants[0].last_used_at);
+    assert.equal(store.revokeAllForUser(u), 2, 'live and expired rows; the revoked one is skipped');
+    assert.deepEqual(store.listGrantsForUser(u), []);
   });
 });
