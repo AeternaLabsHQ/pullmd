@@ -307,30 +307,51 @@ describe('OpenDocument errors', () => {
     assert.match(r.markdown, /\*\*x {200000}y\*\*/);
   });
 
-  it('rejects a content.xml with too many elements', async () => {
-    const buf = odf('text', `<office:text>${'<text:p/>'.repeat(1_600_000)}</office:text>`);
-    // The extraction runs synchronously, so RSS after it is at least what a
-    // DOM built on the way would have left behind (the heap does not shrink
-    // back right away).
+  // Builds the upload inside its own scope (the inflated XML string is
+  // garbage once odf() returns) and drops the buffer afterwards, so these
+  // floods do not keep memory alive for later tests. The extraction runs
+  // synchronously, so RSS after it is at least what a DOM built on the way
+  // would have left behind (the heap does not shrink back right away).
+  async function assertLeanReject(build) {
+    let buf = build();
+    assert.ok(buf.length < 300 * 1024, `zip is ${buf.length} bytes`);
     const rss0 = process.memoryUsage().rss;
-    await assert.rejects(() => extractOpenDocument(buf, { filename: 'viele.odt' }), is422('document_too_complex'));
+    const t0 = Date.now();
+    try {
+      await assert.rejects(() => extractOpenDocument(buf, { filename: 'flut.odt' }), is422('document_too_complex'));
+    } finally {
+      buf = null;
+    }
+    assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
     const grown = (process.memoryUsage().rss - rss0) / 1024 / 1024;
     assert.ok(grown < 300, `RSS grew by ${grown.toFixed(0)} MB`);
+  }
+
+  it('rejects a content.xml over the node budget', async () => {
+    await assertLeanReject(() => odf('text', `<office:text>${'<text:p/>'.repeat(1_600_000)}</office:text>`));
   });
 
-  for (const [name, unit] of [['processing instructions between text', 'x<?a?>'], ['comments', '<!---->']]) {
-    it(`rejects a content.xml flooded with ${name}, not only with elements`, async () => {
-      // About 32 MB inflated with almost no elements: every one is a DOM node.
-      const buf = odf('text', `<office:text><text:p>${unit.repeat(Math.floor(32_000_000 / unit.length))}</text:p></office:text>`);
-      assert.ok(buf.length < 100 * 1024);
-      const rss0 = process.memoryUsage().rss;
-      const t0 = Date.now();
-      await assert.rejects(() => extractOpenDocument(buf, { filename: 'flut.odt' }), is422('document_too_complex'));
-      assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
-      const grown = (process.memoryUsage().rss - rss0) / 1024 / 1024;
-      assert.ok(grown < 300, `RSS grew by ${grown.toFixed(0)} MB`);
+  // About 32 MB inflated with almost no elements: comments, processing
+  // instructions and attributes count against the node budget as well.
+  const L = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const attrNames = [...L, ...L.flatMap((a) => L.map((b) => a + b))].join(' ');
+  for (const [name, unit] of [
+    ['processing instructions between text', 'x<?a?>'],
+    ['comments', '<!---->'],
+    ['bare attribute names', `<text:p ${attrNames}/>`],
+  ]) {
+    it(`rejects a content.xml flooded with ${name} (node budget)`, async () => {
+      await assertLeanReject(() => odf('text', `<office:text><text:p>${unit.repeat(Math.floor(32_000_000 / unit.length))}</text:p></office:text>`));
     });
   }
+
+  it('rejects a styles.xml flooded with bare attribute names (node budget)', async () => {
+    await assertLeanReject(() => odf('text', '<office:text><text:p>a</text:p></office:text>', [{
+      name: 'styles.xml',
+      data: `<?xml version="1.0"?><office:document-styles ${NS}>${`<a ${attrNames}/>`.repeat(3000)}</office:document-styles>`,
+      deflate: true,
+    }]));
+  });
 
   it('rejects an oversized meta.xml', async () => {
     const meta = `<?xml version="1.0"?><office:document-meta ${NS}><office:meta>${' '.repeat(1024 * 1024)}</office:meta></office:document-meta>`;
@@ -343,7 +364,7 @@ describe('OpenDocument errors', () => {
     const deep = '<a>'.repeat(300) + '</a>'.repeat(300);
     const part = (name, root, inner) => ({ name, data: `<?xml version="1.0"?><${root} ${NS}>${inner}</${root}>`, deflate: true });
     for (const extra of [
-      part('styles.xml', 'office:document-styles', '<a/>'.repeat(500_001)),
+      part('styles.xml', 'office:document-styles', '<a/>'.repeat(100_001)),
       part('styles.xml', 'office:document-styles', deep),
       part('meta.xml', 'office:document-meta', deep),
     ]) {

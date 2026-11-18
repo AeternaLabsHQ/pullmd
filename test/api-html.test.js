@@ -165,6 +165,20 @@ describe('POST /api/html - over-nested markup (real extractHtml path)', () => {
     assert.equal(j.error, 'Document is nested too deeply or has too many elements');
   });
 
+  it('rejects attribute floods quickly: one element and many elements', async () => {
+    const app = createApp({});
+    const names = Array.from({ length: 250_000 }, (_, i) => 'a' + i.toString(36));
+    const one = '<html><body><article><p>Text.</p><p ' + names.join(' ') + '>x</p></article></body></html>';
+    const many = '<html><body><article>' + ('<p ' + names.slice(0, 2500).join(' ') + '>x</p>').repeat(100) + '</article></body></html>';
+    for (const body of [one, many]) {
+      const t0 = Date.now();
+      const res = await post(app, '/api/html', body);
+      assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+      assert.equal(res.status, 422, res.body.slice(0, 200));
+      assert.equal(JSON.parse(res.body).code, 'document_too_complex');
+    }
+  });
+
   it('also guards uploads with inlined data: images', async () => {
     const app = createApp({});
     const t0 = Date.now();

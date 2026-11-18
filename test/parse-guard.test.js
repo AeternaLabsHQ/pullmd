@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import {
   inspectMarkup, isTooComplex, loadHtml, parseHtmlDocument, serializeHtml,
-  MAX_NESTING_DEPTH, MAX_DEPTH_SUM, MAX_HTML_ELEMENTS, MAX_TEXT_NODES, MAX_CHILD_NODES, WEB_HTML_LIMITS,
+  MAX_NESTING_DEPTH, MAX_DEPTH_SUM, MAX_HTML_ELEMENTS, MAX_TEXT_NODES, MAX_CHILD_NODES, MAX_ATTRIBUTES, WEB_HTML_LIMITS,
 } from '../lib/parse-guard.js';
 import { htmlFragmentToMarkdown, extractHtml } from '../lib/web.js';
 import { Readability } from '@mozilla/readability';
@@ -27,8 +27,10 @@ describe('inspectMarkup', () => {
     // innerHTML setter overflows the call stack (spread into replaceChildren).
     assert.equal(MAX_HTML_ELEMENTS, 100_000);
     assert.equal(MAX_CHILD_NODES, 100_000);
+    assert.equal(MAX_ATTRIBUTES, 200_000);
     assert.deepEqual(WEB_HTML_LIMITS, {
       maxDepthSum: MAX_DEPTH_SUM, maxElements: MAX_HTML_ELEMENTS, maxTextNodes: MAX_TEXT_NODES, maxChildren: MAX_CHILD_NODES,
+      maxAttributes: MAX_ATTRIBUTES,
     });
   });
 
@@ -71,6 +73,10 @@ describe('inspectMarkup', () => {
     assert.equal(nodesOf('<r><![CDATA[x y]]></r>', { xml: true }), 3);  // element + CDATA + its text
     assert.equal(nodesOf('<p><![CDATA[x]]></p>'), 2);                       // HTML reads CDATA as a comment
     assert.equal(nodesOf('x<?a?>'.repeat(10), { xml: true }), 20);
+    // Attributes count as nodes too (bare names cost almost no input).
+    const r = inspectMarkup('<p a b="1" c=\'\'>x</p>');
+    assert.deepEqual({ nodes: r.nodes, attributes: r.attributes, elements: r.elements }, { nodes: 5, attributes: 3, elements: 1 });
+    assert.equal(inspectMarkup('<r xmlns:a="u" a:b="v"/>', { xml: true }).attributes, 2);
     // A flood without elements stays inside every other budget.
     const flood = '<r>' + '<!---->'.repeat(1000) + '</r>';
     assert.equal(inspectMarkup(flood, { xml: true, maxElements: 10 }).elements, 1);
@@ -79,7 +85,11 @@ describe('inspectMarkup', () => {
     assert.equal(limitOf(() => inspectMarkup('<r>' + '<?a?>'.repeat(1000) + '</r>', { xml: true, maxNodes: 500 })), 'nodes');
     assert.equal(limitOf(() => inspectMarkup('<r>' + 'x<?a?>'.repeat(300) + '</r>', { xml: true, maxNodes: 500 })), 'nodes');
     assert.equal(limitOf(() => inspectMarkup('<r>' + '<![CDATA[x]]>'.repeat(300) + '</r>', { xml: true, maxNodes: 500 })), 'nodes');
+    assert.equal(limitOf(() => inspectMarkup('<r ' + Array.from({ length: 600 }, (_, i) => 'a' + i).join(' ') + '/>', { xml: true, maxNodes: 500 })), 'nodes');
     assert.equal(limitOf(() => inspectMarkup(flood, { xml: true, maxNodes: 1001 })), null);
+    assert.equal(limitOf(() => inspectMarkup('<p a b c>x</p>'.repeat(10), { maxAttributes: 29 })), 'attributes');
+    assert.equal(limitOf(() => inspectMarkup('<p a b c>x</p>'.repeat(10), { maxAttributes: 30 })), null);
+    assert.equal(limitOf(() => inspectMarkup('<p ' + 'a'.repeat(5).split('').map((_, i) => 'x' + i).join(' ') + '>', WEB_HTML_LIMITS)), null);
   });
 
   it('rejects flat documents over the element budget', () => {
