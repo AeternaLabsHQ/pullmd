@@ -324,6 +324,19 @@ describe('OpenDocument errors', () => {
     await assert.rejects(() => extractOpenDocument(buf, { filename: 'meta.odt' }), is422('document_too_large'));
   });
 
+  it('checks styles.xml and meta.xml before parsing them', async () => {
+    const plain = '<office:text><text:p>a</text:p></office:text>';
+    const deep = '<a>'.repeat(300) + '</a>'.repeat(300);
+    const part = (name, root, inner) => ({ name, data: `<?xml version="1.0"?><${root} ${NS}>${inner}</${root}>`, deflate: true });
+    for (const extra of [
+      part('styles.xml', 'office:document-styles', '<a/>'.repeat(500_001)),
+      part('styles.xml', 'office:document-styles', deep),
+      part('meta.xml', 'office:document-meta', deep),
+    ]) {
+      await assert.rejects(() => extractOpenDocument(odf('text', plain, [extra]), { filename: 'p.odt' }), is422('document_too_complex'), extra.name);
+    }
+  });
+
   it('fails cleanly on a zip bomb', async () => {
     const buf = makeZip([
       { name: 'mimetype', data: 'application/vnd.oasis.opendocument.text' },
