@@ -4,6 +4,7 @@ import { createApp } from '../server.js';
 import { createCache } from '../lib/cache.js';
 import { SsrfError } from '../lib/ssrf.js';
 import { unprocessable } from '../lib/mail-render.js';
+import { conversionTimeoutError, converterBusyError } from '../lib/convert-pool.js';
 
 const MCP_HEADERS = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
 
@@ -85,4 +86,21 @@ describe('MCP read_url - document too complex', () => {
     assert.equal(j.result.content[0].text, 'Document is nested too deeply or has too many elements');
     assert.equal(cache.get(url), null);
   });
+});
+
+describe('MCP read_url - converter limits', () => {
+  for (const [label, make, text] of [
+    ['conversion_timeout', conversionTimeoutError, 'Document took too long to convert'],
+    ['converter_busy', converterBusyError, 'The converter is busy, try again shortly'],
+  ]) {
+    it(`answers a tool error, not an HTTP failure, for ${label}`, async () => {
+      const cache = createCache(':memory:');
+      const url = 'http://8.8.8.8/slow';
+      const app = createApp({ cache, extractWeb: async () => { throw make(); } });
+      const j = await callReadUrl(app, { url });
+      assert.equal(j.result.isError, true);
+      assert.equal(j.result.content[0].text, text);
+      assert.equal(cache.get(url), null);
+    });
+  }
 });

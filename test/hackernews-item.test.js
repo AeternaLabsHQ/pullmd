@@ -46,6 +46,19 @@ describe('formatItem', () => {
   });
 });
 
+describe('formatItem - sloppy and hostile comment HTML', () => {
+  it('renders a comment of 2000 paragraphs without end tags and with open inline tags', () => {
+    const text = '<p><i>x'.repeat(2000);
+    const md = formatItem(comment({ text }));
+    assert.ok(md.includes('x'));
+  });
+
+  it('refuses comment markup nested far beyond any real comment as too complex', () => {
+    const text = '<b>'.repeat(20_000) + 'x';
+    assert.throws(() => formatItem(comment({ text })), (err) => err.status === 422 && err.code === 'document_too_complex');
+  });
+});
+
 describe('itemMeta', () => {
   it('maps author/points/created to frontmatter keys', () => {
     const m = itemMeta(story());

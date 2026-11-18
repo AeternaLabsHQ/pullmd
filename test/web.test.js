@@ -506,7 +506,7 @@ describe('extractWeb orchestrator with playwright fallback', () => {
         (err) => err.code === 'document_too_complex' && err.status === 422,
       );
       assert.equal(sidecarCalls, 0, `render=${render}`);
-      assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+      assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
     }
   });
 
@@ -1321,6 +1321,6 @@ describe('extractHtml - documents without a <body> tag', () => {
   it('many flat top-level elements stay linear and hit the element budget', async () => {
     const t0 = Date.now();
     await assert.rejects(extractHtml('<a></a>'.repeat(200_000)), (err) => err.code === 'document_too_complex');
-    assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+    assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
   });
 });

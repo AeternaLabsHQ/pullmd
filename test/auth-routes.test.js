@@ -473,4 +473,57 @@ describe('settings - connected apps', () => {
     assert.equal(store.revokeAllForUser(u), 2, 'live and expired rows; the revoked one is skipped');
     assert.deepEqual(store.listGrantsForUser(u), []);
   });
+
+  describe('grants and password reset', () => {
+    const setup = () => {
+      const cache = createCache(':memory:');
+      const store = createOAuthStore({ db: cache.db });
+      const u = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES ('a@x.y', 'x')").run().lastInsertRowid;
+      const client = store.registerClient({
+        redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+        client_name: 'App', token_endpoint_auth_method: 'none',
+      }).client_id;
+      const future = new Date(Date.now() + 86400e3).toISOString();
+      const setCreated = (hash, at) => cache.db.prepare('UPDATE oauth_refresh_tokens SET created_at = ? WHERE token_hash = ?').run(at, hash);
+      return { cache, store, u, client, future, setCreated };
+    };
+
+    it('revokeAllForUser also uses up the unexchanged auth codes of the user', () => {
+      const { cache, store, u, client } = setup();
+      const other = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES ('b@x.y', 'x')").run().lastInsertRowid;
+      const make = (user) => store.createAuthCode({
+        client_id: client, user_id: user, redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        code_challenge: 'c', code_challenge_method: 'S256', scope: 's',
+      }).codeHash;
+      const mine = make(u);
+      const theirs = make(other);
+      store.revokeAllForUser(u);
+      assert.equal(store.consumeAuthCode(mine), null, 'the reset user\'s code is dead');
+      assert.ok(store.consumeAuthCode(theirs), 'the other user\'s code is untouched');
+    });
+
+    it('connected since survives rotation: it is the first row of the live chain', () => {
+      const { store, u, client, future, setCreated } = setup();
+      store.insertRefreshToken({ tokenHash: 't1', client_id: client, user_id: u, scope: 's', expiresAt: future });
+      store.rotateRefreshToken({ oldHash: 't1', newHash: 't2', client_id: client, user_id: u, scope: 's', expiresAt: future });
+      store.rotateRefreshToken({ oldHash: 't2', newHash: 't3', client_id: client, user_id: u, scope: 's', expiresAt: future });
+      setCreated('t1', '2026-01-01 10:00:00');
+      setCreated('t2', '2026-02-01 10:00:00');
+      setCreated('t3', '2026-03-01 10:00:00');
+      const [g] = store.listGrantsForUser(u);
+      assert.equal(g.created_at, '2026-01-01 10:00:00');
+      assert.equal(g.last_used_at, '2026-03-01 10:00:00');
+    });
+
+    it('connected since ignores the revoked rows of an earlier connection', () => {
+      const { store, u, client, future, setCreated } = setup();
+      store.insertRefreshToken({ tokenHash: 'old', client_id: client, user_id: u, scope: 's', expiresAt: future });
+      setCreated('old', '2026-01-01 10:00:00');
+      store.revokeClientForUser(u, client);
+      store.insertRefreshToken({ tokenHash: 'new', client_id: client, user_id: u, scope: 's', expiresAt: future });
+      setCreated('new', '2026-05-01 10:00:00');
+      const [g] = store.listGrantsForUser(u);
+      assert.equal(g.created_at, '2026-05-01 10:00:00');
+    });
+  });
 });

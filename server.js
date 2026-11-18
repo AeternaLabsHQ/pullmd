@@ -26,7 +26,7 @@ import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
 import { createFileJobStore } from './lib/file-jobs.js';
 import { isYoutubeEnabled } from './lib/youtube.js';
-import { isConverterBusy } from './lib/convert-pool.js';
+import { BUSY_RETRY_AFTER_SECONDS, isConverterBusy } from './lib/convert-pool.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { stripCommentsSection } from './lib/markdown-sections.js';
@@ -1038,7 +1038,11 @@ export function createApp(overrides = {}) {
     const job = JOB_ID_RE.test(id) ? fileJobs.get(id, jobOwner(req)) : null;
     if (!job) return jobMiss(req, res);
     if (job.status === 'done') return res.json({ status: 'done', ...job.result });
-    if (job.status === 'error') return res.json({ status: 'error', error: job.error, httpStatus: job.httpStatus });
+    if (job.status === 'error') {
+      // A job refused as busy can be resubmitted shortly: same hint as the 503 of the direct routes.
+      if (job.httpStatus === 503) res.set('Retry-After', String(BUSY_RETRY_AFTER_SECONDS));
+      return res.json({ status: 'error', error: job.error, httpStatus: job.httpStatus });
+    }
     return res.json({ status: 'pending' });
   });
 

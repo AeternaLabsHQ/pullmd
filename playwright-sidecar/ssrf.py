@@ -22,7 +22,8 @@ IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 # the policy: an old image ignores allowedHosts and fetches whatever Chromium
 # asks for. The number is the policy revision; bump it when pullmd should
 # start requiring a newer one (lib/status.js holds the minimum).
-POLICY = {"ssrf": 1}
+# 2: the guard covers the whole render context (workers, pages the site opens).
+POLICY = {"ssrf": 2}
 
 # IPv4 ranges that must never be reached via user-supplied URLs.
 # 100.64.0.0/10 (CGNAT/shared) covers Alibaba metadata 100.100.100.200.

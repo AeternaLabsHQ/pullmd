@@ -136,9 +136,9 @@ def test_cache_memoises_lookups():
 
 
 def test_policy_marker_is_a_positive_revision():
-    # lib/status.js reads policy.ssrf and requires an integer >= 1.
+    # lib/status.js reads policy.ssrf and requires an integer >= 2.
     assert isinstance(POLICY["ssrf"], int) and not isinstance(POLICY["ssrf"], bool)
-    assert POLICY["ssrf"] >= 1
+    assert POLICY["ssrf"] >= 2
 
 
 def test_health_reports_the_policy_marker():
