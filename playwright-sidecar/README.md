@@ -68,7 +68,8 @@ The guard covers the whole browser context, not just the page being rendered,
 so requests from workers and from any page the site opens itself are checked
 too. The renderer only reads the main document: `window.open` returns `null`,
 links and forms aimed at another window (`target="_blank"` and the like) do
-nothing, any other page that still appears gets no network at all, and
+nothing, any other page that still appears gets no HTTP traffic (its
+WebSockets go through the same address policy as everything else), and
 `SharedWorker` is switched off in Chromium. Dedicated workers keep working
 under the same address policy.
 

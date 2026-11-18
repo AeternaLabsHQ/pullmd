@@ -119,6 +119,15 @@ def make_pages(internal: str, public: str) -> dict[str, tuple[str, str]]:
                              "'use strict'; window.open = function () { return null; }; document.getElementById('fi').submit();"
                              # Split so the marker is not in the page source itself.
                              f" document.body.insertAdjacentHTML('beforeend', '<p>{STRICT_MARKER[:6]}' + '{STRICT_MARKER[6:]}</p>');"),
+        "/speculation.html": page(
+            f'<link rel="prerender" href="{internal}/link-prerender">'
+            f'<link rel="preconnect" href="{internal}/link-preconnect">'
+            f'<link rel="dns-prefetch" href="{internal}/link-dns-prefetch">'
+            '<script type="speculationrules">'
+            f'{{"prefetch": [{{"source": "list", "urls": ["{internal}/spec-prefetch"]}}],'
+            f' "prerender": [{{"source": "list", "urls": ["{internal}/spec-prerender", "{public}/stage2.html?prerender"]}}]}}'
+            '</script>',
+            ""),
         "/stage2.html": ("text/html", f"<html><body><script>fetch('{internal}/from-popup', {{mode: 'no-cors'}});</script></body></html>"),
         "/sw.js": (js, f"fetch('{internal}/sharedworker-fetch' + self.location.search, {{mode: 'no-cors'}});"),
         "/wp.js": (js, f"fetch('{public}/worker-public', {{mode: 'no-cors'}});"),
@@ -203,6 +212,13 @@ async def test_dedicated_worker_public_fetch_still_works():
     await render_and_settle("/public-worker.html")
     hits = public_log.hits()
     assert "/worker-public" in hits, f"worker fetch to the public site was lost: {hits}"
+
+
+async def test_speculation_prefetch_does_not_reach_internal():
+    # Speculative loads run outside context.route(); they must not happen.
+    await render_and_settle("/speculation.html")
+    hits = internal_log.hits()
+    assert not hits, f"internal server was reached: {hits}"
 
 
 async def test_page_scripts_keep_working():

@@ -125,8 +125,9 @@ class AddressGuard:
     its own (3xx, meta refresh, `location` changes, iframes, subresources,
     WebSockets, popups, workers) and none of that passes through Node. This
     guard is installed unconditionally on the whole browser context and checks
-    each request before it leaves the browser. A blocked main-frame navigation is remembered so the render
-    can fail loudly instead of returning whatever page Chromium stayed on.
+    each request before it leaves the browser. A blocked main-frame navigation
+    is remembered so the render can fail loudly instead of returning whatever
+    page Chromium stayed on.
     """
 
     def __init__(self, allow: AllowList, strip_client_hints: bool):
