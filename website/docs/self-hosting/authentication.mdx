@@ -66,7 +66,7 @@ curl -s -b cookies.txt -X POST https://pullmd.example.com/api/keys \
   -H "Accept: application/json" -d "label=ci"
 ```
 
-The login returns `302` with a `pullmd_session` cookie, or `401` for a wrong email or password. With `Accept: application/json`, `/api/keys` returns `{"key":"pmd_..."}`, and `label` is optional. Without that header, it redirects to `/settings`. A request to `/login`, `/api/keys` or `/api/keys/:id/revoke` whose `Origin` header (or, without one, `Referer`) names another host gets `403`. A script that sends neither header, like the `curl` calls above, is accepted.
+The login returns `302` with a `pullmd_session` cookie, or `401` for a wrong email or password. With `Accept: application/json`, `/api/keys` returns `{"key":"pmd_..."}`, and `label` is optional. Without that header, it redirects to `/settings`. A post to `/login`, `/logout`, `/signup`, `/oauth/consent`, `/settings/apps/:clientId/revoke`, `/api/keys` or `/api/keys/:id/revoke` whose `Origin` header (or, without one, `Referer`) names another host gets `403`. A script that sends neither header, like the `curl` calls above, is accepted.
 
 Keys look like `pmd_` followed by 32 letters and digits. PullMD stores only a hash. To revoke a key, open `/settings`.
 

@@ -28,7 +28,7 @@ The Traefik compose file keeps `proxy` on the `pullmd` service as well. Then run
 
 ## Other changes to check
 
-- **`422 document_too_complex`.** HTML and XML that is nested too deeply or has too many elements, text nodes or attributes is refused before parsing. Ordinary pages stay far below the budgets; a very long page (over 100,000 elements or 200,000 text nodes) or a spreadsheet with more than about 250,000 filled cells now gets `422` where it used to convert slowly. The exact budgets are in `CHANGELOG.md`.
+- **`422 document_too_complex`.** HTML and XML that is nested too deeply or has too many elements, text nodes or attributes is refused before parsing. Ordinary pages stay far below the budgets; a very long page (over 100,000 elements or 200,000 text nodes) or a spreadsheet with more than roughly 250,000 to 300,000 filled cells (fewer when the cells carry a lot of formatting) now gets `422` where it used to convert slowly. The exact budgets are in `CHANGELOG.md`.
 - **`reset-password` signs OAuth clients out.** `scripts/admin.js reset-password` revokes the user's OAuth refresh tokens in addition to ending their sessions. Connected clients such as claude.ai have to be connected again; API keys stay.
 - **Same-origin check on API key routes.** `POST /api/keys` and `POST /api/keys/:id/revoke` answer `403` when the browser's `Origin` (or `Referer`) names another host, the same rule as `/login`. Behind a proxy that rewrites `Host`, set `PUBLIC_URL` as described in the v3.13.0 section below. Scripts that send neither header are not affected.
 

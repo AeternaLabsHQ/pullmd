@@ -71,11 +71,12 @@ links and forms aimed at another window (`target="_blank"` and the like) do
 nothing, any other page that still appears gets no HTTP traffic (its
 WebSockets go through the same address policy as everything else), and
 `SharedWorker` is switched off in Chromium. Dedicated workers keep working
-under the same address policy. `<script type="speculationrules">` elements
-are removed before Chromium acts on them, because speculative prefetch and
-prerender bypass the request guard. Rules sent in a `Speculation-Rules`
-response header cannot be removed that way; that residual is described in
-[SECURITY.md](../SECURITY.md).
+under the same address policy. An in-page script removes
+`<script type="speculationrules">` elements as they are created or parsed,
+because speculative prefetch and prerender bypass the request guard. This is
+best effort: rules a page script gets past it, and rules sent in a
+`Speculation-Rules` response header, can still fire; that residual is
+described in [SECURITY.md](../SECURITY.md).
 
 Exceptions come from pullmd: it forwards its `PULLMD_ALLOWED_HOSTS` in the
 render request as `allowedHosts` (same grammar: CIDRs, bare IPs, exact

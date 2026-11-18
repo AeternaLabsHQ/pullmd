@@ -606,7 +606,7 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: File too large (max 25 MB). / Datei zu groß (max. 25 MB). }
         '422':
-          description: 'The file doesn''t match its format, such as an `.eml` file without mail headers. Or, with `"code": "document_too_complex"`, the file is nested too deeply or too large to parse, such as an OpenDocument spreadsheet with more than about 250,000 filled cells.'
+          description: 'The file doesn''t match its format, such as an `.eml` file without mail headers. Or, with `"code": "document_too_complex"`, the file is nested too deeply or too large to parse, such as an OpenDocument spreadsheet with more than roughly 250,000 to 300,000 filled cells (fewer when the cells carry a lot of formatting).'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

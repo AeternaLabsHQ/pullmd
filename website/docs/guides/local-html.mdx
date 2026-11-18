@@ -41,6 +41,6 @@ In the web app, drag the `.html` file onto the page.
 - **Never cached:** the conversion creates no history entry or share link, and the stats don't record the file name.
 - **No JavaScript:** PullMD never runs scripts from an uploaded file, so the headless browser is off. `extractor` accepts `readability` or `trafilatura`.
 - **App shells:** a file with under 200 characters of text after extraction returns `422`. That usually means the page builds its content with JavaScript. If the page is public, convert its URL, because PullMD renders JavaScript pages in a headless browser.
-- **Size limits:** HTML nested more than 256 levels deep, or with more than 100,000 elements, 200,000 text nodes or 200,000 attributes, returns `422` with `"code": "document_too_complex"`. The same limits apply to URL conversions. See [Troubleshooting](/troubleshooting).
+- **Size limits:** HTML nested more than 256 levels deep, or with more than 100,000 elements, 200,000 text nodes, 100,000 children of one element or 200,000 attributes, returns `422` with `"code": "document_too_complex"`. The same limits apply to URL conversions. See [Troubleshooting](/troubleshooting).
 
 Send the file as `Content-Type: text/html` or `application/xhtml+xml`. Any other type returns `400`.
