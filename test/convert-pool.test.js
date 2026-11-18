@@ -2,7 +2,10 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import zlib from 'node:zlib';
-import { createConvertPool, converterBusyError } from '../lib/convert-pool.js';
+import {
+  createConvertPool, converterBusyError, convertTimeoutMs, convertWorkers,
+  DEFAULT_CONVERT_TIMEOUT_MS, DEFAULT_CONVERT_WORKERS,
+} from '../lib/convert-pool.js';
 import { extractHtml, extractFile, extractWeb } from '../lib/web.js';
 import { mergeRecipes } from '../lib/recipes.js';
 import { createApp } from '../server.js';
@@ -108,6 +111,18 @@ function tinyOdt() {
 }
 
 const htmlJob = (html) => ({ op: 'html', html, url: null, filename: 'x.html', recipe: mergeRecipes([]), trafilatura: false });
+
+describe('conversion pool - documented defaults', () => {
+  // The docs, .env.example and the help page state 60 seconds and 2 workers.
+  it('times out after 60 seconds and runs 2 workers unless configured', () => {
+    assert.equal(DEFAULT_CONVERT_TIMEOUT_MS, 60_000);
+    assert.equal(DEFAULT_CONVERT_WORKERS, 2);
+    assert.equal(convertTimeoutMs({}), 60_000);
+    assert.equal(convertTimeoutMs({ PULLMD_CONVERT_TIMEOUT_MS: '' }), 60_000);
+    assert.equal(convertWorkers({}), 2);
+    assert.equal(convertWorkers({ PULLMD_CONVERT_WORKERS: '' }), 2);
+  });
+});
 
 describe('conversion pool - lib/web.js through worker threads', () => {
   // Start the shared pool's workers first: a running instance has them, and
