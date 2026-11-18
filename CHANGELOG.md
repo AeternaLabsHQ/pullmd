@@ -11,6 +11,27 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+Found in an internal security review.
+
+### Security
+
+- **The Playwright sidecar's address guard covers the whole render context.** It applied to the page being rendered; now it also checks requests from workers and from any page the site opens itself. `window.open` returns `null`, links and forms aimed at another window do nothing, and `SharedWorker` is switched off. Dedicated workers keep working under the same address policy. Update the `pullmd-playwright` image together with `pullmd`.
+- **Speculation rules in page markup are removed before Chromium acts on them.** Speculative prefetch and prerender bypass the sidecar's request guard. Rules sent in a `Speculation-Rules` response header cannot be removed this way; that residual is described in [`SECURITY.md`](./SECURITY.md).
+- **The shipped compose files put the Playwright sidecar on its own network.** It moves from `pullmd-internal` to a new `pullmd-render` bridge network that only `pullmd` joins, so page scripts running in the browser cannot reach trafilatura or markitdown. A compose file you downloaded earlier keeps the old layout; see [`MIGRATION.md`](./MIGRATION.md).
+- **Over-nested or oversized HTML and XML is refused before it is parsed.** Deeply nested markup made the parser and the extraction slow down sharply and could block the server. PullMD now measures the markup first and answers `422` with `"code": "document_too_complex"` when it exceeds a budget. For HTML (fetched pages, `POST /api/html`, saved pages, and the HTML part of e-mails): nesting depth 256, 100,000 elements, 200,000 text nodes (each `&`, `<`, `>` and non-breaking space in the text counts as a split), 100,000 child nodes of one element, 200,000 attributes, and 10,000,000 for the nesting depth summed over all elements. For XML uploads and feeds: nesting depth 256. For OpenDocument files: nesting depth 256 and 1,200,000 nodes in `content.xml` (elements, attributes and text), 100,000 in `styles.xml` and `meta.xml`. See the Changed section for what this means for large documents.
+- **A login with an unknown email costs as much as one with a wrong password.** The miss ran a cheap dummy check, so response times could tell whether an account exists. It now runs a full password check against a hash made with the instance's own parameters.
+- **`scripts/admin.js reset-password` revokes the user's OAuth refresh tokens.** It already ended the user's sessions; connected OAuth clients now have to sign in again. Access tokens already issued stay valid until they expire, at most 1 hour. API keys are not touched; the user revokes them on `/settings`.
+- **`POST /oauth/revoke` revokes only tokens issued to the requesting client.** A token belonging to another client is left alone, and the answer is `200` either way.
+- **`POST /api/keys` and `POST /api/keys/:id/revoke` refuse requests from other sites.** Like `/login` and `/logout`, they answer `403` when the browser's `Origin` (or, without one, `Referer`) names a host other than the instance's own or `PUBLIC_URL`'s. Requests with neither header, such as scripts, are accepted as before.
+
+### Added
+
+- **Connected apps on `/settings`.** A new section lists the OAuth clients (such as claude.ai) that hold a valid refresh token for your account, with when they were connected and last used, and a **Revoke** button for each. Revoking ends the client's refresh tokens, so it cannot get a new access token; one it already holds expires within 1 hour.
+
+### Changed
+
+- **Very large pages and documents can now get `422` instead of a slow conversion.** The budgets above are set well above ordinary pages, but a very long page with more than 100,000 elements or 200,000 text nodes is refused, on `GET /api`, `/api/stream` (an `error` event carrying the code), MCP `read_url` (an error result) and `POST /api/html`. When the automatic browser render produces a page over budget, the static result is kept; with `render=force` or `extractor=playwright` the request is refused. In OpenDocument files each filled spreadsheet cell costs four or more nodes, so a spreadsheet with more than about 250,000 filled cells is refused. An e-mail whose HTML part is over budget is converted from its plain-text part when it has one.
+
 ## [3.19.2] - 2026-11-13
 
 ### Security

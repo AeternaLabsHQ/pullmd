@@ -62,7 +62,7 @@ In Claude Desktop, add the connector the same way under **Settings → Connector
 | Access token | JWT signed with `OAUTH_JWT_SECRET` | 1 hour. Accepted only on `/mcp`. |
 | Refresh token | Opaque, starts with `pmd_rt_` | 30 days. Replaced on every refresh. |
 
-If a refresh token is used twice, PullMD treats it as stolen and revokes the whole chain; the user must sign in again. To revoke a refresh token, send `POST /oauth/revoke` with the form fields `token` and `client_id`, plus `client_secret` for a client that has one. Access tokens stay valid until they expire.
+If a refresh token is used twice, PullMD treats it as stolen and revokes the whole chain; the user must sign in again. To revoke a refresh token, send `POST /oauth/revoke` with the form fields `token` and `client_id`, plus `client_secret` for a client that has one. PullMD revokes the token only if it was issued to that `client_id`, and answers `200` either way. To disconnect a client in the browser, use **Connected apps** on `/settings` (see [Authentication](/self-hosting/authentication#connected-apps)). Access tokens stay valid until they expire.
 
 Access tokens work only on `/mcp`. Scripts that call `/api` need an API key from `/settings`.
 

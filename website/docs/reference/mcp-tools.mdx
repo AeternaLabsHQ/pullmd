@@ -77,6 +77,7 @@ cached: true
 | `URL not allowed: …` | The URL, a redirect, or a page loaded in the browser points at a private or metadata address, or the host doesn't resolve. See [SSRF protection](/self-hosting/ssrf-protection). |
 | `Site is behind a bot-protection challenge (Cloudflare); …` | The site served a bot-protection challenge. The message names the provider, such as Cloudflare or Bunny Shield. The message includes the workaround: save the page and send it to `POST /api/html`. |
 | `Page fetch failed with status 404` | The site answered with an error status. The message carries the status. |
+| `Document is nested too deeply or has too many elements` | The page is too large or too deeply nested to parse. See [Troubleshooting](/troubleshooting). |
 | `MCP error -32602: Input validation error: …` | A parameter is out of range, for example `max_tokens` below `64`. The message names the parameter and the limit. |
 
 ## get_share

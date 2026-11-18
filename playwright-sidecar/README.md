@@ -12,7 +12,7 @@ This image is **not** useful on its own. Use it together with `aeternalabshq/pul
 
 ## Wiring
 
-In your `docker-compose.yml`, run alongside `pullmd` on a shared internal network and set `PLAYWRIGHT_URL=http://playwright:8002/render` on the pullmd service:
+In your `docker-compose.yml`, run it alongside `pullmd` on a network of its own that only `pullmd` joins, and set `PLAYWRIGHT_URL=http://playwright:8002/render` on the pullmd service. The shipped compose files call this network `pullmd-render`; `pullmd` also sits on `pullmd-internal` with the other sidecars, the browser does not:
 
 ```yaml
 services:
@@ -23,15 +23,15 @@ services:
     depends_on:
       - playwright
     networks:
-      - pullmd-internal
+      - pullmd-render
 
   playwright:
     image: aeternalabshq/pullmd-playwright:latest
     networks:
-      - pullmd-internal
+      - pullmd-render
 
 networks:
-  pullmd-internal:
+  pullmd-render:
     driver: bridge
 ```
 

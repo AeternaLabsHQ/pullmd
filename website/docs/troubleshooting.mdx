@@ -27,6 +27,13 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
   <Accordion title="403: URL not allowed">
     The URL points at a private, loopback or metadata address, or its host name doesn't resolve. With `render=force` or `extractor=playwright`, it can also mean the page tried to navigate the browser to one of those addresses. That's server-side request forgery (SSRF) protection; see [SSRF protection](/self-hosting/ssrf-protection). To allow an internal host, set `PULLMD_ALLOWED_HOSTS`, and add it to the compose file's `environment:` list so it reaches the container.
   </Accordion>
+  <Accordion title="422: document_too_complex">
+    ```json
+    { "error": "Document is nested too deeply or has too many elements", "code": "document_too_complex" }
+    ```
+
+    PullMD measures HTML and XML before it parses them and refuses a document over budget. For HTML (fetched pages, `POST /api/html`, saved pages, the HTML part of an e-mail) the budgets are 256 levels of nesting, 100,000 elements, 200,000 text nodes, 100,000 children of one element and 200,000 attributes. Uploaded XML and feeds may nest 256 levels. In an OpenDocument file, `content.xml` may hold 1,200,000 nodes, which a spreadsheet reaches at about 250,000 filled cells. Retrying won't help. Split the document, or for a web page convert a smaller part of it with [`POST /api/html`](/guides/local-html). If the automatic browser render produces a page over budget, PullMD keeps the static result; with `render=force` or `extractor=playwright` you get this error.
+  </Accordion>
   <Accordion title="401: Authentication required">
     Sign-in is on and the request had no valid credentials. Send an API key as `Authorization: Bearer pmd_…` (create one under **Settings** in the web app). A key from another instance, or one that was revoked, gives the same error. See [Authentication](/self-hosting/authentication#api-keys).
   </Accordion>

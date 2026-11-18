@@ -58,12 +58,14 @@ and was an accepted residual until then. Reddit short-link resolution
 The Playwright sidecar applies the same address policy to every request
 Chromium makes (since 3.15.2, [GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77)),
 but Chromium resolves names itself, so the DNS-rebinding residual remains on
-that path and is accepted. Operators who want a boundary that does not depend
-on the application can put the sidecar on its own bridge network with no
-other service on it; nothing in pullmd needs the sidecar to see the other
-containers. Please do not re-report it.
+that path and is accepted. For a boundary that does not depend on the
+application, the shipped compose files (since 3.20.0) put the sidecar on its
+own bridge network, `pullmd-render`, whose only other member is pullmd;
+nothing in pullmd needs the sidecar to see the other containers. Operators
+with their own compose file should do the same (see `MIGRATION.md`). Please
+do not re-report it.
 
-Since 3.19.3 the sidecar's guard covers every page and worker in the render
+Since 3.20.0 the sidecar's guard covers every page and worker in the render
 context, not just the rendered page. Chromium's speculative loading is the
 exception: speculation rules delivered by the `Speculation-Rules` response
 header, or rules a page script gets past the sidecar's removal of

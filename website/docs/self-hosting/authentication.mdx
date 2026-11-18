@@ -66,11 +66,15 @@ curl -s -b cookies.txt -X POST https://pullmd.example.com/api/keys \
   -H "Accept: application/json" -d "label=ci"
 ```
 
-The login returns `302` with a `pullmd_session` cookie, or `401` for a wrong email or password. With `Accept: application/json`, `/api/keys` returns `{"key":"pmd_..."}`, and `label` is optional. Without that header, it redirects to `/settings`. A login request that carries an `Origin` header from another host gets `403`.
+The login returns `302` with a `pullmd_session` cookie, or `401` for a wrong email or password. With `Accept: application/json`, `/api/keys` returns `{"key":"pmd_..."}`, and `label` is optional. Without that header, it redirects to `/settings`. A request to `/login`, `/api/keys` or `/api/keys/:id/revoke` whose `Origin` header (or, without one, `Referer`) names another host gets `403`. A script that sends neither header, like the `curl` calls above, is accepted.
 
 Keys look like `pmd_` followed by 32 letters and digits. PullMD stores only a hash. To revoke a key, open `/settings`.
 
 claude.ai and Claude Desktop sign in with [OAuth](/agents/claude-ai-connector), because they can't send a header.
+
+## Connected apps
+
+`/settings` lists under **Connected apps** every OAuth client that holds a valid refresh token for your account, with when you connected it and when it last refreshed its token. **Revoke** ends that client's refresh tokens, so it can't get a new access token and has to be connected again. An access token it already holds stays valid until it expires, within 1 hour.
 
 ## What needs sign-in
 
@@ -80,7 +84,7 @@ claude.ai and Claude Desktop sign in with [OAuth](/agents/claude-ai-connector), 
 | `/mcp` | `/login`, `/signup` |
 | `/api/history`, `/api/archive` | Share links, `/s/:id` |
 | `DELETE /api/cache/:id`, `DELETE /api/cache` | `/api/status`, `/api/recipes/status` |
-| `/api/me`, `/settings`, `/share` | `/api/stats`, `/api/storage`, `/api/config` |
+| `/api/me`, `/settings`, `POST /settings/apps/:clientId/revoke`, `/share` | `/api/stats`, `/api/storage`, `/api/config` |
 | `POST /api/keys`, `POST /api/keys/:id/revoke` | OAuth endpoints, `/web-reader.zip`, `/sw.js` |
 
 Share links are always open, so anyone with a link can read the shared content. `/api/stats` hides its per-domain lists from everyone but the admin. `/api/me` answers `401` when you're not signed in, and doesn't exist (`404`) while sign-in is off.
@@ -136,7 +140,7 @@ To run a command from a script, pipe the password in:
 echo "new-password" | docker exec -i pullmd node scripts/admin.js create-user someone@example.com
 ```
 
-Without `-i`, the command prints a usage hint and exits with code 2. Passwords need at least 8 characters, `create-user` makes a non-admin account, and `reset-password` also ends that user's sessions. Emails need a dotted domain. The 8-character minimum also applies to signup, but PullMD doesn't check the first admin's `PULLMD_ADMIN_PASSWORD`.
+Without `-i`, the command prints a usage hint and exits with code 2. Passwords need at least 8 characters, `create-user` makes a non-admin account, and `reset-password` also ends that user's sessions and revokes the refresh tokens of their [connected apps](#connected-apps). API keys stay. Emails need a dotted domain. The 8-character minimum also applies to signup, but PullMD doesn't check the first admin's `PULLMD_ADMIN_PASSWORD`.
 
 ## Rate limits
 

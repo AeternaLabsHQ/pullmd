@@ -1,3 +1,39 @@
+# Migrating from v3.19.x to v3.20.0
+
+v3.20.0 has no breaking API change and no database schema change. Nothing stops working if you skip the step below, but you keep a weaker boundary around the browser sidecar.
+
+## Recommended: move the Playwright sidecar to its own network
+
+The browser in the Playwright sidecar runs the scripts of every page it renders. The shipped compose files now put it on a bridge network of its own, `pullmd-render`, that only `pullmd` joins, so those scripts cannot reach trafilatura, markitdown or anything else on `pullmd-internal`. A compose file you downloaded or edited before v3.20.0 still has the sidecar on `pullmd-internal`; `docker compose pull` updates the images, not the file. Change three places:
+
+```yaml
+services:
+  pullmd:
+    networks:
+      - pullmd-internal
+      - pullmd-render        # new
+
+  playwright:
+    networks:
+      - pullmd-render        # was: pullmd-internal
+
+networks:
+  pullmd-internal:
+    driver: bridge
+  pullmd-render:             # new
+    driver: bridge
+```
+
+The Traefik compose file keeps `proxy` on the `pullmd` service as well. Then run `docker compose up -d`. If a host you list in `PULLMD_ALLOWED_HOSTS` is reachable only on a Docker network, the sidecar needs that network too.
+
+## Other changes to check
+
+- **`422 document_too_complex`.** HTML and XML that is nested too deeply or has too many elements, text nodes or attributes is refused before parsing. Ordinary pages stay far below the budgets; a very long page (over 100,000 elements or 200,000 text nodes) or a spreadsheet with more than about 250,000 filled cells now gets `422` where it used to convert slowly. The exact budgets are in `CHANGELOG.md`.
+- **`reset-password` signs OAuth clients out.** `scripts/admin.js reset-password` revokes the user's OAuth refresh tokens in addition to ending their sessions. Connected clients such as claude.ai have to be connected again; API keys stay.
+- **Same-origin check on API key routes.** `POST /api/keys` and `POST /api/keys/:id/revoke` answer `403` when the browser's `Origin` (or `Referer`) names another host, the same rule as `/login`. Behind a proxy that rewrites `Host`, set `PUBLIC_URL` as described in the v3.13.0 section below. Scripts that send neither header are not affected.
+
+---
+
 # Migrating from v3.12.x to v3.13.0
 
 v3.13.0 has no breaking API change and no database schema change. It changes how PullMD reads forwarding headers, which matters if a reverse proxy sits in front of it. Instances started from the bundled `docker-compose.traefik.yml` are configured correctly out of the box; instances reached directly on their port are not affected.
