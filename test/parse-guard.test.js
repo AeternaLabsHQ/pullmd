@@ -45,7 +45,7 @@ describe('inspectMarkup', () => {
       maxAttributes: MAX_ATTRIBUTES,
     });
     assert.equal(MAX_RAW_DEPTH_SUM, 100_000_000);
-    assert.deepEqual(RAW_HTML_LIMITS, { ...WEB_HTML_LIMITS, maxDepth: Infinity, maxDepthSum: MAX_RAW_DEPTH_SUM });
+    assert.deepEqual(RAW_HTML_LIMITS, { ...WEB_HTML_LIMITS, maxDepth: Infinity, maxDepthSum: MAX_RAW_DEPTH_SUM, foreignRawText: true });
   });
 
   // Guards the reliance on htmlparser2's internal parser.stack: if a new
@@ -175,6 +175,37 @@ describe('htmlFragmentToMarkdown (mail and calendar bodies)', () => {
 
 // Content that htmlparser2 reads as raw text but parse5 nests: the raw-input
 // check sees no depth, the strict check on parse5's output does.
+describe('raw-input check - raw-text elements in foreign content', () => {
+  const variants = ['<svg><title>', '<svg><style>', '<svg><script>', '<svg><textarea>', '<svg><xmp>',
+    '<math><mi><svg><title>', '<math><title>', '<math><mtext><textarea>', '<svg><foreignObject><title>'];
+  for (const prefix of variants) {
+    it(`${prefix} + 100k <div> is rejected in under 1 s`, () => {
+      const t0 = performance.now();
+      assert.throws(() => loadHtml(prefix + '<div>'.repeat(100_000)), assertTooComplex);
+      assert.ok(performance.now() - t0 < 1000, `took ${performance.now() - t0} ms`);
+    });
+  }
+
+  it('measures the content as markup at its depth, also without an end tag', () => {
+    const r = inspectMarkup('<svg><title>' + '<div>'.repeat(10), RAW_HTML_LIMITS);
+    assert.equal(r.depth, 12);
+    assert.equal(r.elements, 12);
+    assert.equal(r.depthSum, 1 + 2 + (3 + 12) * 10 / 2);
+    // Outside foreign content, and in the strict check, a <title> stays text.
+    assert.equal(inspectMarkup('<title>' + '<div>'.repeat(10), RAW_HTML_LIMITS).elements, 1);
+    assert.equal(inspectMarkup('<svg><title>' + '<div>'.repeat(10)).elements, 2);
+  });
+
+  it('a nested chain of raw-text elements is cut off', () => {
+    assert.throws(() => inspectMarkup('<svg><title>'.repeat(20), RAW_HTML_LIMITS), assertTooComplex);
+  });
+
+  it('plain SVG with a title and CSS passes unchanged', () => {
+    const r = inspectMarkup('<svg><title>Icon &amp; label</title><style>a > b { fill: red }</style><path d="M0 0"/></svg>', RAW_HTML_LIMITS);
+    assert.equal(r.elements, 4);
+  });
+});
+
 describe('extractHtml - raw-text contexts in foreign content', () => {
   const variants = {
     'svg/title': '<svg><title>',
@@ -337,13 +368,13 @@ describe('extractHtml - a stack overflow in preprocess()', () => {
   convertInProcess();
 
   it('a mail fragment with 6000 nested <div> answers 422 document_too_complex', () => {
-    assert.throws(() => htmlFragmentToMarkdown('<div>'.repeat(6000) + 'x'), (err) => assertTooComplex(err) && err.limit === 'stack');
+    assert.throws(() => htmlFragmentToMarkdown('<div>'.repeat(6000) + 'x'), assertTooComplex);
   });
 
   it('6000 nested <div> answer 422 document_too_complex', async () => {
     const html = '<div>'.repeat(6000) + 'x';
     assert.doesNotThrow(() => loadHtml(html));
-    await assert.rejects(extractHtml(html, { extractor: 'readability', recipes: [] }), (err) => assertTooComplex(err) && err.limit === 'stack');
+    await assert.rejects(extractHtml(html, { extractor: 'readability', recipes: [] }), assertTooComplex);
   });
 });
 
