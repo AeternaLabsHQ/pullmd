@@ -78,13 +78,13 @@ it.
 
 Since 3.20.0 the boundary for converting documents is the conversion worker
 limit, not the input budgets alone. Web pages, HTML uploads and the formats
-pullmd reads itself are converted in worker threads
-(`PULLMD_CONVERT_WORKERS`, 2 by default) with a time limit per conversion
-(`PULLMD_CONVERT_TIMEOUT_MS`, 60 s of worker time) and a 512 MB heap limit
-per worker. The markup budgets measure a document with a tokenizer, without building a
-tree, and answer `422 document_too_complex` when it is over; they run before
-the first parse and again on the normalised markup. They catch the common
-cases cheaply; what they miss is stopped by the limit. This leaves residuals, all accepted:
+pullmd reads itself are converted in worker threads (`PULLMD_CONVERT_WORKERS`,
+2 by default) with a time limit per conversion (`PULLMD_CONVERT_TIMEOUT_MS`,
+60 s of worker time) and a 512 MB heap limit per worker. The markup budgets
+measure a document with a tokenizer, without building a tree, and answer
+`422 document_too_complex` when it is over; they run before the first parse
+and again on the normalised markup. They catch the common cases cheaply; what
+they miss is stopped by the limit. This leaves residuals, all accepted:
 
 - An attacker who can send documents can keep the workers busy with slow ones.
   Up to 16 conversions then wait for a worker, at most 30 s each; beyond that
@@ -116,7 +116,15 @@ This is the documented open mode, not a vulnerability. Operators who share an
 instance should enable sign-in or set `DISABLE_PUBLIC_HISTORY=true`, which
 also refuses anonymous deletes, or keep the port off public networks.
 
-An upload sent with `async=1` (`POST /api/file`) is converted in the background, and its result waits in memory under a random 128-bit job id until the client deletes it or the retention time passes (`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default). It is never written to disk or to the cache, and a restart loses it. With sign-in enabled, a job is bound to the account that created it, and any other account gets the same `404` as for an unknown id. Without sign-in, the job id is the only credential, as with share links: anyone who has the id can read and delete the result.
+An upload sent with `async=1` (`POST /api/file`) is converted in the
+background, and its result waits in memory under a random 128-bit job id until
+the client deletes it or the retention time passes
+(`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default). It is never written to
+disk or to the cache, and a restart loses it. With sign-in enabled, a job is
+bound to the account that created it, and any other account gets the same
+`404` as for an unknown id. Without sign-in, the job id is the only
+credential, as with share links: anyone who has the id can read and delete the
+result.
 
 ## Supported versions
 
