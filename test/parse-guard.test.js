@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
@@ -8,6 +8,17 @@ import {
 } from '../lib/parse-guard.js';
 import { htmlFragmentToMarkdown, extractHtml } from '../lib/web.js';
 import { Readability } from '@mozilla/readability';
+
+// Readability spies and patches live in this thread, so the conversions they
+// watch run here too, not in the worker pool (lib/convert-pool.js).
+function convertInProcess() {
+  let saved;
+  before(() => { saved = process.env.PULLMD_CONVERT_WORKERS; process.env.PULLMD_CONVERT_WORKERS = '0'; });
+  after(() => {
+    if (saved === undefined) delete process.env.PULLMD_CONVERT_WORKERS;
+    else process.env.PULLMD_CONVERT_WORKERS = saved;
+  });
+}
 
 const fixture = readFileSync(new URL('./fixtures/claude-blog-split-body.html', import.meta.url), 'utf8');
 
@@ -283,6 +294,8 @@ describe('extractHtml - escaped markup in <head><title> with a url', () => {
 // MAX_TEXT_NODES as well. The <br> case below stays inside every budget and
 // exercises the neutralised title itself.
 describe('extractHtml - escaped markup in a body <title>', () => {
+  convertInProcess();
+
   for (const n of [99_000, 150_000, 199_000]) {
     it(`${n / 1000}k escaped <div> is rejected before Readability runs`, async () => {
       const html = '<html><body><p>x</p><title>T&lt;/title&gt;' + '&lt;div&gt;'.repeat(n) + '</title></body></html>';
@@ -351,6 +364,8 @@ describe('parseHtmlDocument - <title> outside <head>', () => {
 });
 
 describe('extractHtml - many siblings and a stack overflow inside Readability', () => {
+  convertInProcess();
+
   it('140k empty siblings in body are rejected at the first parse', async () => {
     const html = '<html><body><p>x</p>' + '<b></b>'.repeat(140_000) + '</body></html>';
     const parse = Readability.prototype.parse;

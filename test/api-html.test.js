@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server.js';
 import { Readability } from '@mozilla/readability';
@@ -7,6 +7,17 @@ import { loadRecipes } from '../lib/recipes.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+// Readability spies and patches live in this thread, so the conversions they
+// watch run here too, not in the worker pool (lib/convert-pool.js).
+function convertInProcess() {
+  let saved;
+  before(() => { saved = process.env.PULLMD_CONVERT_WORKERS; process.env.PULLMD_CONVERT_WORKERS = '0'; });
+  after(() => {
+    if (saved === undefined) delete process.env.PULLMD_CONVERT_WORKERS;
+    else process.env.PULLMD_CONVERT_WORKERS = saved;
+  });
+}
 
 async function request(app, path, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -240,6 +251,8 @@ describe('POST /api/html - escaped markup in <head><title> with a url', () => {
 // (99k by MAX_CHILD_NODES, 150k and 199k by MAX_TEXT_NODES too); the <br> case
 // below stays inside the budgets and converts the neutralised title as text.
 describe('POST /api/html - escaped markup in a body <title>', () => {
+  convertInProcess();
+
   for (const n of [99_000, 150_000, 199_000]) {
     it(`${n / 1000}k escaped <div> answers without a 500, rejected before Readability`, async () => {
       const app = createApp({});
@@ -276,6 +289,8 @@ describe('POST /api/html - body <title> behind <br> runs', () => {
 });
 
 describe('POST /api/html - many siblings and a stack overflow inside Readability', () => {
+  convertInProcess();
+
   it('140k empty siblings answer 422 document_too_complex before Readability runs', async () => {
     const app = createApp({});
     const html = '<html><body><p>x</p>' + '<b></b>'.repeat(140_000) + '</body></html>';

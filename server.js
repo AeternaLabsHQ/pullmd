@@ -26,6 +26,7 @@ import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
 import { createFileJobStore } from './lib/file-jobs.js';
 import { isYoutubeEnabled } from './lib/youtube.js';
+import { isConverterBusy } from './lib/convert-pool.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { stripCommentsSection } from './lib/markdown-sections.js';
@@ -34,6 +35,22 @@ import { stripCommentsSection } from './lib/markdown-sections.js';
 // then throw inside the catch block and bypass the JSON error response.
 function errMessage(err) {
   return String(err?.message ?? err);
+}
+
+// Answers the conversion owns: 422 when the document is the problem (over a
+// budget, the time or the memory limit), 503 while every converter is busy.
+// Returns false for anything else.
+function sendConversionError(res, err) {
+  if (err?.status === 422) {
+    res.status(422).json({ error: err.message, code: err.code });
+    return true;
+  }
+  if (isConverterBusy(err)) {
+    res.set('Retry-After', String(err.retryAfter));
+    res.status(503).json({ error: err.message, code: err.code });
+    return true;
+  }
+  return false;
 }
 
 function isRedditUrl(url) {
@@ -758,10 +775,9 @@ export function createApp(overrides = {}) {
         console.warn('Bot challenge:', err.vendor, url);
         return res.status(502).json({ error: err.message, code: 'bot_challenge', vendor: err.vendor });
       }
-      if (err?.status === 422) {
-        // Bad input (over-nested markup), not an upstream failure.
-        return res.status(422).json({ error: err.message, code: err.code });
-      }
+      // Bad input (over-nested markup, too slow to convert), not an upstream
+      // failure; or no free converter.
+      if (sendConversionError(res, err)) return;
       console.error('Web extraction error:', err);
       return res.status(502).json({ error: `Failed to extract page: ${errMessage(err)}` });
     }
@@ -846,9 +862,7 @@ export function createApp(overrides = {}) {
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       return res.send(finalMd);
     } catch (err) {
-      if (err?.status === 422) {
-        return res.status(422).json({ error: err.message, code: err.code });
-      }
+      if (sendConversionError(res, err)) return;
       console.error('Local HTML extraction error:', err);
       return res.status(500).json({ error: `Failed to extract HTML: ${errMessage(err)}` });
     }
@@ -922,8 +936,8 @@ export function createApp(overrides = {}) {
           suggestedFilename,
         });
       } catch (err) {
-        if (err?.status === 422) {
-          fileJobs.fail(id, { error: capJobError(err.message), httpStatus: 422 });
+        if (err?.status === 422 || isConverterBusy(err)) {
+          fileJobs.fail(id, { error: capJobError(err.message), httpStatus: err.status });
           return;
         }
         console.error('File conversion error:', err);
@@ -995,9 +1009,7 @@ export function createApp(overrides = {}) {
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       return res.send(outMd);
     } catch (err) {
-      if (err?.status === 422) {
-        return res.status(422).json({ error: err.message, code: err.code });
-      }
+      if (sendConversionError(res, err)) return;
       console.error('File conversion error:', err);
       // 502: the markitdown sidecar is an upstream dependency (same as the web /api path).
       return res.status(502).json({ error: `Failed to convert file: ${errMessage(err)}` });
@@ -1256,9 +1268,10 @@ export function createApp(overrides = {}) {
     } catch (err) {
       console.error('SSE stream error:', err);
       const message = err instanceof SsrfError ? `URL not allowed: ${err.message}` : String(err?.message ?? err) || 'Internal error';
-      // Headers are already out, so a 422 cannot be sent; the code tells the
-      // client it was the document, not a transient failure.
-      send('error', err?.status === 422 ? { message, code: err.code } : { message });
+      // Headers are already out, so a 422 or 503 cannot be sent; the code
+      // tells the client it was the document (or a busy converter), not a
+      // transient failure.
+      send('error', err?.status === 422 || isConverterBusy(err) ? { message, code: err.code } : { message });
       res.end();
     }
   });
