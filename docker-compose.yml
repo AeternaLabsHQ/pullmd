@@ -67,6 +67,10 @@ services:
       - PULLMD_FILE_JOB_MAX_MB=${PULLMD_FILE_JOB_MAX_MB:-}
       # Size limit for fetched pages/documents in bytes. Default 52428800 (50 MB).
       - PULLMD_MAX_FETCH_BYTES=${PULLMD_MAX_FETCH_BYTES:-}
+      # Conversion workers: time limit per conversion in ms (default 60000) and
+      # number of worker threads (default 2; 0 = in-process, no limits).
+      - PULLMD_CONVERT_TIMEOUT_MS=${PULLMD_CONVERT_TIMEOUT_MS:-}
+      - PULLMD_CONVERT_WORKERS=${PULLMD_CONVERT_WORKERS:-}
       - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data

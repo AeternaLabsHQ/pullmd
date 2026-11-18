@@ -52,7 +52,7 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     Sign-in is on and the request had no valid credentials. Send an API key as `Authorization: Bearer pmd_…` (create one under **Settings** in the web app). A key from another instance, or one that was revoked, gives the same error. See [Authentication](/self-hosting/authentication#api-keys).
   </Accordion>
   <Accordion title="A setting in .env has no effect">
-    The compose files (`docker-compose.yml` and `docker-compose.traefik.yml`) pass variables to the container one by one. As of v3.19.0, `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` aren't in the list, and as of v3.20.0 neither are `PULLMD_CONVERT_TIMEOUT_MS` and `PULLMD_CONVERT_WORKERS`. Add a line such as `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service.
+    The compose files (`docker-compose.yml` and `docker-compose.traefik.yml`) pass variables to the container one by one. As of v3.19.0, `PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` aren't in the list. Add a line such as `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}` to the `pullmd` service.
 
     Check what the container received:
 

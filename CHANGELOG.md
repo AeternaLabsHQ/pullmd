@@ -28,7 +28,7 @@ Found in an internal security review.
 
 ### Added
 
-- **`PULLMD_CONVERT_TIMEOUT_MS` and `PULLMD_CONVERT_WORKERS`.** They set the time limit per conversion (default `60000`) and the number of conversion workers (default `2`). The compose files don't pass them through; add a line for each one you use to the `pullmd` service's `environment:` list.
+- **`PULLMD_CONVERT_TIMEOUT_MS` and `PULLMD_CONVERT_WORKERS`.** They set the time limit per conversion (default `60000`) and the number of conversion workers (default `2`). The shipped compose files pass both through.
 - **Connected apps on `/settings`.** A new section lists the OAuth clients (such as claude.ai) that hold a valid refresh token for your account, with when they were connected and last used, and a **Revoke** button for each. Revoking ends the client's refresh tokens and any authorization code it has not exchanged yet, so it cannot get a new access token; one it already holds expires within 1 hour.
 
 ### Changed

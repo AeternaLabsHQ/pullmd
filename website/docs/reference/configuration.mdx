@@ -7,7 +7,7 @@ description: Every PullMD environment variable, grouped by what it controls, wit
 
 PullMD is configured with environment variables. With Docker Compose, put them in a `.env` file next to `docker-compose.yml` and run `docker compose up -d` to apply them. Every variable is optional unless marked.
 
-<Warning title="Compose passthrough">`PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` (marked † below) aren't passed through by the compose files as of v3.19.0, and neither are `PULLMD_CONVERT_TIMEOUT_MS` and `PULLMD_CONVERT_WORKERS` as of v3.20.0. Add a line for each one you use to the `pullmd` service's `environment:` list, for example `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}`.</Warning>
+<Warning title="Compose passthrough">`PULLMD_ALLOWED_HOSTS`, `PULLMD_ALLOW_SIGNUP`, `PULLMD_ARTICLE_SERIES`, `PULLMD_COVERAGE_GUARD`, `PULLMD_EMBEDDED_IMAGES`, `PULLMD_EMBEDDED_IMAGES_MAX` and `PULLMD_FILENAME_DATE_PREFIX` (marked † below) aren't passed through by the compose files as of v3.19.0. Add a line for each one you use to the `pullmd` service's `environment:` list, for example `- PULLMD_ALLOWED_HOSTS=${PULLMD_ALLOWED_HOSTS:-}`.</Warning>
 
 ## Server
 
@@ -125,8 +125,8 @@ Set on the `pullmd` service. PullMD converts web pages, HTML uploads and the [fo
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PULLMD_CONVERT_TIMEOUT_MS` † | `60000` | Time in milliseconds one conversion may run in a worker before PullMD stops it and answers `422` with `"code": "conversion_timeout"`. Time spent waiting for a free worker and for the Trafilatura sidecar doesn't count. A non-numeric or `0` value uses the default. |
-| `PULLMD_CONVERT_WORKERS` † | `2` | Number of conversion workers. Each has a 512 MB heap limit; a conversion that exhausts it answers `422` with `"code": "document_too_complex"`. `0` converts inside the server process with no time or memory limit, which isn't safe for an instance that others can reach. A non-numeric value uses `2`. |
+| `PULLMD_CONVERT_TIMEOUT_MS` | `60000` | Time in milliseconds one conversion may run in a worker before PullMD stops it and answers `422` with `"code": "conversion_timeout"`. Time spent waiting for a free worker and for the Trafilatura sidecar doesn't count. A non-numeric or `0` value uses the default. |
+| `PULLMD_CONVERT_WORKERS` | `2` | Number of conversion workers. Each has a 512 MB heap limit; a conversion that exhausts it answers `422` with `"code": "document_too_complex"`. `0` converts inside the server process with no time or memory limit, which isn't safe for an instance that others can reach. A non-numeric value uses `2`. |
 
 When every worker is busy, up to 16 conversions wait for a free one, for at most 30 seconds each. A request that can't wait gets `503` with `"code": "converter_busy"` and `Retry-After: 5`. See [Troubleshooting](/troubleshooting).
 
