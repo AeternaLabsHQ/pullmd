@@ -44,7 +44,7 @@ describe('inspectMarkup', () => {
       maxDepthSum: MAX_DEPTH_SUM, maxElements: MAX_HTML_ELEMENTS, maxTextNodes: MAX_TEXT_NODES, maxChildren: MAX_CHILD_NODES,
       maxAttributes: MAX_ATTRIBUTES,
     });
-    assert.equal(MAX_RAW_DEPTH_SUM, 25_000_000);
+    assert.equal(MAX_RAW_DEPTH_SUM, 100_000_000);
     assert.deepEqual(RAW_HTML_LIMITS, { ...WEB_HTML_LIMITS, maxDepth: Infinity, maxDepthSum: MAX_RAW_DEPTH_SUM });
   });
 
@@ -336,6 +336,10 @@ describe('parse helpers check their own input', () => {
 describe('extractHtml - a stack overflow in preprocess()', () => {
   convertInProcess();
 
+  it('a mail fragment with 6000 nested <div> answers 422 document_too_complex', () => {
+    assert.throws(() => htmlFragmentToMarkdown('<div>'.repeat(6000) + 'x'), (err) => assertTooComplex(err) && err.limit === 'stack');
+  });
+
   it('6000 nested <div> answer 422 document_too_complex', async () => {
     const html = '<div>'.repeat(6000) + 'x';
     assert.doesNotThrow(() => loadHtml(html));
@@ -380,6 +384,7 @@ describe('extractHtml - omitted end tags parse as in a browser', () => {
     'p/b': rep(2000, (i) => `<p><b>${para(i)}`),
     'li/a': '<ul>' + rep(2000, (i) => `<li><a href="/x${i}">Item ${i} ${lorem}`) + '</ul>',
     'dt/b/dd': '<dl>' + rep(2000, (i) => `<dt><b>Term ${i}<dd>${para(i)}`) + '</dl>',
+    'td/font': '<table>' + rep(2000, (i) => `<tr><td><font>a${i}<td><font>${lorem}`) + '</table>',
   })) {
     it(`2000 unclosed ${name} items pass the input check`, () => {
       assert.doesNotThrow(() => loadHtml(wrap(html)));
