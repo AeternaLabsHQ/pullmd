@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import {
   inspectMarkup, isTooComplex, loadHtml, parseHtmlDocument,
-  MAX_NESTING_DEPTH, MAX_DEPTH_SUM, MAX_RAW_DEPTH_SUM, MAX_HTML_ELEMENTS, MAX_TEXT_NODES, MAX_CHILD_NODES, MAX_ATTRIBUTES,
+  MAX_NESTING_DEPTH, MAX_DEPTH_SUM, MAX_RAW_DEPTH_SUM, MAX_HTML_ELEMENTS, MAX_TEXT_NODES, MAX_CHILD_NODES, MAX_ATTRIBUTES, MAX_ELEMENT_ATTRIBUTES,
   WEB_HTML_LIMITS, RAW_HTML_LIMITS,
 } from '../lib/parse-guard.js';
 import { htmlFragmentToMarkdown, extractHtml } from '../lib/web.js';
@@ -42,8 +42,9 @@ describe('inspectMarkup', () => {
     assert.equal(MAX_ATTRIBUTES, 200_000);
     assert.deepEqual(WEB_HTML_LIMITS, {
       maxDepthSum: MAX_DEPTH_SUM, maxElements: MAX_HTML_ELEMENTS, maxTextNodes: MAX_TEXT_NODES, maxChildren: MAX_CHILD_NODES,
-      maxAttributes: MAX_ATTRIBUTES,
+      maxAttributes: MAX_ATTRIBUTES, maxElementAttributes: MAX_ELEMENT_ATTRIBUTES,
     });
+    assert.equal(MAX_ELEMENT_ATTRIBUTES, 1000);
     assert.equal(MAX_RAW_DEPTH_SUM, 100_000_000);
     assert.deepEqual(RAW_HTML_LIMITS, { ...WEB_HTML_LIMITS, maxDepth: Infinity, maxDepthSum: MAX_RAW_DEPTH_SUM, foreignRawText: true });
   });
@@ -52,6 +53,32 @@ describe('inspectMarkup', () => {
   // htmlparser2 version renames or reorders it, depth stops being measured.
   it('reads the depth from the parser stack', () => {
     assert.equal(inspectMarkup('<a><b>').depth, 2);
+  });
+
+  describe('attributes on one element', () => {
+    const limitOf = (fn) => { try { fn(); } catch (err) { assertTooComplex(err); return err.limit; } return null; };
+    const names = (n) => Array.from({ length: n }, (_, i) => 'a' + i).join(' ');
+
+    it('rejects 40k distinct attribute names on one element quickly, in raw and strict mode', () => {
+      const html = `<div ${names(40_000)}>x</div>`;
+      for (const limits of [WEB_HTML_LIMITS, RAW_HTML_LIMITS]) {
+        const t0 = performance.now();
+        assert.equal(limitOf(() => inspectMarkup(html, limits)), 'elementAttributes');
+        assert.ok(performance.now() - t0 < 1000, `took ${performance.now() - t0} ms`);
+      }
+    });
+
+    it('lets an element with 200 attributes pass, and counts per element, not per document', () => {
+      assert.equal(limitOf(() => inspectMarkup(`<div ${names(200)}>x</div>`, WEB_HTML_LIMITS)), null);
+      assert.equal(limitOf(() => inspectMarkup(`<div ${names(1000)}>x</div>`, WEB_HTML_LIMITS)), null);
+      assert.equal(limitOf(() => inspectMarkup(`<div ${names(1001)}>x</div>`, WEB_HTML_LIMITS)), 'elementAttributes');
+      assert.equal(limitOf(() => inspectMarkup(`<p ${names(600)}>x</p>`.repeat(50), WEB_HTML_LIMITS)), null);
+    });
+
+    it('applies inside raw-text content that parse5 reads as markup', () => {
+      const html = `<svg><title><div ${names(1001)}></div></title></svg>`;
+      assert.equal(limitOf(() => inspectMarkup(html, RAW_HTML_LIMITS)), 'elementAttributes');
+    });
   });
 
   it('sums the depth at every open tag', () => {

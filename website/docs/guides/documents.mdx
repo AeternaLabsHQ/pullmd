@@ -115,7 +115,7 @@ These uploaded formats work without the MarkItDown sidecar. PullMD picks the rea
 
 With `frontmatter=true`, e-mail results carry `title`, `author`, `published` and `source: email`.
 
-A file that doesn't match its format, such as an `.eml` file without mail headers, returns `422`. So does a file nested too deeply or too large to parse, with `"code": "document_too_complex"`: for example a spreadsheet with more than roughly 250,000 to 300,000 filled cells (fewer when the cells carry a lot of formatting), or an e-mail whose HTML part is over the [HTML limits](/guides/local-html#differences-from-a-url-conversion) and has no plain-text part. See [Troubleshooting](/troubleshooting). An upload with `async=1` reports it as a job with `status: "error"`, the message in `error` and `httpStatus: 422`, without the `code`.
+A file that doesn't match its format, such as an `.eml` file without mail headers, returns `422`. So does a file nested too deeply or too large to parse, with `"code": "document_too_complex"`: for example a spreadsheet with more than roughly 200,000 to 240,000 filled cells (fewer when the cells carry a lot of formatting), or an e-mail whose HTML part is over the [HTML limits](/guides/local-html#differences-from-a-url-conversion) and has no plain-text part. See [Troubleshooting](/troubleshooting). An upload with `async=1` reports it as a job with `status: "error"`, the message in `error` and `httpStatus: 422`, without the `code`.
 
 ## Tables in PDFs: use OCR
 
