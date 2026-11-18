@@ -33,4 +33,33 @@ describe('compactTables', () => {
     assert.equal(compactTables(''), '');
     assert.equal(compactTables(null), null);
   });
+
+  it('shrinks long space runs in linear time', () => {
+    const run = ' '.repeat(1_000_000);
+    for (const [input, expected] of [
+      ['|' + run + '|', '| |'],
+      ['|' + run + 'x|', '| x|'],
+      ['| a' + run + '|', '| a |'],
+    ]) {
+      const t0 = performance.now();
+      const out = compactTables(input);
+      const ms = performance.now() - t0;
+      assert.equal(out, expected);
+      assert.ok(ms < 200, `${JSON.stringify(input.slice(0, 4))}... took ${ms.toFixed(0)} ms`);
+    }
+  });
+
+  it('matches the previous space-run handling on a seeded fuzz corpus', () => {
+    const legacy = (line) => line.replace(/ {2,}\|/g, ' |').replace(/\| {2,}/g, '| ');
+    let seed = 20261118;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 2 ** 32; };
+    const alphabet = [' ', ' ', '  ', '|', 'a', '\\|', ':'];
+    for (let n = 0; n < 20000; n++) {
+      let row = '|';
+      const len = Math.floor(rnd() * 20);
+      for (let i = 0; i < len; i++) row += alphabet[Math.floor(rnd() * alphabet.length)];
+      row += '|';
+      assert.equal(compactTables(row), legacy(row), JSON.stringify(row));
+    }
+  });
 });
