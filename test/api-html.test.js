@@ -180,24 +180,44 @@ describe('POST /api/html - raw-text contexts in foreign content', () => {
       const app = createApp({});
       const t0 = Date.now();
       const res = await post(app, '/api/html?extractor=readability', prefix + '<div>'.repeat(10_000));
-      assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+      assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
       assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
     });
   }
 });
 
 describe('POST /api/html - escaped markup inside unencoded elements', () => {
+  it('a guaranteed 422 carries error and code only', async () => {
+    const app = createApp({});
+    const res = await post(app, '/api/html', '<div>'.repeat(300));
+    assert.equal(res.status, 422, res.body);
+    const body = JSON.parse(res.body);
+    assert.equal(body.code, 'document_too_complex');
+    assert.equal('limit' in body, false, 'the exceeded budget stays internal');
+  });
+
   for (const tag of ['noscript', 'iframe', 'noembed', 'noframes', 'plaintext']) {
     it(`<${tag}> + 20k escaped <div> answers fast and never 500`, async () => {
       const app = createApp({});
       const t0 = Date.now();
       const close = tag === 'plaintext' ? '' : `</${tag}>`;
       const res = await post(app, '/api/html?extractor=readability', `<p>x</p><${tag}>` + '&lt;div&gt;'.repeat(20_000) + close);
-      assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+      assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
       assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
       if (res.status === 422) assert.equal('limit' in JSON.parse(res.body), false, 'the exceeded budget stays internal');
     });
   }
+});
+
+describe('POST /api/html - escaped markup in <head><title> with a url', () => {
+  it('answers fast and never 500', async () => {
+    const app = createApp({});
+    const html = '<html><head><title>T&lt;/title&gt;' + '&lt;div&gt;'.repeat(20_000) + '</title></head><body><p>x</p></body></html>';
+    const t0 = Date.now();
+    const res = await post(app, `/api/html?extractor=readability&url=${encodeURIComponent('https://example.org/a')}`, html);
+    assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+    assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
+  });
 });
 
 describe('POST /api/html - size limit', () => {

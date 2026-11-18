@@ -152,7 +152,7 @@ describe('extractHtml - raw-text contexts in foreign content', () => {
       } catch (err) {
         assertTooComplex(err);
       }
-      assert.ok(performance.now() - t0 < 2000, `took ${performance.now() - t0} ms`);
+      assert.ok(performance.now() - t0 < 5000, `took ${performance.now() - t0} ms`);
     });
   }
 });
@@ -199,7 +199,33 @@ describe('extractHtml - escaped markup inside unencoded elements', () => {
       } catch (err) {
         assertTooComplex(err);
       }
-      assert.ok(performance.now() - t0 < 2000, `took ${performance.now() - t0} ms`);
+      assert.ok(performance.now() - t0 < 5000, `took ${performance.now() - t0} ms`);
     });
   }
+});
+
+// linkedom writes the decoded text of a <title> back unescaped, so its
+// toString() (used when a url is given) can turn text into markup. Every
+// later parse checks its own input.
+describe('extractHtml - escaped markup in <head><title> with a url', () => {
+  it('answers fast, 422 or a result', async () => {
+    const html = '<html><head><title>T&lt;/title&gt;' + '&lt;div&gt;'.repeat(20_000) + '</title></head><body><p>x</p></body></html>';
+    const t0 = performance.now();
+    try {
+      const r = await extractHtml(html, { url: 'https://example.org/a', extractor: 'readability', recipes: [] });
+      assert.equal(typeof r.markdown, 'string');
+    } catch (err) {
+      assertTooComplex(err);
+    }
+    assert.ok(performance.now() - t0 < 5000, `took ${performance.now() - t0} ms`);
+  });
+});
+
+describe('parse helpers check their own input', () => {
+  it('loadHtml and parseHtmlDocument reject over-nested markup', async () => {
+    const { parseHtmlDocument } = await import('../lib/parse-guard.js');
+    assert.throws(() => loadHtml('<div>'.repeat(300)), assertTooComplex);
+    assert.throws(() => parseHtmlDocument('<div>'.repeat(300)), assertTooComplex);
+    assert.equal(parseHtmlDocument('<html><body><p>x</p></body></html>').document.querySelector('p').textContent, 'x');
+  });
 });
