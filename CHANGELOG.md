@@ -23,13 +23,13 @@ Found in an internal security review.
 - **`format=text` conversion no longer slows down on crafted Markdown.** Some bracket and parenthesis patterns made the plain-text conversion take seconds to minutes on a few kilobytes and held up the whole server meanwhile. Links and images are now converted in a single pass, so the time grows only with the length of the text. The output is unchanged.
 - **A login with an unknown email costs as much as one with a wrong password.** The miss ran a cheap dummy check, so response times could tell whether an account exists. It now runs a full password check against a hash made with the instance's own parameters.
 - **`scripts/admin.js reset-password` revokes the user's OAuth refresh tokens.** It already ended the user's sessions; connected OAuth clients now have to sign in again. Access tokens already issued stay valid until they expire, at most 1 hour. API keys are not touched; the user revokes them on `/settings`.
-- **`POST /oauth/revoke` revokes only tokens issued to the requesting client.** A token belonging to another client is left alone, and the answer is `200` either way.
+- **`POST /oauth/revoke` revokes only tokens issued to the requesting client.** A token belonging to another client is left alone, and the answer is `200` either way. Revoking a token also uses up any authorization code the client holds for the same user that it has not exchanged yet.
 - **`POST /api/keys` and `POST /api/keys/:id/revoke` refuse requests from other sites.** Like `/login` and `/logout`, they answer `403` when the browser's `Origin` (or, without one, `Referer`) names a host other than the instance's own or `PUBLIC_URL`'s. Requests with neither header, such as scripts, are accepted as before.
 
 ### Added
 
 - **`PULLMD_CONVERT_TIMEOUT_MS` and `PULLMD_CONVERT_WORKERS`.** They set the time limit per conversion (default `60000`) and the number of conversion workers (default `2`). The compose files don't pass them through; add a line for each one you use to the `pullmd` service's `environment:` list.
-- **Connected apps on `/settings`.** A new section lists the OAuth clients (such as claude.ai) that hold a valid refresh token for your account, with when they were connected and last used, and a **Revoke** button for each. Revoking ends the client's refresh tokens, so it cannot get a new access token; one it already holds expires within 1 hour.
+- **Connected apps on `/settings`.** A new section lists the OAuth clients (such as claude.ai) that hold a valid refresh token for your account, with when they were connected and last used, and a **Revoke** button for each. Revoking ends the client's refresh tokens and any authorization code it has not exchanged yet, so it cannot get a new access token; one it already holds expires within 1 hour.
 
 ### Changed
 

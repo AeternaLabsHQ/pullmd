@@ -502,6 +502,27 @@ describe('settings - connected apps', () => {
       assert.ok(store.consumeAuthCode(theirs), 'the other user\'s code is untouched');
     });
 
+    it('revokeClientForUser also uses up the unexchanged auth codes for that client only', () => {
+      const { cache, store, u, client, future } = setup();
+      const other = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES ('b@x.y', 'x')").run().lastInsertRowid;
+      const otherClient = store.registerClient({
+        redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+        client_name: 'Other', token_endpoint_auth_method: 'none',
+      }).client_id;
+      const make = (user, cid) => store.createAuthCode({
+        client_id: cid, user_id: user, redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+        code_challenge: 'c', code_challenge_method: 'S256', scope: 's',
+      }).codeHash;
+      const mine = make(u, client);
+      const mineOtherClient = make(u, otherClient);
+      const theirs = make(other, client);
+      store.insertRefreshToken({ tokenHash: 'r1', client_id: client, user_id: u, scope: 's', expiresAt: future });
+      assert.equal(store.revokeClientForUser(u, client), 1, 'still reports the revoked refresh rows');
+      assert.equal(store.consumeAuthCode(mine), null, 'the revoked client\'s code is dead');
+      assert.ok(store.consumeAuthCode(mineOtherClient), 'the user\'s code for another client is untouched');
+      assert.ok(store.consumeAuthCode(theirs), 'another user\'s code for the same client is untouched');
+    });
+
     it('connected since survives rotation: it is the first row of the live chain', () => {
       const { store, u, client, future, setCreated } = setup();
       store.insertRefreshToken({ tokenHash: 't1', client_id: client, user_id: u, scope: 's', expiresAt: future });
