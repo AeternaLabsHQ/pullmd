@@ -492,6 +492,37 @@ describe('extractWeb orchestrator with playwright fallback', () => {
     assert.notEqual(result.source, 'playwright');
   });
 
+  it('rejects an over-nested static page without calling the sidecar', async () => {
+    process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
+    for (const render of [undefined, 'force']) {
+      let sidecarCalls = 0;
+      const t0 = Date.now();
+      await assert.rejects(
+        extractWeb('https://example.com', {
+          fetch: fetchWith('<html><body>' + '<span>'.repeat(100_000) + 'x</body></html>'),
+          renderClient: async () => { sidecarCalls++; return cleanHtml(); },
+          render,
+        }),
+        (err) => err.code === 'document_too_complex' && err.status === 422,
+      );
+      assert.equal(sidecarCalls, 0, `render=${render}`);
+      assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+    }
+  });
+
+  it('rejects an over-nested rendered page instead of keeping the static result', async () => {
+    process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
+    let sidecarCalls = 0;
+    await assert.rejects(
+      extractWeb('https://example.com', {
+        fetch: fetchWith(soupHtml()),
+        renderClient: async () => { sidecarCalls++; return '<html><body>' + '<div>'.repeat(100_000) + '</body></html>'; },
+      }),
+      (err) => err.code === 'document_too_complex',
+    );
+    assert.equal(sidecarCalls, 1);
+  });
+
   it('emits stage events in order on render path', async () => {
     process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
     const events = [];

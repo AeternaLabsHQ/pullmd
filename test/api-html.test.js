@@ -152,6 +152,28 @@ describe('POST /api/html - errors', () => {
   });
 });
 
+describe('POST /api/html - over-nested markup (real extractHtml path)', () => {
+  it('answers 422 document_too_complex quickly', async () => {
+    const app = createApp({});
+    const t0 = Date.now();
+    const res = await post(app, '/api/html', '<html><body>' + '<div>'.repeat(100_000) + 'x</body></html>');
+    assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+    assert.equal(res.status, 422, res.body);
+    const j = JSON.parse(res.body);
+    assert.equal(j.code, 'document_too_complex');
+    assert.equal(j.error, 'Document is nested too deeply or has too many elements');
+  });
+
+  it('also guards uploads with inlined data: images', async () => {
+    const app = createApp({});
+    const t0 = Date.now();
+    const res = await post(app, '/api/html', '<img src="data:image/png;base64,AA">' + '<div>'.repeat(100_000));
+    assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+    assert.equal(res.status, 422, res.body);
+    assert.equal(JSON.parse(res.body).code, 'document_too_complex');
+  });
+});
+
 describe('POST /api/html - size limit', () => {
   it('413 with a friendly bilingual JSON error for bodies over 10 MB', async () => {
     const app = createApp({ extractHtml: async () => FAKE_RESULT });
