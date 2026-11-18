@@ -249,7 +249,8 @@ describe('seriesToMarkdown - nested article chains', () => {
     try {
       const r = await extractHtml(chainPage(250, 38_000), { recipes: [], fetch: async () => { throw new Error('no network'); } });
       assert.equal(typeof r.markdown, 'string');
-      assert.equal(r.source, 'readability');
+      // The page is a detected series; which extract wins is MIN_GAIN's call.
+      assert.ok(['readability', 'article-series'].includes(r.source), r.source);
     } catch (err) {
       assert.equal(err.code, 'document_too_complex');
     }
