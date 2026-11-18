@@ -222,8 +222,9 @@ describe('POST /api/html - escaped markup in <head><title> with a url', () => {
 });
 
 // See the matching extractHtml test in parse-guard.test.js: the spy proves
-// the 422 comes before Readability.parse(). 99k reaches the check of the
-// serialized body; 150k and 199k stop at the first parse (MAX_TEXT_NODES).
+// the 422 comes before Readability.parse(). All three stop at the first parse
+// (99k by MAX_CHILD_NODES, 150k and 199k by MAX_TEXT_NODES too); the <br> case
+// below stays inside the budgets and converts the neutralised title as text.
 describe('POST /api/html - escaped markup in a body <title>', () => {
   for (const n of [99_000, 150_000, 199_000]) {
     it(`${n / 1000}k escaped <div> answers without a 500, rejected before Readability`, async () => {
@@ -244,6 +245,53 @@ describe('POST /api/html - escaped markup in a body <title>', () => {
       assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
     });
   }
+});
+
+describe('POST /api/html - body <title> behind <br> runs', () => {
+  for (const [n, expected] of [[45_000, 200], [79_000, 422]]) {
+    it(`${n / 1000}k escaped <br> answers ${expected} fast, never 500`, async () => {
+      const app = createApp({});
+      const html = '<html><body>' + '<span>a<br><br>'.repeat(125) + '<title>T&lt;/title&gt;' + '&lt;br&gt;'.repeat(n)
+        + '</title>' + '</span>'.repeat(125) + '</body></html>';
+      const t0 = Date.now();
+      const res = await post(app, '/api/html?extractor=readability', html);
+      assert.equal(res.status, expected, `${res.status} ${res.body.slice(0, 200)}`);
+      assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+    });
+  }
+});
+
+describe('POST /api/html - many siblings and a stack overflow inside Readability', () => {
+  it('140k empty siblings answer 422 document_too_complex before Readability runs', async () => {
+    const app = createApp({});
+    const html = '<html><body><p>x</p>' + '<b></b>'.repeat(140_000) + '</body></html>';
+    const parse = Readability.prototype.parse;
+    let calls = 0;
+    Readability.prototype.parse = function (...args) { calls++; return parse.apply(this, args); };
+    let res;
+    try {
+      res = await post(app, '/api/html?extractor=readability', html);
+    } finally {
+      Readability.prototype.parse = parse;
+    }
+    assert.equal(res.status, 422, res.body.slice(0, 200));
+    assert.deepEqual(JSON.parse(res.body), { error: 'Document is nested too deeply or has too many elements', code: 'document_too_complex' });
+    assert.equal(calls, 0);
+  });
+
+  it('a RangeError inside Readability answers 422 document_too_complex, not 500', async () => {
+    const app = createApp({});
+    const parse = Readability.prototype.parse;
+    Readability.prototype.parse = function () { throw new RangeError('Maximum call stack size exceeded'); };
+    let res;
+    try {
+      res = await post(app, '/api/html?extractor=readability', `<html><body><p>${LONG_PARAGRAPH}</p></body></html>`);
+    } finally {
+      Readability.prototype.parse = parse;
+    }
+    assert.equal(res.status, 422, res.body.slice(0, 200));
+    assert.equal(JSON.parse(res.body).code, 'document_too_complex');
+  });
 });
 
 describe('POST /api/html - size limit', () => {

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import {
-  inspectMarkup, isTooComplex, loadHtml, serializeHtml, MAX_NESTING_DEPTH, MAX_DEPTH_SUM, MAX_HTML_ELEMENTS, MAX_TEXT_NODES, WEB_HTML_LIMITS,
+  inspectMarkup, isTooComplex, loadHtml, parseHtmlDocument, serializeHtml,
+  MAX_NESTING_DEPTH, MAX_DEPTH_SUM, MAX_HTML_ELEMENTS, MAX_TEXT_NODES, MAX_CHILD_NODES, WEB_HTML_LIMITS,
 } from '../lib/parse-guard.js';
 import { htmlFragmentToMarkdown, extractHtml } from '../lib/web.js';
 import { Readability } from '@mozilla/readability';
@@ -22,7 +23,13 @@ describe('inspectMarkup', () => {
   it('exports the budgets', () => {
     assert.equal(MAX_NESTING_DEPTH, 256);
     assert.equal(MAX_DEPTH_SUM, 10_000_000);
-    assert.deepEqual(WEB_HTML_LIMITS, { maxDepthSum: MAX_DEPTH_SUM, maxElements: MAX_HTML_ELEMENTS, maxTextNodes: MAX_TEXT_NODES });
+    // 100k keeps a margin below the ~125k direct children at which linkedom's
+    // innerHTML setter overflows the call stack (spread into replaceChildren).
+    assert.equal(MAX_HTML_ELEMENTS, 100_000);
+    assert.equal(MAX_CHILD_NODES, 100_000);
+    assert.deepEqual(WEB_HTML_LIMITS, {
+      maxDepthSum: MAX_DEPTH_SUM, maxElements: MAX_HTML_ELEMENTS, maxTextNodes: MAX_TEXT_NODES, maxChildren: MAX_CHILD_NODES,
+    });
   });
 
   // Guards the reliance on htmlparser2's internal parser.stack: if a new
@@ -56,6 +63,21 @@ describe('inspectMarkup', () => {
 
   it('rejects flat documents over the element budget', () => {
     assert.throws(() => inspectMarkup('<a></a>'.repeat(MAX_HTML_ELEMENTS + 1), WEB_HTML_LIMITS), assertTooComplex);
+  });
+
+  it('counts the child nodes of each element, text nodes and splits included', () => {
+    assert.equal(inspectMarkup('<div><p>a</p> <p>b &lt; c</p></div>').children, 3);
+    assert.equal(inspectMarkup('<div>' + ' <b></b>'.repeat(50) + '</div>').children, 100);
+    assert.equal(inspectMarkup('<div>'.repeat(50) + 'x').children, 1);
+    // Void elements are children of the element they stand in.
+    assert.equal(inspectMarkup('<div><p>a<br>b</p>' + ' <br>'.repeat(50) + '</div>').children, 101);
+    assert.equal(inspectMarkup('<p>a<br>b<img>c</p>').children, 5);
+    const limitOf = (fn) => { try { fn(); } catch (err) { assertTooComplex(err); return err.limit; } return null; };
+    assert.equal(limitOf(() => inspectMarkup('<div>' + ' <b></b>'.repeat(60) + '</div>', { maxChildren: 100 })), 'children');
+    assert.equal(limitOf(() => inspectMarkup('<div>' + '<b>x</b>'.repeat(60) + '</div>', { maxChildren: 100 })), null);
+    // 60k elements and 60k blank text nodes: inside every other budget, but
+    // 120k direct children of body.
+    assert.equal(limitOf(() => inspectMarkup('<html><body>' + ' <b></b>'.repeat(60_000) + '</body></html>', WEB_HTML_LIMITS)), 'children');
   });
 
   it('accepts a normal article', () => {
@@ -222,13 +244,13 @@ describe('extractHtml - escaped markup in <head><title> with a url', () => {
   });
 });
 
-// The same title serialization inside <body>: Readability caches
-// body.innerHTML and re-parses it with linkedom's innerHTML setter on each
-// retry pass, so that string is checked before Readability runs. The spy
-// proves the order: a 422 must come before Readability.parse(). 99k stays
-// just under MAX_TEXT_NODES for the first parse (about 198k text nodes), so it
-// reaches the check of the serialized body; 150k and 199k stop at the first
-// parse.
+// The same title serialization inside <body>: parseHtmlDocument() turns a
+// body <title> into a text node, and the serialized body is checked once more
+// before Readability runs. The spy proves the order: a 422 must come before
+// Readability.parse(). All three stop at the first parse: 99k has about 198k
+// text nodes inside one element (MAX_CHILD_NODES), 150k and 199k are over
+// MAX_TEXT_NODES as well. The <br> case below stays inside every budget and
+// exercises the neutralised title itself.
 describe('extractHtml - escaped markup in a body <title>', () => {
   for (const n of [99_000, 150_000, 199_000]) {
     it(`${n / 1000}k escaped <div> is rejected before Readability runs`, async () => {
@@ -249,6 +271,93 @@ describe('extractHtml - escaped markup in a body <title>', () => {
       assert.ok(performance.now() - t0 < 5000, `took ${performance.now() - t0} ms`);
     });
   }
+});
+
+describe('parseHtmlDocument - <title> outside <head>', () => {
+  it('turns a body <title> into a text node and keeps the head title', () => {
+    const { document } = parseHtmlDocument('<html><head><title>Head &amp; T</title></head>'
+      + '<body><p>x</p><title>T&lt;/title&gt;&lt;br&gt;</title><svg><title>S&lt;b&gt;</title></svg></body></html>');
+    assert.equal(document.querySelector('head > title').textContent, 'Head & T');
+    assert.equal(document.querySelector('body title:not(svg title)'), null);
+    assert.ok(document.body.textContent.includes('T</title><br>'));
+    assert.ok(document.body.innerHTML.includes('T&lt;/title&gt;&lt;br&gt;'));
+    assert.ok(!document.body.innerHTML.includes('<br>'));
+    // The svg title is an SVGElement and serializes escaped on its own.
+    assert.equal(document.querySelector('svg title').textContent, 'S<b>');
+    assert.ok(document.body.innerHTML.includes('<svg><title>S&lt;b&gt;</title></svg>'));
+  });
+
+  it('keeps the head title for metadata and shows the body title as text', async () => {
+    const html = '<html><head><title>Head Title</title></head><body><p>Some words in a paragraph here.</p>'
+      + '<title>Body &lt;b&gt;bold&lt;/b&gt; text</title><p>More words in another paragraph.</p></body></html>';
+    const r = await extractHtml(html, { extractor: 'readability', recipes: [] });
+    assert.equal(r.title, 'Head Title');
+    assert.ok(r.markdown.includes('bold'), r.markdown);
+    assert.ok(!/\*\*bold\*\*/.test(r.markdown), 'body title content became markup');
+  });
+
+  // Readability's _replaceBrs wraps the siblings after a <br> run in <p>, so
+  // the string it caches can be deeper than the body checked before parse().
+  // With the body title gone there is no markup left to grow: 45k escaped
+  // <br> (90k text nodes, inside every budget) convert as text, and 79k (the
+  // original probe, 158k child nodes of the title) stop at the first parse.
+  for (const n of [45_000, 79_000]) {
+    it(`a body <title> with ${n / 1000}k escaped <br> behind <br> runs answers fast, 200 or 422`, async () => {
+      const html = '<html><body>' + '<span>a<br><br>'.repeat(125) + '<title>T&lt;/title&gt;' + '&lt;br&gt;'.repeat(n)
+        + '</title>' + '</span>'.repeat(125) + '</body></html>';
+      const t0 = performance.now();
+      try {
+        const r = await extractHtml(html, { extractor: 'readability', recipes: [] });
+        assert.equal(typeof r.markdown, 'string');
+        assert.equal(n, 45_000, 'expected the 79k case to stop at the first parse');
+      } catch (err) {
+        assertTooComplex(err);
+        assert.equal(n, 79_000, 'expected the 45k case to convert');
+      }
+      assert.ok(performance.now() - t0 < 5000, `took ${performance.now() - t0} ms`);
+    });
+  }
+});
+
+describe('extractHtml - many siblings and a stack overflow inside Readability', () => {
+  it('140k empty siblings in body are rejected at the first parse', async () => {
+    const html = '<html><body><p>x</p>' + '<b></b>'.repeat(140_000) + '</body></html>';
+    const parse = Readability.prototype.parse;
+    let calls = 0;
+    Readability.prototype.parse = function (...args) { calls++; return parse.apply(this, args); };
+    try {
+      await assert.rejects(extractHtml(html, { extractor: 'readability', recipes: [] }), assertTooComplex);
+    } finally {
+      Readability.prototype.parse = parse;
+    }
+    assert.equal(calls, 0);
+  });
+
+  it('a RangeError thrown by Readability.parse() becomes a 422 document_too_complex', async () => {
+    const parse = Readability.prototype.parse;
+    Readability.prototype.parse = function () { throw new RangeError('Maximum call stack size exceeded'); };
+    try {
+      await assert.rejects(
+        extractHtml('<html><body><p>Some words in a paragraph here.</p></body></html>', { extractor: 'readability', recipes: [] }),
+        assertTooComplex,
+      );
+    } finally {
+      Readability.prototype.parse = parse;
+    }
+  });
+
+  it('other errors from Readability.parse() keep their type', async () => {
+    const parse = Readability.prototype.parse;
+    Readability.prototype.parse = function () { throw new TypeError('boom'); };
+    try {
+      await assert.rejects(
+        extractHtml('<html><body><p>Some words in a paragraph here.</p></body></html>', { extractor: 'readability', recipes: [] }),
+        (err) => err instanceof TypeError && err.message === 'boom',
+      );
+    } finally {
+      Readability.prototype.parse = parse;
+    }
+  });
 });
 
 describe('parse helpers check their own input', () => {
