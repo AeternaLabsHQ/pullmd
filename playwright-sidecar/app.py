@@ -98,6 +98,55 @@ SINGLE_PAGE_INIT_SCRIPT = """
     const link = e.target && e.target.closest ? e.target.closest('a[href], area[href]') : null;
     if (link && opensNewContext(link)) e.preventDefault();
   }, true);
+
+  // Speculation rules make Chromium prefetch and prerender outside
+  // context.route(). A rules script never gets the type: setters rewrite
+  // it, and parsed ones are caught by the observer, which runs before the
+  // parser prepares the script. Rules sent as a response header are out of
+  // reach here (SECURITY.md, known residuals).
+  const isRules = (v) => String(v).trim().toLowerCase() === 'speculationrules';
+  const INERT = 'text/x-pullmd-disabled-speculationrules';
+  const Script = window.HTMLScriptElement;
+  const setAttr = Element.prototype.setAttribute;
+  if (Script) {
+    const typeProp = Object.getOwnPropertyDescriptor(Script.prototype, 'type');
+    if (typeProp && typeProp.set) {
+      Object.defineProperty(Script.prototype, 'type', {
+        ...typeProp,
+        set(v) { typeProp.set.call(this, isRules(v) ? INERT : v); },
+      });
+    }
+    Element.prototype.setAttribute = function (name, value) {
+      if (this instanceof Script && String(name).toLowerCase() === 'type' && isRules(value)) value = INERT;
+      return setAttr.call(this, name, value);
+    };
+    const setAttrNS = Element.prototype.setAttributeNS;
+    Element.prototype.setAttributeNS = function (ns, name, value) {
+      if (this instanceof Script && !ns && String(name).toLowerCase() === 'type' && isRules(value)) value = INERT;
+      return setAttrNS.call(this, ns, name, value);
+    };
+    const supports = Script.supports;
+    if (typeof supports === 'function') {
+      Script.supports = function (type) { return isRules(type) ? false : supports.call(this, type); };
+    }
+  }
+  const neuter = (node) => {
+    if (!node || node.nodeType !== 1) return;
+    const found = node.matches && node.matches('script') ? [node] : [];
+    if (node.querySelectorAll) found.push(...node.querySelectorAll('script'));
+    for (const el of found) {
+      if (isRules(el.getAttribute('type') || '')) {
+        setAttr.call(el, 'type', INERT);
+        el.remove();
+      }
+    }
+  };
+  new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type === 'attributes') neuter(r.target);
+      else r.addedNodes.forEach(neuter);
+    }
+  }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['type'] });
 })();
 """
 

@@ -128,6 +128,21 @@ def make_pages(internal: str, public: str) -> dict[str, tuple[str, str]]:
             f' "prerender": [{{"source": "list", "urls": ["{internal}/spec-prerender", "{public}/stage2.html?prerender"]}}]}}'
             '</script>',
             ""),
+        "/speculation-dynamic.html": page("", f"""
+          const rules = (tag) => JSON.stringify({{prefetch: [{{source: 'list', urls: ['{internal}/spec-' + tag]}}]}});
+          let s = document.createElement('script'); s.type = 'speculationrules'; s.textContent = rules('dyn-prop');
+          document.head.appendChild(s);
+          s = document.createElement('script'); s.setAttribute('type', 'speculationrules'); s.text = rules('dyn-attr');
+          document.body.append(s);
+          s = document.createElement('script'); s.type = 'speculationrules'; document.head.appendChild(s);
+          s.textContent = rules('dyn-late-text');
+          s = document.createElement('script'); document.head.appendChild(s); s.type = 'speculationrules';
+          s.appendChild(document.createTextNode(rules('dyn-late-type')));
+        """),
+        "/speculation-header.html": ("text/html", f"<html><body><p>{MARKER}</p><img src=\"{public}/slow\"></body></html>",
+                                     {"Speculation-Rules": '"/rules.json"'}),
+        "/rules.json": ("application/speculationrules+json",
+                        f'{{"prefetch": [{{"source": "list", "urls": ["{internal}/spec-header-prefetch"]}}]}}'),
         "/stage2.html": ("text/html", f"<html><body><script>fetch('{internal}/from-popup', {{mode: 'no-cors'}});</script></body></html>"),
         "/sw.js": (js, f"fetch('{internal}/sharedworker-fetch' + self.location.search, {{mode: 'no-cors'}});"),
         "/wp.js": (js, f"fetch('{public}/worker-public', {{mode: 'no-cors'}});"),
@@ -150,10 +165,12 @@ def attacker_handler(pages):
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
-            ctype, body = pages[path]
+            ctype, body, *extra = pages[path]
             data = body.encode()
             self.send_response(200)
             self.send_header("Content-Type", ctype)
+            for name, value in (extra[0] if extra else {}).items():
+                self.send_header(name, value)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -215,10 +232,25 @@ async def test_dedicated_worker_public_fetch_still_works():
 
 
 async def test_speculation_prefetch_does_not_reach_internal():
-    # Speculative loads run outside context.route(); they must not happen.
+    # Speculative loads run outside context.route(); the init script removes
+    # speculation-rules scripts, whether parsed or inserted by page script.
     await render_and_settle("/speculation.html")
     hits = internal_log.hits()
     assert not hits, f"internal server was reached: {hits}"
+    await render_and_settle("/speculation-dynamic.html")
+    hits = internal_log.hits()
+    assert not hits, f"internal server was reached: {hits}"
+
+
+async def test_speculation_rules_header_is_known_residual():
+    # Documented residual, see SECURITY.md "Known and accepted residuals":
+    # rules delivered by the Speculation-Rules response header never touch
+    # the DOM, so the init script cannot remove them, and Chromium sends the
+    # prefetch outside context.route(). This pins the current behaviour; if
+    # it starts failing, the residual is gone and SECURITY.md needs updating.
+    await render_and_settle("/speculation-header.html")
+    hits = internal_log.hits()
+    assert hits == ["/spec-header-prefetch"], f"residual changed: {hits}"
 
 
 async def test_page_scripts_keep_working():

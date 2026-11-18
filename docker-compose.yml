@@ -72,6 +72,7 @@ services:
       - ./data:/data
     networks:
       - pullmd-internal
+      - pullmd-render
     depends_on:
       - trafilatura
       - playwright
@@ -88,8 +89,10 @@ services:
     image: aeternalabshq/pullmd-playwright:latest
     container_name: pullmd-playwright
     restart: unless-stopped
+    # Own network shared only with pullmd: page scripts run in this browser,
+    # so it must not see trafilatura, markitdown or anything else.
     networks:
-      - pullmd-internal
+      - pullmd-render
 
   markitdown:
     image: aeternalabshq/pullmd-markitdown:latest
@@ -113,4 +116,6 @@ services:
 
 networks:
   pullmd-internal:
+    driver: bridge
+  pullmd-render:
     driver: bridge

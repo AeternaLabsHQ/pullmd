@@ -71,15 +71,20 @@ links and forms aimed at another window (`target="_blank"` and the like) do
 nothing, any other page that still appears gets no HTTP traffic (its
 WebSockets go through the same address policy as everything else), and
 `SharedWorker` is switched off in Chromium. Dedicated workers keep working
-under the same address policy.
+under the same address policy. `<script type="speculationrules">` elements
+are removed before Chromium acts on them, because speculative prefetch and
+prerender bypass the request guard. Rules sent in a `Speculation-Rules`
+response header cannot be removed that way; that residual is described in
+[SECURITY.md](../SECURITY.md).
 
 Exceptions come from pullmd: it forwards its `PULLMD_ALLOWED_HOSTS` in the
 render request as `allowedHosts` (same grammar: CIDRs, bare IPs, exact
 hostnames). Setting `PULLMD_ALLOWED_HOSTS` on the sidecar container works as a
 fallback when the request carries none.
 
-For a boundary that does not depend on the application, give the sidecar its
-own bridge network with no other service on it.
+For a boundary that does not depend on the application, the shipped compose
+files put the sidecar on its own bridge network (`pullmd-render`) that only
+pullmd joins; trafilatura and markitdown are not reachable from it.
 
 ## Resource footprint
 

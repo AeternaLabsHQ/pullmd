@@ -63,6 +63,17 @@ on the application can put the sidecar on its own bridge network with no
 other service on it; nothing in pullmd needs the sidecar to see the other
 containers. Please do not re-report it.
 
+Since 3.19.3 the sidecar's guard covers every page and worker in the render
+context, not just the rendered page. Chromium's speculative loading is the
+exception: speculation rules delivered by the `Speculation-Rules` response
+header, or rules a page script gets past the sidecar's removal of
+`<script type="speculationrules">`, can still make Chromium send GET requests
+that bypass the guard. These requests are blind: the response reaches neither
+the page nor the output. In our tests they reached loopback addresses, while
+plain-http targets on the LAN were not reached. The shipped compose files put
+the sidecar on its own network that only pullmd joins. Please do not re-report
+it.
+
 Text transcribed from Reddit post images (`PULLMD_EMBEDDED_IMAGES`, since 3.16.0)
 is untrusted third-party content and can carry prompt injection. The output
 labels it as machine-derived from the image; consumers should treat it like any
