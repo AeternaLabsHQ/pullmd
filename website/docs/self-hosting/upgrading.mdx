@@ -39,7 +39,9 @@ Keep the `proxy` network on `pullmd` if you use the Traefik file. Nothing breaks
 
 Also changed in 3.20:
 
+- Update `pullmd-playwright` together with `pullmd`. The sidecar's address policy is at revision 2, and `/api/status` reports a `pullmd-playwright` image older than 3.20.0 as `degraded` with `"error": "policy-missing"` and answers `503` until it is updated. See [Health check](/self-hosting/monitoring#health-check).
 - HTML and XML that is nested too deeply or too large returns `422` with `"code": "document_too_complex"`. This affects very long pages (over 100,000 elements or 200,000 text nodes) and spreadsheets with more than roughly 200,000 to 240,000 filled cells (fewer when the cells carry a lot of formatting). See [Output format](/reference/output-format#errors).
+- Web pages, HTML uploads and the formats PullMD reads itself are converted in worker threads. A conversion that runs longer than `PULLMD_CONVERT_TIMEOUT_MS` (60 seconds) returns `422` with `"code": "conversion_timeout"`, one that exceeds a worker's 512 MB heap returns `422` with `document_too_complex`, and when both of the `PULLMD_CONVERT_WORKERS` (2) workers are busy and 16 conversions are already waiting, a request gets `503` with `"code": "converter_busy"` and `Retry-After: 5`. The workers run inside the `pullmd` container, and each can use up to 512 MB of heap. The compose files don't pass the two variables through; see [Configuration](/reference/configuration#document-conversion).
 - `node scripts/admin.js reset-password` also revokes the user's OAuth refresh tokens, so connected apps such as claude.ai have to be connected again.
 - `POST /api/keys` and `POST /api/keys/:id/revoke` answer `403` to a browser request from another site, like `/login`.
 

@@ -167,6 +167,7 @@ in [`website/`](./website); pages are Markdown, and pull requests are welcome.
 - `lib/render-decision.js` - Predicate that decides when to fall back to Playwright (readability-fellback + thin, body-soup signature, or quality < 0.5; plus `force` / `skip` overrides).
 - `lib/playwright-client.js` - HTTP client for the Playwright sidecar with `AbortSignal` propagation for SSE-disconnect cancellation.
 - `lib/scoring.js` - Quality scoring used to pick between extractors and as a render-trigger heuristic.
+- `lib/convert-pool.js` - worker-thread pool that converts documents with a time and memory limit; `lib/parse-guard.js` - markup budgets checked before a document is parsed.
 - `lib/cache.js` - SQLite cache (`better-sqlite3`) with configurable retention (default 90 days) and 32-hex (128-bit) share ids.
 - `lib/mcp.js` - Stateless MCP server registering the three tools.
 - `lib/distrib.js` - Public-URL substitution in `/help` and `/pullmd.zip`.

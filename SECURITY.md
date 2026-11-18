@@ -76,6 +76,33 @@ plain-http targets on the LAN were not reached. The shipped compose files put
 the sidecar on its own network that only pullmd joins. Please do not re-report
 it.
 
+Since 3.20.0 the boundary for converting documents is the conversion worker
+limit, not the input budgets alone. Web pages, HTML uploads and the formats
+pullmd reads itself are converted in worker threads
+(`PULLMD_CONVERT_WORKERS`, 2 by default) with a time limit per conversion
+(`PULLMD_CONVERT_TIMEOUT_MS`, 60 s of worker time) and a 512 MB heap limit
+per worker. The markup budgets measure a document with a tokenizer, without building a
+tree, and answer `422 document_too_complex` when it is over; they run before
+the first parse and again on the normalised markup. They catch the common
+cases cheaply; what they miss is stopped by the limit. This leaves residuals, all accepted:
+
+- An attacker who can send documents can keep the workers busy with slow ones.
+  Up to 16 conversions then wait for a worker, at most 30 s each; beyond that
+  conversions answer `503 converter_busy` while the rest of the server (cache
+  hits, share links, Reddit and Hacker News conversions) keeps answering.
+- `PULLMD_CONVERT_WORKERS=0` converts in the server process and removes this
+  boundary: a pathological document can then stall or crash the whole server.
+  Do not use it on an instance others can reach.
+- The heap limit covers each worker's JavaScript heap, not Buffers. Those are
+  bounded by the existing size limits for uploads (25 MB, 10 MB for HTML),
+  fetched documents (`PULLMD_MAX_FETCH_BYTES`) and the size limit for ZIP
+  entries.
+- The old.reddit fallback page (`parseOldRedditHtml` in `lib/reddit.js`) is
+  parsed without the markup budgets by design, and Hacker News comment HTML
+  gets only the raw-input markup budgets. Both are converted on the main
+  thread, outside the worker pool, so neither has a time or memory limit
+  beyond the size the Reddit and Hacker News APIs return.
+
 Text transcribed from Reddit post images (`PULLMD_EMBEDDED_IMAGES`, since 3.16.0)
 is untrusted third-party content and can carry prompt injection. The output
 labels it as machine-derived from the image; consumers should treat it like any
