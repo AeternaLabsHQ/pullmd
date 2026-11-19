@@ -212,6 +212,22 @@ describe('file upload', () => {
       assert.deepEqual(img.requests.map((r) => r.url).sort(), ['/entity.png', '/ref.png']);
     });
 
+    it('a URL result cannot fake a held-back image with its own data-blocked-src', async (t) => {
+      const { page, img } = await setupWithImages(t, {
+        extractWeb: async (url) => webResult(url, {
+          body: `# Web page\n\n<img data-blocked-src="x" src="${img.origin}/own.png" alt="own">\n\nText.\n`,
+        }),
+      });
+      await convert(page, WEB_URL);
+      await waitForResult(page);
+      await page.locator('#view-toggle button[data-mode="rendered"]').click();
+      const shown = page.locator(`#result-rendered img[src="${img.origin}/own.png"]`);
+      assert.equal(await shown.count(), 1);
+      assert.equal(await shown.getAttribute('data-blocked-src'), null);
+      assert.equal(await page.locator('#result-rendered .blocked-image').count(), 0);
+      await until(() => img.requests.some((r) => r.url === '/own.png'));
+    });
+
     it('data: images still show, and the next URL result loads its images again', async (t) => {
       const { page, img } = await setupWithImages(t, {
         extractWeb: async (url) => webResult(url, { body: `# Web page\n\n![photo](${img.origin}/web.png)\n\nText.\n` }),

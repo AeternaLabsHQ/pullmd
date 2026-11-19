@@ -1826,19 +1826,24 @@
       // True only for the duration of a sanitize() call that must hold
       // remote images back, so the hook leaves every other result alone.
       var purifyHoldsRemoteImages = false;
-      var purifyHeldCount = 0;
+      // Set only by renderedHeldCount(): the counter its pass fills.
+      var purifyHeldCounter = null;
       // How many images the last Raw render held back.
       var rawHeldCount = 0;
       if (window.DOMPurify && typeof window.DOMPurify.addHook === 'function') {
         window.DOMPurify.addHook('afterSanitizeAttributes', function (node) {
           if (node.nodeName !== 'IMG') return;
+          // The marker is ours alone: a document must not bring its own
+          // (ALLOW_DATA_ATTR would let it through) and get swapped for a
+          // placeholder, in URL results too.
+          node.removeAttribute('data-blocked-src');
           node.setAttribute('referrerpolicy', 'no-referrer');
           var src = node.getAttribute('src');
           if (purifyHoldsRemoteImages && isRemoteImageSrc(src)) {
             // Never a src: the placeholder below shows the URL as text.
             node.removeAttribute('src');
             node.setAttribute('data-blocked-src', src);
-            purifyHeldCount++;
+            if (purifyHeldCounter) purifyHeldCounter.n++;
           }
         });
       }
@@ -2082,11 +2087,12 @@
       // parses in an inert document: this pass loads nothing.
       function renderedHeldCount() {
         if (!window.marked || !window.DOMPurify) return 0;
+        var counter = { n: 0 };
         purifyHoldsRemoteImages = true;
-        purifyHeldCount = 0;
+        purifyHeldCounter = counter;
         try { window.DOMPurify.sanitize(window.marked.parse(rawBody || ''), PURIFY_CONFIG); }
-        finally { purifyHoldsRemoteImages = false; }
-        return purifyHeldCount;
+        finally { purifyHoldsRemoteImages = false; purifyHeldCounter = null; }
+        return counter.n;
       }
 
       var remoteImagesBar = document.getElementById('remote-images-bar');
