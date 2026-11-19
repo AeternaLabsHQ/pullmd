@@ -18,7 +18,7 @@ PullMD is configured with environment variables. With Docker Compose, put them i
 | `HOST_DOMAIN` | | Traefik compose file only. Host name without scheme, used for routing. |
 | `PULLMD_TRUST_PROXY` | off (Traefik file: `1`) | When to believe `X-Forwarded-*` headers: a hop count, `true`, or a list of proxy addresses. See [Reverse proxy](/self-hosting/reverse-proxy). |
 | `TZ` | unset | Time zone, such as `Europe/Berlin`. Used for the `PULLMD_FILENAME_DATE_PREFIX` date, and for dates and times in uploaded e-mails (`.eml`, `.msg`), calendars (`.ics`) and feeds, which use `Europe/Berlin` when `TZ` is unset. The compose files don't set it; add `- TZ=Europe/Berlin` to the `pullmd` service's `environment:` list. |
-| `CACHE_DB` | `/data/cache.db` | Path of the SQLite database (cache, history, accounts). `./data/cache.db` when run without Docker. |
+| `CACHE_DB` | `/data/cache.db` | Path of the SQLite database (cache, history, accounts). `./data/cache.db` when run without Docker. In the Docker image the app user can write only under `/data`, so keep the database there. |
 
 ## Sidecars
 

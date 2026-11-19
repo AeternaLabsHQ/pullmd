@@ -169,7 +169,7 @@ components:
       type: object
       properties:
         error: { type: string, description: What went wrong. }
-        code: { type: string, description: 'Machine-readable reason, when there is one. `bot_challenge`: the site is behind a bot-protection challenge; retrying won''t help. `document_too_complex` (with `422`): the HTML or XML is nested too deeply or too large to parse, or its conversion ran out of memory. `conversion_timeout` (with `422`): the conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS`; retrying won''t help. `converter_busy` (with `503`): every conversion worker is busy; try again after `Retry-After`.' }
+        code: { type: string, description: 'Machine-readable reason, when there is one. `bot_challenge`: the site is behind a bot-protection challenge; retrying won''t help. `document_too_complex` (with `422`): the HTML or XML is nested too deeply or too large to parse, or its conversion ran out of memory. `conversion_timeout` (with `422`): the conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS`; retrying won''t help. `converter_busy` (with `503`): every conversion worker is busy; try again after `Retry-After`. `internal_error` (with `500`): an unexpected failure; the details are in the server log. `invalid_body` (with `400`): the request body is not valid JSON. `payload_too_large` (with `413`): the body is over the size limit. `bad_request` (with another `4xx`): the request was rejected before a route handled it.' }
         vendor: { type: string, description: 'With `bot_challenge`: who served the challenge, `Cloudflare` or `Bunny Shield`.' }
     Conversion:
       type: object
@@ -520,7 +520,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example: { error: File too large (max 10 MB). / Datei zu groß (max. 10 MB). }
+              example: { error: 'File too large (max 10 MB). / Datei zu groß (max. 10 MB).', code: payload_too_large }
         '422':
           description: 'The document has under 200 characters of content after extraction, as when a page loads its content with JavaScript. Or, with `"code": "document_too_complex"`, the HTML is nested more than 256 levels deep or exceeds another parse budget (100,000 elements, 200,000 text nodes, 100,000 children of one element, 200,000 attributes, 1,000 attributes on one element). With `"code": "conversion_timeout"`, the conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS`.'
           content:
@@ -630,7 +630,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example: { error: File too large (max 25 MB). / Datei zu groß (max. 25 MB). }
+              example: { error: 'File too large (max 25 MB). / Datei zu groß (max. 25 MB).', code: payload_too_large }
         '422':
           description: 'The file doesn''t match its format, such as an `.eml` file without mail headers. Or, with `"code": "document_too_complex"`, the file is nested too deeply or too large to parse, such as an OpenDocument spreadsheet with more than roughly 200,000 to 240,000 filled cells (fewer when the cells carry a lot of formatting), or its conversion ran out of memory. With `"code": "conversion_timeout"`, the conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS`.'
           content:

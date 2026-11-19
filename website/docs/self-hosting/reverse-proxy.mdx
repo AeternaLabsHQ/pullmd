@@ -71,11 +71,24 @@ pullmd.example.com {
 
 Run Caddy on the same Docker network as PullMD and set `PULLMD_TRUST_PROXY` to Caddy's network, or remove PullMD's published port and use `1`.
 
+## Response headers
+
+PullMD sets these headers on every response, including static files, the sign-in and OAuth pages and error answers:
+
+| Header | Value |
+| --- | --- |
+| `X-Content-Type-Options` | `nosniff` |
+| `X-Frame-Options` | `SAMEORIGIN` |
+| `Content-Security-Policy` | `frame-ancestors 'self'` |
+| `Referrer-Policy` | `same-origin` |
+
+A page on another origin can't show PullMD in a frame. If you embed PullMD, serve the embedding page from the same origin.
+
 ## Sign-in behind a proxy
 
 With [sign-in](/self-hosting/authentication) enabled, check the `Host` header and the referrer policy:
 
-- **The `Host` header:** Login and other form posts (`/login`, `/signup`, `/logout`, `/oauth/consent`) are accepted when the browser's `Origin`, or its `Referer` if `Origin` is absent or `null`, names the host the request arrived for or the host of `PUBLIC_URL`. Only host names are compared. Requests with neither header are accepted. If your proxy rewrites `Host` to an internal name, set `PUBLIC_URL` correctly or pass the original `Host` through. Otherwise login fails with `403 Forbidden: form posts are accepted from this site only.`
-- **No `Referrer-Policy: no-referrer`:** With that policy, browsers send `Origin: null` on form posts and PullMD refuses them. The browser default and `same-origin` both work.
+- **The `Host` header:** Login and other form posts (`/login`, `/signup`, `/logout`, `/oauth/consent`, `/settings/apps/:clientId/revoke`, `/api/keys`, `/api/keys/:id/revoke`) are accepted when the browser's `Origin`, or its `Referer` if `Origin` is absent or `null`, names the host the request arrived for or the host of `PUBLIC_URL`. Only host names are compared. Requests with neither header are accepted. If your proxy rewrites `Host` to an internal name, set `PUBLIC_URL` correctly or pass the original `Host` through. Otherwise login fails with `403 Forbidden: form posts are accepted from this site only.`
+- **No `Referrer-Policy: no-referrer`:** With that policy, browsers send `Origin: null` on form posts and PullMD refuses them. The browser default and `same-origin` both work, and PullMD itself sends `same-origin`, so don't override it in the proxy.
 
 The session cookie is marked `Secure` when the request arrived over HTTPS or `PUBLIC_URL` starts with `https://`. Browsers then drop it on plain `http://` LAN addresses, so open PullMD through its HTTPS address (or `localhost`) to sign in.

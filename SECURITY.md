@@ -103,6 +103,18 @@ they miss is stopped by the limit. This leaves residuals, all accepted:
   thread, outside the worker pool, so neither has a time or memory limit
   beyond the size the Reddit and Hacker News APIs return.
 
+The conversion cache is keyed by URL and shared by all accounts on an
+instance. A URL that another account converted within the last hour is
+answered from the cache without contacting the source, so someone who already
+knows an exact URL can learn that it was converted in that time. A request
+that bypasses the cache (`nocache=1`, for one) replaces the shared entry for
+everyone: a share link created from it keeps its id and then serves the newer
+conversion. The caller has to know the exact URL and can only store what that
+URL serves to the server. Each account's history stays scoped to what that
+account fetched. Keying the cache per account would remove this and the
+cache's deduplication with it; it is an accepted residual. Please do not
+re-report it.
+
 Text transcribed from Reddit post images (`PULLMD_EMBEDDED_IMAGES`, since 3.16.0)
 is untrusted third-party content and can carry prompt injection. The output
 labels it as machine-derived from the image; consumers should treat it like any

@@ -48,6 +48,13 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
 
     Every conversion worker is busy and the queue is full (16 conversions), or a conversion waited 30 seconds for a worker. The response carries `Retry-After: 5`. Try again shortly. An async file job reports it as a job with `status: "error"` and `httpStatus: 503`, and the job status response carries the same `Retry-After`. If only the automatic browser render of a page can't get a worker, PullMD answers with the static result and doesn't cache it; with `render=force` or `extractor=playwright` you get this error. If it happens often, raise `PULLMD_CONVERT_WORKERS`; see [Configuration](/reference/configuration#document-conversion).
   </Accordion>
+  <Accordion title="500: internal_error">
+    ```json
+    { "error": "Internal server error. / Interner Serverfehler.", "code": "internal_error" }
+    ```
+
+    PullMD hit an unexpected failure. The answer carries no details; the error and its stack are in the server log. Run `docker compose logs pullmd` to read them.
+  </Accordion>
   <Accordion title="401: Authentication required">
     Sign-in is on and the request had no valid credentials. Send an API key as `Authorization: Bearer pmd_…` (create one under **Settings** in the web app). A key from another instance, or one that was revoked, gives the same error. See [Authentication](/self-hosting/authentication#api-keys).
   </Accordion>

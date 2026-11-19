@@ -86,6 +86,10 @@ The downloaded compose file uses `:latest` on every image. To pin all four to on
 sed -i.bak 's/:latest/:3.19.2/' docker-compose.yml
 ```
 
+## Container privileges
+
+The compose files start all four containers with `no-new-privileges` and without any Linux capabilities. Only `pullmd` keeps four: `CHOWN`, `DAC_READ_SEARCH`, `SETUID` and `SETGID`. Its entrypoint uses them to fix the ownership of `/data` and then runs the server as the unprivileged `app` user. In the image `/app` belongs to root, so the app can write only under `/data`. Keep the database there, as `CACHE_DB=/data/cache.db` does. To use the same settings in your own compose file, see [Upgrading](/self-hosting/upgrading#to-320-or-later-browser-sidecar-network-and-document-limits).
+
 ## Run a second instance
 
 The compose file sets a fixed `container_name` on each service (`pullmd`, `pullmd-trafilatura`, `pullmd-playwright` and `pullmd-markitdown`), so a second copy fails with a name conflict. To run another instance, delete those lines, give the stack a project name with `-p`, and set a different `PORT` in its `.env`:

@@ -46,6 +46,8 @@ Run through these steps before every release so nothing ships half-finished.
 
 In the web app, drag a file onto the page or use the file picker.
 
+The web app doesn't load images that point to another server when it shows an uploaded file's result, such as an e-mail or a saved page. A bar above the result says so and offers **Load images**, which loads them for that result. The Raw view shows such an image as its Markdown text, and the Rendered view as its alt text and address. `data:` images and images from the instance itself aren't held back, and the web app requests the images in a result without a referrer.
+
 ## Leave the app during a long conversion
 
 Audio transcription, OCR and image descriptions can take longer than a browser keeps a request open. With `async=1`, PullMD takes the upload, answers at once with a job id, and converts the file in the background. You collect the result with a second request, so the connection doesn't have to stay open while the conversion runs.
