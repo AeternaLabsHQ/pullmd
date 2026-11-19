@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import fs from 'node:fs';
+import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { createCache } from '../lib/cache.js';
 import { createAuth, hashPassword } from '../lib/auth.js';
 import { createOAuthStore } from '../lib/oauth/store.js';
@@ -48,10 +51,10 @@ function noStdinError() {
   const err = new Error(
     'Could not read a password: stdin is not connected.\n' +
     'Run this with a terminal attached:\n' +
-    '  docker compose exec pullmd node scripts/admin.js ...\n' +
-    '  docker exec -it <container> node scripts/admin.js ...\n' +
+    '  docker compose exec -u app pullmd node scripts/admin.js ...\n' +
+    '  docker exec -it -u app <container> node scripts/admin.js ...\n' +
     'or pipe the password in:\n' +
-    '  echo "thepassword" | docker exec -i <container> node scripts/admin.js ...'
+    '  echo "thepassword" | docker exec -i -u app <container> node scripts/admin.js ...'
   );
   err.code = 'ENOSTDIN';
   return err;
@@ -165,9 +168,52 @@ async function main() {
   process.exit(1);
 }
 
+/**
+ * Whether and how the CLI hands itself over to the app user. In the container
+ * the database belongs to `app`, and the container has no capability to write
+ * files it does not own, so a run started as root (`docker compose exec`
+ * without `-u app`) re-execs itself through su-exec. Returns null to run
+ * in-process: not root, no app user (root outside the container), or already
+ * re-exec'd.
+ */
+export function reexecCommand({ uid, hasAppUser, env, execPath, execArgv, argv }) {
+  if (uid !== 0 || !hasAppUser || env.PULLMD_ADMIN_REEXEC === '1') return null;
+  return {
+    file: 'su-exec',
+    args: ['app:app', execPath, ...execArgv, ...argv.slice(1)],
+    env: { ...env, PULLMD_ADMIN_REEXEC: '1' },
+  };
+}
+
+function appUserExists() {
+  try {
+    return /^app:/m.test(fs.readFileSync('/etc/passwd', 'utf8'));
+  } catch {
+    return false;
+  }
+}
+
+/** Runs the re-exec if one is due; returns false to carry on in-process. */
+function maybeReexec() {
+  const cmd = reexecCommand({
+    uid: process.getuid?.(),
+    hasAppUser: appUserExists(),
+    env: process.env,
+    execPath: process.execPath,
+    execArgv: process.execArgv,
+    argv: process.argv,
+  });
+  if (!cmd) return false;
+  const r = spawnSync(cmd.file, cmd.args, { stdio: 'inherit', env: cmd.env });
+  if (r.error?.code === 'ENOENT') return false; // no su-exec on this system
+  if (r.error) throw r.error;
+  if (r.signal) process.exit(128 + (os.constants.signals[r.signal] || 0));
+  process.exit(r.status ?? 1);
+}
+
 const isDirectRun = import.meta.url === `file://${process.argv[1]}`
   || process.argv[1]?.endsWith('admin.js');
-if (isDirectRun) {
+if (isDirectRun && !maybeReexec()) {
   main().catch((err) => {
     if (err?.code === 'ENOSTDIN') {
       // An operator error, not a crash - a stack trace would only bury the fix.

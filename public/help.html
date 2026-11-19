@@ -1090,10 +1090,10 @@ claude mcp add --transport http pullmd __PULLMD_URL__/mcp \
             <span lang="de">Kopieren</span><span lang="en">Copy</span>
           </button>
         </div>
-        <pre id="auth-users">docker compose exec pullmd node scripts/admin.js list-users
-docker compose exec pullmd node scripts/admin.js create-user someone@example.com
-docker compose exec pullmd node scripts/admin.js make-admin someone@example.com
-docker compose exec pullmd node scripts/admin.js reset-password someone@example.com</pre>
+        <pre id="auth-users">docker compose exec -u app pullmd node scripts/admin.js list-users
+docker compose exec -u app pullmd node scripts/admin.js create-user someone@example.com
+docker compose exec -u app pullmd node scripts/admin.js make-admin someone@example.com
+docker compose exec -u app pullmd node scripts/admin.js reset-password someone@example.com</pre>
       </div>
       <ul class="doc-list" lang="de">
         <li><code>list-users</code> - alle Konten mit ID, E-Mail, Admin-Flag und Anlagedatum.</li>
@@ -1107,8 +1107,8 @@ docker compose exec pullmd node scripts/admin.js reset-password someone@example.
         <li><code>make-admin &lt;email&gt;</code> - promotes an existing account to admin. Deliberately a separate step.</li>
         <li><code>reset-password &lt;email&gt;</code> - sets a new password, drops all of that user's open sessions and revokes the refresh tokens of their OAuth-connected apps. API keys stay.</li>
       </ul>
-      <p class="muted" lang="de">Ohne Docker läuft derselbe Befehl als <code>node scripts/admin.js …</code> im Verzeichnis der Instanz. <strong>Wichtig:</strong> <code>create-user</code> und <code>reset-password</code> lesen das Passwort von der Standardeingabe, es braucht also <code>docker compose exec</code> oder <code>docker exec -it</code>. Ein <code>docker exec</code> ohne <code>-i</code> hängt die Eingabe nicht an; der Befehl bricht dann mit einer Meldung und Code 2 ab und nennt die funktionierenden Aufrufe. Alternativ lässt sich das Passwort hineinpipen: <code>echo "…" | docker exec -i &lt;container&gt; node scripts/admin.js …</code>.</p>
-      <p class="muted" lang="en">Without Docker the same command runs as <code>node scripts/admin.js …</code> in the instance's directory. <strong>Important:</strong> <code>create-user</code> and <code>reset-password</code> read the password from standard input, so use <code>docker compose exec</code> or <code>docker exec -it</code>. A plain <code>docker exec</code> without <code>-i</code> does not attach input; the command then aborts with a message and exit code 2 that names the invocations which do work. You can also pipe the password in: <code>echo "…" | docker exec -i &lt;container&gt; node scripts/admin.js …</code>.</p>
+      <p class="muted" lang="de">Ohne Docker läuft derselbe Befehl als <code>node scripts/admin.js …</code> im Verzeichnis der Instanz. <strong>Wichtig:</strong> <code>create-user</code> und <code>reset-password</code> lesen das Passwort von der Standardeingabe, es braucht also <code>docker compose exec</code> oder <code>docker exec -it</code>. <code>-u app</code> führt den Befehl als den Benutzer aus, dem die Datenbank gehört; ohne <code>-u app</code> wechselt das Skript im Container selbst zu diesem Benutzer. Ein <code>docker exec</code> ohne <code>-i</code> hängt die Eingabe nicht an; der Befehl bricht dann mit einer Meldung und Code 2 ab und nennt die funktionierenden Aufrufe. Alternativ lässt sich das Passwort hineinpipen: <code>echo "…" | docker exec -i -u app &lt;container&gt; node scripts/admin.js …</code>.</p>
+      <p class="muted" lang="en">Without Docker the same command runs as <code>node scripts/admin.js …</code> in the instance's directory. <strong>Important:</strong> <code>create-user</code> and <code>reset-password</code> read the password from standard input, so use <code>docker compose exec</code> or <code>docker exec -it</code>. <code>-u app</code> runs the command as the user that owns the database; without <code>-u app</code> the script switches to that user itself inside the container. A plain <code>docker exec</code> without <code>-i</code> does not attach input; the command then aborts with a message and exit code 2 that names the invocations which do work. You can also pipe the password in: <code>echo "…" | docker exec -i -u app &lt;container&gt; node scripts/admin.js …</code>.</p>
     </section>
 
     <!-- ===================================================== -->

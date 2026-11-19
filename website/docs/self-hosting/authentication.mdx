@@ -119,7 +119,7 @@ PULLMD_ALLOW_SIGNUP=false
 
 ## Admin commands
 
-Run these inside the container. They read the password from standard input, so the command needs an interactive terminal (`docker compose exec`) or a pipe.
+Run these inside the container as the `app` user (`-u app`), which owns the database. Started as root, the script switches to that user itself. They read the password from standard input, so the command needs an interactive terminal (`docker compose exec`) or a pipe.
 
 | Command | Action |
 | --- | --- |
@@ -131,13 +131,13 @@ Run these inside the container. They read the password from standard input, so t
 To reset a password from a terminal:
 
 ```bash
-docker compose exec pullmd node scripts/admin.js reset-password you@example.com
+docker compose exec -u app pullmd node scripts/admin.js reset-password you@example.com
 ```
 
 To run a command from a script, pipe the password in:
 
 ```bash
-echo "new-password" | docker exec -i pullmd node scripts/admin.js create-user someone@example.com
+echo "new-password" | docker exec -i -u app pullmd node scripts/admin.js create-user someone@example.com
 ```
 
 Without `-i`, the command prints a usage hint and exits with code 2. Passwords need at least 8 characters, `create-user` makes a non-admin account, and `reset-password` also ends that user's sessions and revokes the refresh tokens of their [connected apps](#connected-apps). API keys stay. Emails need a dotted domain. The 8-character minimum also applies to signup, but PullMD doesn't check the first admin's `PULLMD_ADMIN_PASSWORD`.

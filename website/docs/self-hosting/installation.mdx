@@ -88,7 +88,7 @@ sed -i.bak 's/:latest/:3.19.2/' docker-compose.yml
 
 ## Container privileges
 
-The compose files start all four containers with `no-new-privileges` and without any Linux capabilities. Only `pullmd` keeps four: `CHOWN`, `DAC_READ_SEARCH`, `SETUID` and `SETGID`. Its entrypoint uses them to fix the ownership of `/data` and then runs the server as the unprivileged `app` user. In the image `/app` belongs to root, so the app can write only under `/data`. Keep the database there, as `CACHE_DB=/data/cache.db` does. To use the same settings in your own compose file, see [Upgrading](/self-hosting/upgrading#to-320-or-later-browser-sidecar-network-and-document-limits).
+The compose files start all four containers with `no-new-privileges` and without any Linux capabilities. Only `pullmd` keeps four: `CHOWN`, `DAC_READ_SEARCH`, `SETUID` and `SETGID`. Its entrypoint uses them to fix the ownership of `/data` and then runs the server as the unprivileged `app` user. In the image `/app` belongs to root, so the app can write only under `/data`. Keep the database there, as `CACHE_DB=/data/cache.db` does. Run the [admin commands](/self-hosting/authentication#admin-commands) as `app` too, with `docker compose exec -u app`. To use the same settings in your own compose file, see [Upgrading](/self-hosting/upgrading#to-320-or-later-browser-sidecar-network-and-document-limits).
 
 ## Run a second instance
 

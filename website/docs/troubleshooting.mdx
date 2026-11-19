@@ -143,7 +143,7 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     Check that the instance is reachable from the internet on HTTPS, that `OAUTH_JWT_SECRET` and `PUBLIC_URL` are set, and that sign-in is enabled. A firewall or web-application-firewall rule that blocks some countries or networks can stop claude.ai before the request reaches PullMD, so check your proxy's logs too.
   </Accordion>
   <Accordion title="The admin password in .env doesn't work">
-    The admin is created from `.env` only on the first start. Later changes are ignored. Reset it with `docker compose exec pullmd node scripts/admin.js reset-password you@example.com`.
+    The admin is created from `.env` only on the first start. Later changes are ignored. Reset it with `docker compose exec -u app pullmd node scripts/admin.js reset-password you@example.com`.
   </Accordion>
 </AccordionGroup>
 

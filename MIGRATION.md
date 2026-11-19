@@ -54,6 +54,8 @@ Then run `docker compose up -d`. Services you renamed or added need the same tre
 
 Because the app can no longer write under `/app`, keep everything it writes under `/data`: a `CACHE_DB` that points into `/app` stops working. The compose files set `CACHE_DB=/data/cache.db` and mount `./data` there.
 
+Run the admin commands as the app user, which owns the database: `docker compose exec -u app pullmd node scripts/admin.js ...`. Without the dropped capabilities root could write the database; with them it cannot, so `scripts/admin.js` started as root switches to the app user itself.
+
 ## Other changes to check
 
 - **`422 document_too_complex`.** HTML and XML that is nested too deeply or has too many elements, text nodes or attributes is refused before parsing. Ordinary pages stay far below the budgets; a very long page (over 100,000 elements or 200,000 text nodes) or a spreadsheet with more than roughly 200,000 to 240,000 filled cells (fewer when the cells carry a lot of formatting) now gets `422` where it used to convert slowly. The exact budgets are in `CHANGELOG.md`.
@@ -286,7 +288,7 @@ If you were using the Caddy workaround (or any other reverse-proxy bearer-token 
 If the admin loses their password, the env vars do **not** override the stored hash. Use the CLI:
 
 ```
-docker compose exec pullmd node scripts/admin.js reset-password admin@example.com
+docker compose exec -u app pullmd node scripts/admin.js reset-password admin@example.com
 ```
 
 You'll be prompted for the new password. All existing sessions for that user are invalidated.
