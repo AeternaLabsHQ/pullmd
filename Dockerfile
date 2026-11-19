@@ -40,7 +40,9 @@ COPY . .
 
 RUN apk add --no-cache su-exec
 
-RUN mkdir -p /data && chown -R app:app /app /data
+# Only /data belongs to the app user. /app stays owned by root, so a code
+# execution bug in the server cannot rewrite the application files.
+RUN mkdir -p /data && chown -R app:app /data
 
 # The entrypoint script runs as root, fixes permissions on bind-mounted
 # volumes that the Docker daemon may have created as root, then drops to
