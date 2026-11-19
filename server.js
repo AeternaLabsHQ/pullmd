@@ -169,6 +169,30 @@ export function parseCommentDepth(value) {
 
 export function createApp(overrides = {}) {
   const app = express();
+  // First middleware, so static files, auth pages, OAuth routes and error
+  // answers all carry them. same-origin (not no-referrer) as the referrer
+  // policy: with no-referrer browsers send `Origin: null` on same-origin
+  // POSTs and the same-origin checks on /login and /api/keys would refuse
+  // them. Express's own 404/error page (finalhandler) sets
+  // `Content-Security-Policy: default-src 'none'`; setHeader is wrapped so
+  // any CSP written later keeps its directives and gains frame-ancestors.
+  app.use((req, res, next) => {
+    const setHeader = res.setHeader;
+    res.setHeader = function (name, value) {
+      if (typeof name === 'string' && name.toLowerCase() === 'content-security-policy'
+        && !/frame-ancestors/i.test(String(value))) {
+        value = `${value}; frame-ancestors 'self'`;
+      }
+      return setHeader.call(this, name, value);
+    };
+    res.set({
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Content-Security-Policy': "frame-ancestors 'self'",
+      'Referrer-Policy': 'same-origin',
+    });
+    next();
+  });
   // Before any route: req.ip / req.secure (rate limiters, cookie flags)
   // depend on it.
   applyTrustProxy(app, overrides.trustProxy ?? parseTrustProxy(process.env.PULLMD_TRUST_PROXY));
