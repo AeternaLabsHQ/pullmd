@@ -195,6 +195,23 @@ describe('file upload', () => {
       assert.equal(await rendered.getAttribute('referrerpolicy'), 'no-referrer');
     });
 
+    it('are held back in forms only marked recognises (reference links, entity-encoded tags)', async (t) => {
+      const { page, img } = await setupWithImages(t);
+      const ref = `${img.origin}/ref.png`;
+      const encoded = `&#104;ttp://127.0.0.1:${new URL(img.origin).port}/entity.png`;
+      await pick(page, 'notes.md', 'text/markdown', `Intro\n\n![a ref][1]\n\n<img src="${encoded}" alt="raw">\n\n[1]: ${ref}\n`);
+      await waitForResult(page);
+      await page.locator('#view-toggle button[data-mode="rendered"]').click();
+      await page.waitForTimeout(500);
+      assert.equal(img.requests.length, 0);
+      assert.equal(await page.locator('#result-rendered img').count(), 0);
+      assert.equal(await bar(page).isVisible(), true);
+
+      await bar(page).getByRole('button', { name: 'Bilder laden' }).click();
+      await until(() => img.requests.length === 2);
+      assert.deepEqual(img.requests.map((r) => r.url).sort(), ['/entity.png', '/ref.png']);
+    });
+
     it('data: images still show, and the next URL result loads its images again', async (t) => {
       const { page, img } = await setupWithImages(t, {
         extractWeb: async (url) => webResult(url, { body: `# Web page\n\n![photo](${img.origin}/web.png)\n\nText.\n` }),

@@ -1826,6 +1826,9 @@
       // True only for the duration of a sanitize() call that must hold
       // remote images back, so the hook leaves every other result alone.
       var purifyHoldsRemoteImages = false;
+      var purifyHeldCount = 0;
+      // How many images the last Raw render held back.
+      var rawHeldCount = 0;
       if (window.DOMPurify && typeof window.DOMPurify.addHook === 'function') {
         window.DOMPurify.addHook('afterSanitizeAttributes', function (node) {
           if (node.nodeName !== 'IMG') return;
@@ -1835,6 +1838,7 @@
             // Never a src: the placeholder below shows the URL as text.
             node.removeAttribute('src');
             node.setAttribute('data-blocked-src', src);
+            purifyHeldCount++;
           }
         });
       }
@@ -2002,6 +2006,7 @@
 
       function renderMarkdownWithImages(container, text) {
         container.innerHTML = '';
+        rawHeldCount = 0;
         var lines = text.split('\n');
         var imgPattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
         for (var i = 0; i < lines.length; i++) {
@@ -2018,6 +2023,7 @@
             if (blockRemoteImages && isRemoteImageSrc(match[2])) {
               // Held back: the markdown stays visible as plain text.
               lineSpan.appendChild(document.createTextNode(match[0]));
+              rawHeldCount++;
               lastIndex = imgPattern.lastIndex;
               continue;
             }
@@ -2070,15 +2076,17 @@
         setCharsBadge(rawMarkdown.length);
       }
 
-      // Does the document reference a remote image, as markdown or as a raw
-      // <img> tag that the Rendered view would turn into one?
-      function hasRemoteImages(md) {
-        var re = /!\[[^\]]*\]\(([^)]+)\)|<img\b[^>]*?\bsrc\s*=\s*["']?([^"'\s>]+)/gi;
-        var m;
-        while ((m = re.exec(md)) !== null) {
-          if (isRemoteImageSrc(m[1] || m[2])) return true;
-        }
-        return false;
+      // How many images the Rendered view holds back for the current body.
+      // The same marked + DOMPurify pass the view uses, so every form marked
+      // knows (reference links, entities in raw tags) is counted. DOMPurify
+      // parses in an inert document: this pass loads nothing.
+      function renderedHeldCount() {
+        if (!window.marked || !window.DOMPurify) return 0;
+        purifyHoldsRemoteImages = true;
+        purifyHeldCount = 0;
+        try { window.DOMPurify.sanitize(window.marked.parse(rawBody || ''), PURIFY_CONFIG); }
+        finally { purifyHoldsRemoteImages = false; }
+        return purifyHeldCount;
       }
 
       var remoteImagesBar = document.getElementById('remote-images-bar');
@@ -2095,11 +2103,13 @@
         var parts = splitFrontmatter(text);
         rawFrontmatter = parts.frontmatter;
         rawBody = parts.body;
-        blockRemoteImages = Boolean(opts && opts.blockRemoteImages) && hasRemoteImages(text);
-        remoteImagesBar.hidden = !blockRemoteImages;
+        blockRemoteImages = Boolean(opts && opts.blockRemoteImages);
         currentShareId = shareId || '';
         currentSuggestedName = suggestedName || '';
         applyFrontmatterView();
+        // The block holds for every upload; the bar only shows when an image
+        // was actually held back by either view.
+        remoteImagesBar.hidden = !(blockRemoteImages && (rawHeldCount > 0 || renderedHeldCount() > 0));
         resultContainer.classList.add('visible');
         // Bring the result into view when triggered from a list entry deeper
         // down the page (history / archive). No-op when already scrolled top.
