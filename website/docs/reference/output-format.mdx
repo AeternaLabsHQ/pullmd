@@ -167,7 +167,7 @@ Errors are JSON with an `error` message for every `format`:
 { "error": "Missing required parameter: url" }
 ```
 
-Errors that reach PullMD's central error handler also carry a `code`: an unexpected failure, a body that isn't valid JSON, a body over the size limit and other rejected requests. None of them carries a stack trace. Other errors carry a `code` only where the status table below names one:
+Errors that reach PullMD's central error handler also carry a `code`: an unexpected failure, a body that isn't valid JSON, a body over the size limit and other rejected requests. None of them carries a stack trace:
 
 | `code` | Status | `error` |
 | --- | --- | --- |
@@ -175,6 +175,8 @@ Errors that reach PullMD's central error handler also carry a `code`: an unexpec
 | `invalid_body` | `400` | `Invalid request body. / Ungültiger Anfrage-Body.` |
 | `payload_too_large` | `413` | `Request body too large. / Anfrage zu groß.` On `POST /api/html` it is `File too large (max 10 MB). / Datei zu groß (max. 10 MB).`, on `POST /api/file` `File too large (max 25 MB). / Datei zu groß (max. 25 MB).` |
 | `bad_request` | other `4xx` | `Bad request. / Ungültige Anfrage.` |
+
+Other errors carry a `code` only where the status table below names one.
 
 `/api/stream` is the exception: once the event stream has started, an error arrives as an `error` event whose data holds a `message`, plus a `code` for `document_too_complex`, `conversion_timeout` and `converter_busy`.
 

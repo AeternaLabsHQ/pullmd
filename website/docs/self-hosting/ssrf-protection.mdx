@@ -15,7 +15,7 @@ Before every fetch, PullMD resolves the host name and checks each address. It re
 - Carrier-grade NAT (`100.64.0.0/10`), including Alibaba Cloud's metadata address `100.100.100.200`
 - `0.0.0.0/8`, multicast, reserved and documentation ranges
 - IPv6 loopback, link-local, multicast and unique-local (`fc00::/7`, which covers AWS's IPv6 metadata address `fd00:ec2::254`)
-- Any of the blocked IPv4 ranges written in IPv6 form (IPv4-mapped, IPv4-translated, NAT64 under `64:ff9b::/96` and anywhere in the local-use range `64:ff9b:1::/48`, 6to4, IPv4-compatible)
+- Any of the blocked IPv4 ranges written in IPv6 form (IPv4-mapped, IPv4-translated, NAT64 with the IPv4 address in the low 32 bits, under `64:ff9b::/96` or any address in the local-use range `64:ff9b:1::/48`, 6to4, IPv4-compatible)
 
 This request targets the cloud metadata address:
 
