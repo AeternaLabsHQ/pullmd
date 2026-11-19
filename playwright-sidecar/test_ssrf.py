@@ -46,6 +46,13 @@ def test_blocked_v6_and_transition_addresses():
         assert not is_blocked_ip(ip), ip
 
 
+def test_nat64_local_use_and_ipv4_translated():
+    for ip in ("64:ff9b:1::7f00:1", "64:ff9b:1::a9fe:a9fe", "::ffff:0:7f00:1", "::ffff:0:a00:1"):
+        assert is_blocked_ip(ip), ip
+    for ip in ("64:ff9b:1::808:808", "::ffff:0:808:808"):
+        assert not is_blocked_ip(ip), ip
+
+
 def test_unparseable_is_blocked():
     assert is_blocked_ip("not-an-ip")
     assert is_blocked_ip("")

@@ -52,8 +52,9 @@ def _build_blocklist() -> list[IPNetwork]:
     for addr, prefix in BLOCKED_V6:
         nets.append(ipaddress.ip_network(f"{addr}/{prefix}", strict=False))
 
-    # Blocked v4 ranges reached via IPv6 transition addressing (NAT64, 6to4,
-    # IPv4-compatible). Per blocked v4 subnet add the matching embedded v6
+    # Blocked v4 ranges reached via IPv6 transition addressing (NAT64,
+    # NAT64 local-use, IPv4-translated, 6to4, IPv4-compatible). Per blocked v4
+    # subnet add the matching embedded v6
     # subnet, so a NAT64 host still resolves legit public v4 while
     # metadata/private v4 stays blocked in every form. Same construction as
     # buildBlockList() in lib/ssrf.js.
@@ -63,6 +64,11 @@ def _build_blocklist() -> list[IPNetwork]:
         lo = f"{(c << 8) | d:x}"
         # NAT64 well-known prefix 64:ff9b::/96 - v4 in the low 32 bits
         nets.append(ipaddress.ip_network(f"64:ff9b::{hi}:{lo}/{96 + prefix}", strict=False))
+        # NAT64 local-use prefix 64:ff9b:1::/48 (RFC 8215) - v4 in the low 32 bits
+        nets.append(ipaddress.ip_network(f"64:ff9b:1::{hi}:{lo}/{96 + prefix}", strict=False))
+        # IPv4-translated ::ffff:0:0:0/96 (RFC 2765 SIIT) - v4 in the low 32 bits.
+        # Not IPv4-mapped (::ffff:a.b.c.d): a 16-bit zero group sits between.
+        nets.append(ipaddress.ip_network(f"::ffff:0:{hi}:{lo}/{96 + prefix}", strict=False))
         # IPv4-compatible ::/96 (deprecated) - v4 in the low 32 bits
         nets.append(ipaddress.ip_network(f"::{hi}:{lo}/{96 + prefix}", strict=False))
         # 6to4 2002::/16 - v4 in bits 16-48

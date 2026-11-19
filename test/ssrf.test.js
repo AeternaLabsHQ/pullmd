@@ -46,6 +46,26 @@ test('isBlockedIp allows legit public v4 embedded in IPv6 transition addressing'
   }
 });
 
+test('isBlockedIp flags blocked v4 ranges in NAT64 local-use and IPv4-translated addresses', () => {
+  for (const ip of [
+    '64:ff9b:1::7f00:1', // RFC 8215 local-use NAT64 of 127.0.0.1
+    '64:ff9b:1::a9fe:a9fe', // RFC 8215 local-use NAT64 of 169.254.169.254 (metadata)
+    '::ffff:0:7f00:1', // IPv4-translated (SIIT) of 127.0.0.1
+    '::ffff:0:a00:1', // IPv4-translated of 10.0.0.1 (private)
+  ]) {
+    assert.equal(isBlockedIp(ip), true, `${ip} should be blocked`);
+  }
+});
+
+test('isBlockedIp allows legit public v4 in NAT64 local-use and IPv4-translated addresses', () => {
+  for (const ip of [
+    '64:ff9b:1::808:808', // RFC 8215 local-use NAT64 of 8.8.8.8 (public)
+    '::ffff:0:808:808', // IPv4-translated of 8.8.8.8 (public)
+  ]) {
+    assert.equal(isBlockedIp(ip), false, `${ip} should be allowed`);
+  }
+});
+
 test('isBlockedIp handles dotted-quad textual form of NAT64 metadata embedding', () => {
   assert.equal(isBlockedIp('64:ff9b::169.254.169.254'), true);
 });
