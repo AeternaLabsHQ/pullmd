@@ -38,6 +38,10 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 
+# Readable for every user regardless of the file modes in the build context
+# (the app user must read /app, but owns none of it). Ownership stays root.
+RUN chmod -R a+rX /app
+
 RUN apk add --no-cache su-exec
 
 # Only /data belongs to the app user. /app stays owned by root, so a code
