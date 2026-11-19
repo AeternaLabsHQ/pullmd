@@ -1198,7 +1198,7 @@ paths:
       tags: [Instance]
       operationId: getStats
       summary: Get extraction stats
-      description: Counts, average quality and latency per extractor over a time window. The per-domain lists (`lowQualityDomains`, `fallbackByDomain`) are included only for the admin, or for everyone when sign-in is off and public history is on.
+      description: 'Counts, average quality and latency per extractor over a time window. The answer is for the admin, or for everyone when sign-in is off and public history is on. Other callers get `200` with only `window`.'
       security: []
       parameters:
         - name: window
@@ -1208,7 +1208,7 @@ paths:
           example: '-30 days'
       responses:
         '200':
-          description: Extraction stats.
+          description: 'Extraction stats. Callers who may not see the global history get only `window`.'
           content:
             application/json:
               schema:
@@ -1230,7 +1230,7 @@ paths:
                         avgMs: { type: integer, nullable: true, description: 'Average time per request, in milliseconds.' }
                   lowQualityDomains:
                     type: array
-                    description: 'Up to 20 domains whose fresh (not cached) results scored below 0.4, most frequent first. Only for the admin, or everyone when sign-in is off and public history is on. Absent when `total` is `0`.'
+                    description: 'Up to 20 domains whose fresh (not cached) results scored below 0.4, most frequent first. Absent when `total` is `0`.'
                     items:
                       type: object
                       properties:
@@ -1239,7 +1239,7 @@ paths:
                         avgQuality: { type: number, description: Their average quality score. }
                   fallbackByDomain:
                     type: array
-                    description: 'Up to 20 domains where extraction fell back, most frequent first. Counts results from `readability-fallback` and results whose extractor reason contains `fell back` or `readability thin`. Same visibility as `lowQualityDomains`. Absent when `total` is `0`.'
+                    description: 'Up to 20 domains where extraction fell back, most frequent first. Counts results from `readability-fallback` and results whose extractor reason contains `fell back` or `readability thin`. Absent when `total` is `0`.'
                     items:
                       type: object
                       properties:
@@ -1259,11 +1259,11 @@ paths:
       tags: [Instance]
       operationId: getStorage
       summary: Get cache size
-      description: 'Size of the cache, how many rows will expire soon, and cache traffic over the last 7 days. The hit rate is `cacheHits7d / requests7d`. The 7-day counts come from the request log, which keeps entries after their cache rows are deleted, so they can be non-zero while `total` is `0`.'
+      description: 'Size of the cache, how many rows will expire soon, and cache traffic over the last 7 days. The hit rate is `cacheHits7d / requests7d`. The 7-day counts come from the request log, which keeps entries after their cache rows are deleted, so they can be non-zero while `total` is `0`. The full answer is for the admin, or for everyone when sign-in is off and public history is on. Other callers get `200` with only `retentionDays`.'
       security: []
       responses:
         '200':
-          description: Cache statistics.
+          description: 'Cache statistics. Callers who may not see the global history get only `retentionDays`.'
           content:
             application/json:
               schema:

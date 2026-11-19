@@ -273,6 +273,10 @@ export function createApp(overrides = {}) {
   // admin-only. A regular user's delete only unlinks the entry from their own
   // history (`user_fetches`); the shared row and its share link survive.
   const isGlobalScope = (req) => !auth || auth.mode === 'disabled' || !!req.user?.is_admin;
+  // Counts and sizes over the whole instance, and the per-domain lists, go
+  // only to callers who may see the global history: the admin, or anyone
+  // when auth is off and public history is on.
+  const mayReadInstanceStats = (req) => isGlobalScope(req) && (!!req.user || !disablePublicHistory);
 
   // Templated help page + skill zip (PUBLIC_URL substitution).
   // Must come BEFORE express.static so they win over the raw files in /public.
@@ -1338,22 +1342,18 @@ export function createApp(overrides = {}) {
     });
   });
 
+  // Both routes stay ungated and answer 200 to everyone: the PWA pings
+  // /api/storage every 30 s for its status LED. Callers who may not read the
+  // instance stats get the short answer without touching the database.
   app.get('/api/stats', (req, res) => {
-    if (!cache) return res.json({ total: 0, window: '-7 days' });
-    const window = req.query.window || '-7 days';
-    const stats = cache.extractionStats(window);
-    // The per-domain lists name the sites that were fetched, across all
-    // users. They are included only for callers who may see the global
-    // history: the admin, or anyone when auth is off and public history is on.
-    const showDomains = isGlobalScope(req) && (!!req.user || !disablePublicHistory);
-    if (!showDomains) {
-      delete stats.lowQualityDomains;
-      delete stats.fallbackByDomain;
-    }
-    res.json(stats);
+    const window = typeof req.query.window === 'string' && req.query.window ? req.query.window : '-7 days';
+    if (!mayReadInstanceStats(req)) return res.json({ window });
+    if (!cache) return res.json({ total: 0, window });
+    res.json(cache.extractionStats(window));
   });
 
   app.get('/api/storage', (req, res) => {
+    if (!mayReadInstanceStats(req)) return res.json({ retentionDays: cacheRetentionDays });
     if (!cache) return res.json({ total: 0, retentionDays: cacheRetentionDays });
     res.json(cache.storageStats());
   });

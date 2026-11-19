@@ -49,11 +49,11 @@ Add a monitor of type **HTTP(s)** with the URL `https://pullmd.example.com/api/s
 curl "http://localhost:3000/api/stats?window=-30%20days"
 ```
 
-A sudden drop in `playwright` results, or a rise in low-quality results, points to a broken sidecar or a site that changed. The per-domain lists (`lowQualityDomains`, `fallbackByDomain`) show which sites to write a [recipe](/guides/site-recipes) for. They're visible only to the admin, or to everyone when sign-in is off and public history is on.
+A sudden drop in `playwright` results, or a rise in low-quality results, points to a broken sidecar or a site that changed. The per-domain lists (`lowQualityDomains`, `fallbackByDomain`) show which sites to write a [recipe](/guides/site-recipes) for. The answer is for the admin, or for everyone when sign-in is off and public history is on. Other callers get `200` with only `window`, so a monitor that reads it needs an admin API key (`Authorization: Bearer ...`).
 
 ## Cache size
 
-[`GET /api/storage`](/reference/api/instance/get-cache-size) reports the number of cached conversions (`total`), the database size (`dbSizeBytes`), how many rows expire within 10 days (`expiringSoon`), the oldest entry, the retention period, and the cache hits and total requests over 7 days (`cacheHits7d`, `requests7d`).
+[`GET /api/storage`](/reference/api/instance/get-cache-size) reports the number of cached conversions (`total`), the database size (`dbSizeBytes`), how many rows expire within 10 days (`expiringSoon`), the oldest entry, the retention period, and the cache hits and total requests over 7 days (`cacheHits7d`, `requests7d`). Like `/api/stats`, the full answer is for the admin, or for everyone when sign-in is off and public history is on. Other callers get `200` with only `retentionDays`.
 
 ## Recipes
 

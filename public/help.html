@@ -631,12 +631,12 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">Paginated full archive (<code>?limit=</code> default 50, 1 to 200, <code>?offset=</code>).</td>
           </tr>
           <tr><td><code>GET /api/storage</code></td>
-            <td lang="de">Cache-Größe und Aufbewahrungsdauer.</td>
-            <td lang="en">Cache size and retention.</td>
+            <td lang="de">Cache-Größe, Zahlen der letzten 7 Tage und Aufbewahrungsdauer. Die vollständige Antwort gibt es nur für den Admin, oder für alle, wenn Auth aus und die öffentliche History an ist. Sonst enthält sie nur <code>retentionDays</code>.</td>
+            <td lang="en">Cache size, counts over the last 7 days and retention. The full answer is for the admin, or for everyone when auth is off and public history is on. Otherwise it holds only <code>retentionDays</code>.</td>
           </tr>
           <tr><td><code>GET /api/stats</code></td>
-            <td lang="de">Extraktions-Telemetrie: Quellen, Qualität, Laufzeit (<code>?window=-7 days</code>). Die Listen pro Domain gibt es nur für den Admin, oder für alle, wenn Auth aus und die öffentliche History an ist.</td>
-            <td lang="en">Extraction telemetry: sources, quality, latency (<code>?window=-7 days</code>). The per-domain lists are included only for the admin, or for everyone when auth is off and public history is on.</td>
+            <td lang="de">Extraktions-Telemetrie: Quellen, Qualität, Laufzeit (<code>?window=-7 days</code>). Die Antwort gibt es nur für den Admin, oder für alle, wenn Auth aus und die öffentliche History an ist. Sonst enthält sie nur <code>window</code>.</td>
+            <td lang="en">Extraction telemetry: sources, quality, latency (<code>?window=-7 days</code>). The answer is for the admin, or for everyone when auth is off and public history is on. Otherwise it holds only <code>window</code>.</td>
           </tr>
           <tr><td><code>GET /api/config</code></td>
             <td lang="de">Was auf dieser Instanz aktiv ist (Auth-Modus, Dokumente, Vision, STT, PDF-OCR, YouTube). Die PWA blendet danach ihre Bedienelemente ein oder aus.</td>

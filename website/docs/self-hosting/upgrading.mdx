@@ -44,6 +44,7 @@ Also changed in 3.20:
 - Web pages, HTML uploads and the formats PullMD reads itself are converted in worker threads. A conversion that runs longer than `PULLMD_CONVERT_TIMEOUT_MS` (60 seconds) returns `422` with `"code": "conversion_timeout"`, one that exceeds a worker's 512 MB heap returns `422` with `document_too_complex`, and when both of the `PULLMD_CONVERT_WORKERS` (2) workers are busy and 16 conversions are already waiting, a request gets `503` with `"code": "converter_busy"` and `Retry-After: 5`. The workers run inside the `pullmd` container, and each can use up to 512 MB of heap. The compose files pass both variables through; see [Configuration](/reference/configuration#document-conversion).
 - `node scripts/admin.js reset-password` also revokes the user's OAuth refresh tokens, so connected apps such as claude.ai have to be connected again.
 - `POST /api/keys` and `POST /api/keys/:id/revoke` answer `403` to a browser request from another site, like `/login`.
+- `/api/stats` and `/api/storage` return their counts only to the admin, or to everyone when sign-in is off and public history is on. Other callers get `200` with only `window` or `retentionDays`. A monitor that reads these counts needs an admin API key. See [Monitoring](/self-hosting/monitoring#extraction-stats).
 
 ## To 3.19.2 or later: a removed `PULLMD_AUTH_TOKEN` stops working
 
@@ -78,7 +79,7 @@ Also changed in 3.13:
 
 - OAuth access tokens work only on `/mcp`. Scripts calling `/api` need an API key.
 - MCP `list_recent` shows signed-in users their own conversions only.
-- `/api/stats` shows per-domain lists only to the admin, or to everyone when sign-in is off and public history is on.
+- `/api/stats` shows per-domain lists only to the admin, or to everyone when sign-in is off and public history is on. From 3.20 the counts follow the same rule.
 - Image captions, audio transcripts and PDF OCR share an hourly budget, `PULLMD_LLM_RATE_LIMIT` (default 30).
 - Fetched pages and documents are limited to `PULLMD_MAX_FETCH_BYTES` (default 50 MB), and a page fetch has a 60-second timeout.
 - New accounts need an email address with a dotted domain.

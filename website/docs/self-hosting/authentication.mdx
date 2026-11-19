@@ -84,10 +84,10 @@ claude.ai and Claude Desktop sign in with [OAuth](/agents/claude-ai-connector), 
 | `/mcp` | `/login`, `/signup` |
 | `/api/history`, `/api/archive` | Share links, `/s/:id` |
 | `DELETE /api/cache/:id`, `DELETE /api/cache` | `/api/status`, `/api/recipes/status` |
-| `/api/me`, `/settings`, `POST /settings/apps/:clientId/revoke`, `/share` | `/api/stats`, `/api/storage`, `/api/config` |
+| `/api/me`, `/settings`, `POST /settings/apps/:clientId/revoke`, `/share` | `/api/stats`, `/api/storage` (short answer, see below), `/api/config` |
 | `POST /api/keys`, `POST /api/keys/:id/revoke` | OAuth endpoints, `/web-reader.zip`, `/sw.js` |
 
-Share links are always open, so anyone with a link can read the shared content. `/api/stats` hides its per-domain lists from everyone but the admin. `/api/me` answers `401` when you're not signed in, and doesn't exist (`404`) while sign-in is off.
+Share links are always open, so anyone with a link can read the shared content. `/api/stats` and `/api/storage` answer everyone with `200`, but only the admin gets the counts and sizes; other callers get just `window` or `retentionDays`. `/api/me` answers `401` when you're not signed in, and doesn't exist (`404`) while sign-in is off.
 
 A request to `/api*` or `/mcp` without valid credentials gets `401` with `{"error": "Authentication required"}`. When `PUBLIC_URL` is set, the response carries a `WWW-Authenticate` header whose `resource_metadata` points to `/.well-known/oauth-protected-resource`, which exists only when OAuth is enabled. A browser request to a page such as `/settings` gets a `302` redirect to `/login`.
 
