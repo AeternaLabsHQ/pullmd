@@ -167,7 +167,7 @@ Errors are JSON with an `error` message for every `format`:
 { "error": "Missing required parameter: url" }
 ```
 
-An unexpected failure, a body that isn't valid JSON and a body over the size limit answer the same way, with a `code`. None of them carries a stack trace:
+Errors that reach PullMD's central error handler also carry a `code`: an unexpected failure, a body that isn't valid JSON, a body over the size limit and other rejected requests. None of them carries a stack trace. Other errors carry a `code` only where the status table below names one:
 
 | `code` | Status | `error` |
 | --- | --- | --- |

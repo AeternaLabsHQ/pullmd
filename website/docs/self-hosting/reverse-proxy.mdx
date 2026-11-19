@@ -79,7 +79,7 @@ PullMD sets these headers on every response, including static files, the sign-in
 | --- | --- |
 | `X-Content-Type-Options` | `nosniff` |
 | `X-Frame-Options` | `SAMEORIGIN` |
-| `Content-Security-Policy` | `frame-ancestors 'self'` |
+| `Content-Security-Policy` | `frame-ancestors 'self'`, added to any policy the response already has |
 | `Referrer-Policy` | `same-origin` |
 
 A page on another origin can't show PullMD in a frame. If you embed PullMD, serve the embedding page from the same origin.

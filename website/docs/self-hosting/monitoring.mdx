@@ -43,13 +43,15 @@ Add a monitor of type **HTTP(s)** with the URL `https://pullmd.example.com/api/s
 
 ## Extraction stats
 
-[`GET /api/stats`](/reference/api/instance/get-extraction-stats) shows how each extractor performed over the last 7 days: count, share, average quality, average length and average time. To use another period, set `window` to a SQLite `datetime` modifier such as `-30 days`. An invalid value returns `"total": 0`.
+[`GET /api/stats`](/reference/api/instance/get-extraction-stats) shows how each extractor performed over the last 7 days: count, share, average quality, average length and average time. To use another period, set `window` to a SQLite `datetime` modifier such as `-30 days`.
+
+The counts are for the admin, or for everyone when sign-in is off and public history is on. Other callers get `200` with only `window` and no `total`, so a monitor that reads them sends an admin API key:
 
 ```bash
-curl "http://localhost:3000/api/stats?window=-30%20days"
+curl -H "Authorization: Bearer pmd_..." "http://localhost:3000/api/stats?window=-30%20days"
 ```
 
-A sudden drop in `playwright` results, or a rise in low-quality results, points to a broken sidecar or a site that changed. The per-domain lists (`lowQualityDomains`, `fallbackByDomain`) show which sites to write a [recipe](/guides/site-recipes) for. The answer is for the admin, or for everyone when sign-in is off and public history is on. Other callers get `200` with only `window`, so a monitor that reads it needs an admin API key (`Authorization: Bearer ...`).
+For a caller with access, an invalid `window` returns `"total": 0`. A sudden drop in `playwright` results, or a rise in low-quality results, points to a broken sidecar or a site that changed. The per-domain lists (`lowQualityDomains`, `fallbackByDomain`) show which sites to write a [recipe](/guides/site-recipes) for.
 
 ## Cache size
 
