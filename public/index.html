@@ -1814,13 +1814,16 @@
       };
 
       // Uploaded documents (a mail, a saved page) can carry tracking pixels:
-      // their remote images stay unloaded until the user asks. Remote means
-      // neither data: nor this origin. URL results never set the flag.
+      // their images stay unloaded until the user asks. Held back is every
+      // image that is not data: or blob:, this origin included (its /api
+      // fetches whatever URL it is given). URL results never set the flag.
       var blockRemoteImages = false;
       function isRemoteImageSrc(src) {
         if (!src) return false;
-        if (/^\s*data:/i.test(src)) return false;
-        try { return new URL(src, location.href).origin !== location.origin; }
+        try {
+          var protocol = new URL(src, location.href).protocol;
+          return protocol !== 'data:' && protocol !== 'blob:';
+        }
         catch (e) { return true; }
       }
       // True only for the duration of a sanitize() call that must hold

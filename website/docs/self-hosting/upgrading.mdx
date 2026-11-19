@@ -69,7 +69,7 @@ Also changed in 3.20:
 - `POST /api/keys` and `POST /api/keys/:id/revoke` answer `403` to a browser request from another site, like `/login`.
 - Errors answer JSON without a stack trace: `500` with `"code": "internal_error"`, `400` with `invalid_body` for a body that isn't valid JSON, `413` with `payload_too_large`, and other `4xx` with `bad_request`. See [Output format](/reference/output-format#errors).
 - Every response carries `X-Content-Type-Options`, `X-Frame-Options`, `frame-ancestors` and `Referrer-Policy` headers, so a page on another origin can't embed PullMD in a frame. See [Reverse proxy](/self-hosting/reverse-proxy#response-headers).
-- In the web app, remote images in an uploaded e-mail, saved page or document load only after you click **Load images**. See [Documents](/guides/documents#upload-a-file).
+- In the web app, images in an uploaded e-mail, saved page or document load only after you click **Load images**, except `data:` and `blob:` images. See [Documents](/guides/documents#upload-a-file).
 - `/api/stats` and `/api/storage` return their counts only to the admin, or to everyone when sign-in is off and public history is on. Other callers get `200` with only `window` or `retentionDays`. A monitor that reads these counts needs an admin API key. See [Monitoring](/self-hosting/monitoring#extraction-stats).
 
 ## To 3.19.2 or later: a removed `PULLMD_AUTH_TOKEN` stops working

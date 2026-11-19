@@ -212,6 +212,32 @@ describe('file upload', () => {
       assert.deepEqual(img.requests.map((r) => r.url).sort(), ['/entity.png', '/ref.png']);
     });
 
+    it('an image pointing at the instance itself is held back too', async (t) => {
+      const { app, page } = await setupWithImages(t);
+      // The instance's own /api would fetch the URL in its query string.
+      const target = 'https://example.test/pixel-id';
+      const src = `/api?url=${encodeURIComponent(target)}&nocache=1`;
+      const reached = () => app.calls.web.filter(([url]) => url === target).length;
+      const apiRequests = [];
+      page.on('request', (r) => {
+        const u = new URL(r.url());
+        if (u.pathname === '/api' && u.searchParams.get('url') === target) apiRequests.push(r.url());
+      });
+
+      await pick(page, 'notes.md', 'text/markdown', `Intro\n\n![pixel](${src})\n\nText.\n`);
+      await waitForResult(page);
+      await page.locator('#view-toggle button[data-mode="rendered"]').click();
+      await page.waitForTimeout(500);
+      assert.equal(apiRequests.length, 0);
+      assert.equal(reached(), 0);
+      assert.equal(await page.locator('#result-rendered img').count(), 0);
+      assert.equal(await bar(page).isVisible(), true);
+
+      await bar(page).getByRole('button', { name: 'Bilder laden' }).click();
+      await until(() => reached() > 0);
+      assert.ok(apiRequests.length > 0);
+    });
+
     it('a URL result cannot fake a held-back image with its own data-blocked-src', async (t) => {
       const { page, img } = await setupWithImages(t, {
         extractWeb: async (url) => webResult(url, {
