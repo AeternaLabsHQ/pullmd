@@ -66,6 +66,27 @@ test('isBlockedIp allows legit public v4 in NAT64 local-use and IPv4-translated 
   }
 });
 
+test('isBlockedIp checks the low 32 bits of any address under 64:ff9b:1::/48', () => {
+  // Operators carve their own NAT64 prefixes out of the local-use /48.
+  for (const ip of [
+    '64:ff9b:1:fffe::7f00:1', // 127.0.0.1
+    '64:ff9b:1:abcd::a9fe:a9fe', // 169.254.169.254 (metadata)
+    '64:FF9B:1:ABCD::A9FE:A9FE', // uppercase
+    '64:ff9b:1:abcd::169.254.169.254', // dotted-quad tail
+    '64:ff9b:1:1:2:3:a00:1', // no :: compression, 10.0.0.1
+    '64:ff9b:1:ffff:ffff:ffff:c0a8:101', // 192.168.1.1 at the top of the /48
+  ]) {
+    assert.equal(isBlockedIp(ip), true, `${ip} should be blocked`);
+  }
+  for (const ip of [
+    '64:ff9b:1:abcd::808:808', // 8.8.8.8 (public)
+    '64:ff9b:1:abcd::8.8.8.8',
+    '64:ff9b:2::7f00:1', // outside the /48
+  ]) {
+    assert.equal(isBlockedIp(ip), false, `${ip} should be allowed`);
+  }
+});
+
 test('isBlockedIp handles dotted-quad textual form of NAT64 metadata embedding', () => {
   assert.equal(isBlockedIp('64:ff9b::169.254.169.254'), true);
 });
