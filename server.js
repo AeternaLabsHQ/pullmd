@@ -2,6 +2,7 @@ import express from 'express';
 import { extractPost, normalizeRedditUrl, RedditUnsupportedPageError } from './lib/reddit.js';
 import { RedditAuthError } from './lib/reddit-auth.js';
 import { extractHn, normalizeHnUrl } from './lib/hackernews.js';
+import { finalErrorHandler } from './lib/error-handler.js';
 import { extractWeb, extractHtml, extractFile } from './lib/web.js';
 import { createCache, readCacheRetentionDays } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
@@ -1409,18 +1410,9 @@ export function createApp(overrides = {}) {
     res.json({ ok: true, scope: 'user', removed: result.changes });
   });
 
-  // Friendly JSON for body-parser limit violations. Mounted last; non-413
-  // errors fall through to Express' default handler. /api/html names its
-  // 10 MB cap and /api/file its 25 MB cap; other routes (e.g. /mcp at 1 MB) get the generic message.
-  app.use((err, req, res, next) => {
-    if (err?.type === 'entity.too.large') {
-      let error = 'Request body too large. / Anfrage zu groß.';
-      if (req.path === '/api/html') error = 'File too large (max 10 MB). / Datei zu groß (max. 10 MB).';
-      else if (req.path === '/api/file') error = 'File too large (max 25 MB). / Datei zu groß (max. 25 MB).';
-      return res.status(413).json({ error });
-    }
-    next(err);
-  });
+  // Mounted last: every error leaves as JSON, never as Express' HTML page
+  // with a stack trace.
+  app.use(finalErrorHandler);
 
   return app;
 }

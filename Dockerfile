@@ -28,6 +28,9 @@ LABEL org.opencontainers.image.documentation="https://github.com/AeternaLabsHQ/p
 LABEL org.opencontainers.image.licenses="AGPL-3.0-or-later"
 LABEL org.opencontainers.image.vendor="Aeterna Labs"
 
+# Express prints stack traces in its error pages unless this is production.
+ENV NODE_ENV=production
+
 RUN addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
