@@ -11,6 +11,8 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+## [3.20.0] - 2026-11-20
+
 Found in an internal security review.
 
 ### Security

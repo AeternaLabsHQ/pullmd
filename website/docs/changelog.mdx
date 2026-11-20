@@ -5,11 +5,26 @@ description: Highlights of recent PullMD releases. The full history is in CHANGE
 
 # Changelog
 
-Highlights of recent releases. Every change, with issue links, is in [CHANGELOG.md](https://github.com/AeternaLabsHQ/pullmd/blob/main/CHANGELOG.md). Before upgrading across 3.0 or 3.13, read [Upgrading](/self-hosting/upgrading).
+Highlights of recent releases. Every change, with issue links, is in [CHANGELOG.md](https://github.com/AeternaLabsHQ/pullmd/blob/main/CHANGELOG.md). Before upgrading across 3.0, 3.13 or 3.20, read [Upgrading](/self-hosting/upgrading).
+
+## 3.20.0
+
+November 20, 2026 · <Badge tone="brand">Latest</Badge>
+
+Security fixes from an internal review. Read [Upgrading](/self-hosting/upgrading) first: two compose changes are recommended, and `pullmd-playwright` should be updated together with `pullmd`.
+
+- The Playwright sidecar's [address check](/self-hosting/ssrf-protection) covers workers and pages a site opens itself, and the compose files put the sidecar on its own `pullmd-render` network.
+- Deeply nested or very large HTML and XML is refused with `422` and `document_too_complex` before it is parsed, and conversions run in worker threads with a time and memory limit (`PULLMD_CONVERT_TIMEOUT_MS`, `PULLMD_CONVERT_WORKERS`). See [Output format](/reference/output-format#errors).
+- Errors answer JSON without a stack trace, and every response carries `X-Content-Type-Options`, `X-Frame-Options`, `frame-ancestors` and `Referrer-Policy` headers.
+- In the web app, images in an uploaded document load only after you click **Load images**. See [Documents](/guides/documents#upload-a-file).
+- `/api/stats` and `/api/storage` return their counts only to callers who may see the global history. See [Monitoring](/self-hosting/monitoring#extraction-stats).
+- `/settings` lists connected OAuth apps with a **Revoke** button, and `reset-password` also signs out connected apps.
+- The `pullmd` image keeps `/app` read-only for the app user, and the compose files run all containers with fewer privileges. Run admin commands with `docker compose exec -u app pullmd node scripts/admin.js ...`.
+- A login with an unknown email takes as long as one with a wrong password, and `POST /api/keys` refuses requests from other sites.
 
 ## 3.19.2
 
-November 13, 2026 · <Badge tone="brand">Latest</Badge>
+November 13, 2026
 
 - HTML task lists keep their state: a checked item converts to `- [x]`, an unchecked one to `- [ ]`.
 - Outlook `.msg` files that store their text in a code page (Cyrillic, Central European, Shift-JIS and others) convert with the right characters instead of garbled text.
