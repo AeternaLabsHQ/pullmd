@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createApp } from '../server.js';
 import { createCache } from '../lib/cache.js';
 import { RedditUnsupportedPageError } from '../lib/reddit.js';
+import { unprocessable } from '../lib/mail-render.js';
 
 const REDDIT_URL = 'https://www.reddit.com/r/test/comments/abc/title/';
 const HN_URL = 'https://news.ycombinator.com/item?id=1';
@@ -288,5 +289,28 @@ describe('GET /api - web extractor throwing a non-Error', () => {
     assert.equal(res.status, 502);
     assert.match(res.headers['content-type'], /application\/json/);
     assert.match(JSON.parse(res.body).error, /^Failed to extract page: /);
+  });
+});
+
+describe('GET /api - document too complex', () => {
+  it('-> JSON 422 with the error code', async (t) => {
+    t.mock.method(console, 'error', () => {});
+    const cache = createCache(':memory:');
+    // `limit` (the exceeded budget) must not reach the response.
+    const app = createApp({ cache, extractWeb: async () => { throw Object.assign(unprocessable('Document is nested too deeply or has too many elements', 'document_too_complex'), { limit: 'textNodes' }); } });
+    const res = await request(app, api('https://news.ycombinator.com/other'));
+    assert.equal(res.status, 422);
+    assert.match(res.headers['content-type'], /application\/json/);
+    assert.deepEqual(JSON.parse(res.body), { error: 'Document is nested too deeply or has too many elements', code: 'document_too_complex' });
+    assertNothingStored(cache);
+  });
+
+  it('/api/stream reports the error code in the SSE error event', async (t) => {
+    t.mock.method(console, 'error', () => {});
+    const app = createApp({ extractWeb: async () => { throw unprocessable('Document is nested too deeply or has too many elements', 'document_too_complex'); } });
+    const res = await request(app, `/api/stream?url=${encodeURIComponent('https://news.ycombinator.com/other')}&nocache=1`);
+    const m = res.body.match(/event: error\ndata: (.+)\n/);
+    assert.ok(m, res.body);
+    assert.deepEqual(JSON.parse(m[1]), { message: 'Document is nested too deeply or has too many elements', code: 'document_too_complex' });
   });
 });

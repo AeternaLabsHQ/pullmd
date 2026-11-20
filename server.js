@@ -2,6 +2,7 @@ import express from 'express';
 import { extractPost, normalizeRedditUrl, RedditUnsupportedPageError } from './lib/reddit.js';
 import { RedditAuthError } from './lib/reddit-auth.js';
 import { extractHn, normalizeHnUrl } from './lib/hackernews.js';
+import { finalErrorHandler } from './lib/error-handler.js';
 import { extractWeb, extractHtml, extractFile } from './lib/web.js';
 import { createCache, readCacheRetentionDays } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
@@ -26,6 +27,7 @@ import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
 import { createFileJobStore } from './lib/file-jobs.js';
 import { isYoutubeEnabled } from './lib/youtube.js';
+import { BUSY_RETRY_AFTER_SECONDS, isConverterBusy } from './lib/convert-pool.js';
 import path from 'node:path';
 import fs from 'node:fs';
 import { stripCommentsSection } from './lib/markdown-sections.js';
@@ -34,6 +36,22 @@ import { stripCommentsSection } from './lib/markdown-sections.js';
 // then throw inside the catch block and bypass the JSON error response.
 function errMessage(err) {
   return String(err?.message ?? err);
+}
+
+// Answers the conversion owns: 422 when the document is the problem (over a
+// budget, the time or the memory limit), 503 while every converter is busy.
+// Returns false for anything else.
+function sendConversionError(res, err) {
+  if (err?.status === 422) {
+    res.status(422).json({ error: err.message, code: err.code });
+    return true;
+  }
+  if (isConverterBusy(err)) {
+    res.set('Retry-After', String(err.retryAfter));
+    res.status(503).json({ error: err.message, code: err.code });
+    return true;
+  }
+  return false;
 }
 
 function isRedditUrl(url) {
@@ -151,6 +169,30 @@ export function parseCommentDepth(value) {
 
 export function createApp(overrides = {}) {
   const app = express();
+  // First middleware, so static files, auth pages, OAuth routes and error
+  // answers all carry them. same-origin (not no-referrer) as the referrer
+  // policy: with no-referrer browsers send `Origin: null` on same-origin
+  // POSTs and the same-origin checks on /login and /api/keys would refuse
+  // them. Express's own 404/error page (finalhandler) sets
+  // `Content-Security-Policy: default-src 'none'`; setHeader is wrapped so
+  // any CSP written later keeps its directives and gains frame-ancestors.
+  app.use((req, res, next) => {
+    const setHeader = res.setHeader;
+    res.setHeader = function (name, value) {
+      if (typeof name === 'string' && name.toLowerCase() === 'content-security-policy'
+        && !/frame-ancestors/i.test(String(value))) {
+        value = `${value}; frame-ancestors 'self'`;
+      }
+      return setHeader.call(this, name, value);
+    };
+    res.set({
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Content-Security-Policy': "frame-ancestors 'self'",
+      'Referrer-Policy': 'same-origin',
+    });
+    next();
+  });
   // Before any route: req.ip / req.secure (rate limiters, cookie flags)
   // depend on it.
   applyTrustProxy(app, overrides.trustProxy ?? parseTrustProxy(process.env.PULLMD_TRUST_PROXY));
@@ -231,6 +273,10 @@ export function createApp(overrides = {}) {
   // admin-only. A regular user's delete only unlinks the entry from their own
   // history (`user_fetches`); the shared row and its share link survive.
   const isGlobalScope = (req) => !auth || auth.mode === 'disabled' || !!req.user?.is_admin;
+  // Counts and sizes over the whole instance, and the per-domain lists, go
+  // only to callers who may see the global history: the admin, or anyone
+  // when auth is off and public history is on.
+  const mayReadInstanceStats = (req) => isGlobalScope(req) && (!!req.user || !disablePublicHistory);
 
   // Templated help page + skill zip (PUBLIC_URL substitution).
   // Must come BEFORE express.static so they win over the raw files in /public.
@@ -758,6 +804,9 @@ export function createApp(overrides = {}) {
         console.warn('Bot challenge:', err.vendor, url);
         return res.status(502).json({ error: err.message, code: 'bot_challenge', vendor: err.vendor });
       }
+      // Bad input (over-nested markup, too slow to convert), not an upstream
+      // failure; or no free converter.
+      if (sendConversionError(res, err)) return;
       console.error('Web extraction error:', err);
       return res.status(502).json({ error: `Failed to extract page: ${errMessage(err)}` });
     }
@@ -842,6 +891,7 @@ export function createApp(overrides = {}) {
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       return res.send(finalMd);
     } catch (err) {
+      if (sendConversionError(res, err)) return;
       console.error('Local HTML extraction error:', err);
       return res.status(500).json({ error: `Failed to extract HTML: ${errMessage(err)}` });
     }
@@ -915,8 +965,8 @@ export function createApp(overrides = {}) {
           suggestedFilename,
         });
       } catch (err) {
-        if (err?.status === 422) {
-          fileJobs.fail(id, { error: capJobError(err.message), httpStatus: 422 });
+        if (err?.status === 422 || isConverterBusy(err)) {
+          fileJobs.fail(id, { error: capJobError(err.message), httpStatus: err.status });
           return;
         }
         console.error('File conversion error:', err);
@@ -988,9 +1038,7 @@ export function createApp(overrides = {}) {
       res.set('Content-Type', 'text/markdown; charset=utf-8');
       return res.send(outMd);
     } catch (err) {
-      if (err?.status === 422) {
-        return res.status(422).json({ error: err.message });
-      }
+      if (sendConversionError(res, err)) return;
       console.error('File conversion error:', err);
       // 502: the markitdown sidecar is an upstream dependency (same as the web /api path).
       return res.status(502).json({ error: `Failed to convert file: ${errMessage(err)}` });
@@ -1019,7 +1067,11 @@ export function createApp(overrides = {}) {
     const job = JOB_ID_RE.test(id) ? fileJobs.get(id, jobOwner(req)) : null;
     if (!job) return jobMiss(req, res);
     if (job.status === 'done') return res.json({ status: 'done', ...job.result });
-    if (job.status === 'error') return res.json({ status: 'error', error: job.error, httpStatus: job.httpStatus });
+    if (job.status === 'error') {
+      // A job refused as busy can be resubmitted shortly: same hint as the 503 of the direct routes.
+      if (job.httpStatus === 503) res.set('Retry-After', String(BUSY_RETRY_AFTER_SECONDS));
+      return res.json({ status: 'error', error: job.error, httpStatus: job.httpStatus });
+    }
     return res.json({ status: 'pending' });
   });
 
@@ -1249,7 +1301,10 @@ export function createApp(overrides = {}) {
     } catch (err) {
       console.error('SSE stream error:', err);
       const message = err instanceof SsrfError ? `URL not allowed: ${err.message}` : String(err?.message ?? err) || 'Internal error';
-      send('error', { message });
+      // Headers are already out, so a 422 or 503 cannot be sent; the code
+      // tells the client it was the document (or a busy converter), not a
+      // transient failure.
+      send('error', err?.status === 422 || isConverterBusy(err) ? { message, code: err.code } : { message });
       res.end();
     }
   });
@@ -1287,22 +1342,18 @@ export function createApp(overrides = {}) {
     });
   });
 
+  // Both routes stay ungated and answer 200 to everyone: the PWA pings
+  // /api/storage every 30 s for its status LED. Callers who may not read the
+  // instance stats get the short answer without touching the database.
   app.get('/api/stats', (req, res) => {
-    if (!cache) return res.json({ total: 0, window: '-7 days' });
-    const window = req.query.window || '-7 days';
-    const stats = cache.extractionStats(window);
-    // The per-domain lists name the sites that were fetched, across all
-    // users. They are included only for callers who may see the global
-    // history: the admin, or anyone when auth is off and public history is on.
-    const showDomains = isGlobalScope(req) && (!!req.user || !disablePublicHistory);
-    if (!showDomains) {
-      delete stats.lowQualityDomains;
-      delete stats.fallbackByDomain;
-    }
-    res.json(stats);
+    const window = typeof req.query.window === 'string' && req.query.window ? req.query.window : '-7 days';
+    if (!mayReadInstanceStats(req)) return res.json({ window });
+    if (!cache) return res.json({ total: 0, window });
+    res.json(cache.extractionStats(window));
   });
 
   app.get('/api/storage', (req, res) => {
+    if (!mayReadInstanceStats(req)) return res.json({ retentionDays: cacheRetentionDays });
     if (!cache) return res.json({ total: 0, retentionDays: cacheRetentionDays });
     res.json(cache.storageStats());
   });
@@ -1383,18 +1434,9 @@ export function createApp(overrides = {}) {
     res.json({ ok: true, scope: 'user', removed: result.changes });
   });
 
-  // Friendly JSON for body-parser limit violations. Mounted last; non-413
-  // errors fall through to Express' default handler. /api/html names its
-  // 10 MB cap and /api/file its 25 MB cap; other routes (e.g. /mcp at 1 MB) get the generic message.
-  app.use((err, req, res, next) => {
-    if (err?.type === 'entity.too.large') {
-      let error = 'Request body too large. / Anfrage zu groß.';
-      if (req.path === '/api/html') error = 'File too large (max 10 MB). / Datei zu groß (max. 10 MB).';
-      else if (req.path === '/api/file') error = 'File too large (max 25 MB). / Datei zu groß (max. 25 MB).';
-      return res.status(413).json({ error });
-    }
-    next(err);
-  });
+  // Mounted last: every error leaves as JSON, never as Express' HTML page
+  // with a stack trace.
+  app.use(finalErrorHandler);
 
   return app;
 }

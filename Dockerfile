@@ -28,6 +28,9 @@ LABEL org.opencontainers.image.documentation="https://github.com/AeternaLabsHQ/p
 LABEL org.opencontainers.image.licenses="AGPL-3.0-or-later"
 LABEL org.opencontainers.image.vendor="Aeterna Labs"
 
+# Express prints stack traces in its error pages unless this is production.
+ENV NODE_ENV=production
+
 RUN addgroup -S app && adduser -S app -G app
 
 WORKDIR /app
@@ -35,9 +38,15 @@ WORKDIR /app
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
 
+# Readable for every user regardless of the file modes in the build context
+# (the app user must read /app, but owns none of it). Ownership stays root.
+RUN chmod -R a+rX /app
+
 RUN apk add --no-cache su-exec
 
-RUN mkdir -p /data && chown -R app:app /app /data
+# Only /data belongs to the app user. /app stays owned by root, so a code
+# execution bug in the server cannot rewrite the application files.
+RUN mkdir -p /data && chown -R app:app /data
 
 # The entrypoint script runs as root, fixes permissions on bind-mounted
 # volumes that the Docker daemon may have created as root, then drops to

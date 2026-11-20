@@ -72,6 +72,39 @@ describe('POST /oauth/revoke (RFC 7009)', () => {
     });
   });
 
+  it('revoking a refresh token also uses up the user\'s unexchanged codes for that client', async () => {
+    const { app, oauth, cache, userId, client } = await setup();
+    const other = oauth.store.registerClient({
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+      client_name: 'Other', token_endpoint_auth_method: 'none',
+    });
+    const otherUser = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES ('z@x.y', 'x')").run().lastInsertRowid;
+    const code = (user, cid) => oauth.store.createAuthCode({
+      client_id: cid, user_id: user, redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+      code_challenge: 'c', code_challenge_method: 'S256', scope: 'mcp:full',
+    }).codeHash;
+    const mine = code(userId, client.client_id);
+    const mineOtherClient = code(userId, other.client_id);
+    const otherUsers = code(otherUser, client.client_id);
+    const exp = new Date(Date.now() + 30 * 86400e3).toISOString();
+    const { token } = oauth.tokens.generateRefreshToken();
+    oauth.store.insertRefreshToken({
+      tokenHash: oauth.tokens.hashRefreshToken(token), client_id: client.client_id, user_id: userId,
+      scope: 'mcp:full', expiresAt: exp, rotated_from: null,
+    });
+    await withServer(app, async (base) => {
+      const r = await fetch(`${base}/oauth/revoke`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token, client_id: client.client_id }).toString(),
+      });
+      assert.equal(r.status, 200);
+    });
+    assert.equal(oauth.store.consumeAuthCode(mine), null, 'the revoking client\'s code for this user is dead');
+    assert.ok(oauth.store.consumeAuthCode(mineOtherClient), 'the user\'s code for another client stays');
+    assert.ok(oauth.store.consumeAuthCode(otherUsers), 'another user\'s code for this client stays');
+  });
+
   it('revoke unknown token → still 200 (no info leak per RFC 7009)', async () => {
     const { app, client } = await setup();
     await withServer(app, async (base) => {
@@ -83,6 +116,44 @@ describe('POST /oauth/revoke (RFC 7009)', () => {
         }).toString(),
       });
       assert.equal(r.status, 200);
+    });
+  });
+
+  it('/oauth/revoke ignores another client\'s token', async () => {
+    const { app, oauth, userId, client } = await setup();
+    const other = oauth.store.registerClient({
+      redirect_uris: ['https://claude.ai/api/mcp/auth_callback'],
+      client_name: 'Other', token_endpoint_auth_method: 'none',
+    });
+    const exp = new Date(Date.now() + 30 * 86400e3).toISOString();
+    const { token, tokenHash } = oauth.tokens.generateRefreshToken();
+    oauth.store.insertRefreshToken({
+      tokenHash, client_id: client.client_id, user_id: userId, scope: 'mcp:full',
+      expiresAt: exp, rotated_from: null,
+    });
+    const ownerCode = oauth.store.createAuthCode({
+      client_id: client.client_id, user_id: userId, redirect_uri: 'https://claude.ai/api/mcp/auth_callback',
+      code_challenge: 'c', code_challenge_method: 'S256', scope: 'mcp:full',
+    }).codeHash;
+    await withServer(app, async (base) => {
+      const r = await fetch(`${base}/oauth/revoke`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token, client_id: other.client_id }).toString(),
+      });
+      assert.equal(r.status, 200);
+      assert.equal(oauth.store.findRefreshToken(tokenHash).revoked_at, null);
+      assert.ok(oauth.store.consumeAuthCode(ownerCode), 'the owning client\'s code stays');
+
+      const use = await fetch(`${base}/oauth/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token', refresh_token: token, client_id: client.client_id,
+        }).toString(),
+      });
+      assert.equal(use.status, 200);
+      assert.ok((await use.json()).access_token);
     });
   });
 

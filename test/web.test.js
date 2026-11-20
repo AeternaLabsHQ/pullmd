@@ -4,6 +4,9 @@ import { extractFile, extractHtml } from '../lib/web.js';
 import { extractWeb, publicLookup } from './helpers/fake-dns.js';
 import { matchRecipesAgainst } from '../lib/recipes.js';
 
+// Buffer.from(small).buffer is the shared 8 KB pool; slice to exactly the bytes.
+const bytesOf = (s) => { const b = Buffer.from(s); return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength); };
+
 // Single-fetch: extractWeb makes exactly ONE request per call.
 // The Accept header includes text/markdown preference.
 function mockFetch(response) {
@@ -492,6 +495,50 @@ describe('extractWeb orchestrator with playwright fallback', () => {
     assert.notEqual(result.source, 'playwright');
   });
 
+  it('rejects an over-nested static page without calling the sidecar', async () => {
+    process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
+    for (const render of [undefined, 'force']) {
+      let sidecarCalls = 0;
+      const t0 = Date.now();
+      await assert.rejects(
+        extractWeb('https://example.com', {
+          fetch: fetchWith('<html><body>' + '<span>'.repeat(100_000) + 'x</body></html>'),
+          renderClient: async () => { sidecarCalls++; return cleanHtml(); },
+          render,
+        }),
+        (err) => err.code === 'document_too_complex' && err.status === 422,
+      );
+      assert.equal(sidecarCalls, 0, `render=${render}`);
+      assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
+    }
+  });
+
+  it('keeps the static result when the automatic render returns an over-nested page', async () => {
+    process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
+    let sidecarCalls = 0;
+    const result = await extractWeb('https://example.com', {
+      fetch: fetchWith(soupHtml()),
+      renderClient: async () => { sidecarCalls++; return '<html><body>' + '<div>'.repeat(100_000) + '</body></html>'; },
+    });
+    assert.equal(sidecarCalls, 1);
+    assert.notEqual(result.source, 'playwright');
+    assert.match(result.metadata.extractorReason, /playwright fallback failed: Document is nested too deeply/);
+  });
+
+  it('rejects an over-nested rendered page when the render was forced', async () => {
+    process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
+    let sidecarCalls = 0;
+    await assert.rejects(
+      extractWeb('https://example.com', {
+        fetch: fetchWith(cleanHtml()),
+        render: 'force',
+        renderClient: async () => { sidecarCalls++; return '<html><body>' + '<div>'.repeat(100_000) + '</body></html>'; },
+      }),
+      (err) => err.code === 'document_too_complex',
+    );
+    assert.equal(sidecarCalls, 1);
+  });
+
   it('emits stage events in order on render path', async () => {
     process.env.PLAYWRIGHT_URL = 'http://playwright:8002/render';
     const events = [];
@@ -747,7 +794,7 @@ describe('extractWeb - markitdown document routing', () => {
     const octetFetch = async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'application/octet-stream' : null) },
-      arrayBuffer: async () => Buffer.from('DOCX').buffer,
+      arrayBuffer: async () => bytesOf('DOCX'),
     });
     let called = false;
     const markitdownClient = async () => { called = true; return { markdown: 'docx text content', title: 'D' }; };
@@ -767,7 +814,7 @@ describe('extractWeb - markitdown document routing', () => {
     const htmlFetch = async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
-      arrayBuffer: async () => Buffer.from('<html><head><title>T</title></head><body><article><p>Plenty of real article body text that is well over the two hundred character minimum so Readability keeps it as the main content of the page for sure.</p></article></body></html>').buffer,
+      arrayBuffer: async () => bytesOf('<html><head><title>T</title></head><body><article><p>Plenty of real article body text that is well over the two hundred character minimum so Readability keeps it as the main content of the page for sure.</p></article></body></html>'),
     });
     let called = false;
     const result = await extractWeb('https://example.com/page', { fetch: htmlFetch, markitdownClient: async () => { called = true; return { markdown: 'x', title: 'x' }; } });
@@ -871,7 +918,7 @@ describe('extractWeb - YouTube routing', () => {
     return async () => ({
       ok: true, status: 200,
       headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'text/html; charset=utf-8' : null) },
-      arrayBuffer: async () => Buffer.from('<html><head><title>Vid - YouTube</title></head><body>p</body></html>').buffer,
+      arrayBuffer: async () => bytesOf('<html><head><title>Vid - YouTube</title></head><body>p</body></html>'),
     });
   }
 
@@ -1244,5 +1291,39 @@ describe('PDF-OCR routing (opt-in)', () => {
       ocrFn: async () => ({ markdown: 'ocr body', usage: { model: 'mistral-ocr-latest' }, pdfPages: 1 }),
     });
     assert.equal(r.source, 'pdf-ocr');
+  });
+});
+
+// Fragments without html/head/body: parse5 in preprocess() adds the implied
+// elements, so the content still reaches Readability.
+describe('extractHtml - documents without a <body> tag', () => {
+  const P = '<p>' + 'Main content paragraph that needs to be long enough for Readability. '.repeat(5) + '</p>';
+
+  it('a fragment with a leading <title>', async () => {
+    const r = await extractHtml(`<title>Frag</title><article><h1>H</h1>${P}${P}</article>`, { extractor: 'readability' });
+    assert.equal(r.title, 'Frag');
+    assert.equal(r.source, 'readability');
+    assert.match(r.markdown, /^# Frag\n\n## H\n\nMain content paragraph/);
+  });
+
+  it('<html lang> with a head but no body', async () => {
+    const r = await extractHtml(`<html lang="de"><head><title>NoBody</title></head><article>${P}${P}</article></html>`, { extractor: 'readability' });
+    assert.equal(r.title, 'NoBody');
+    assert.equal(r.source, 'readability');
+    assert.equal(r.metadata.language, 'de');
+    assert.ok(r.metadata.contentLength > 600);
+  });
+
+  it('a fragment with an inlined data: image keeps its alt text', async () => {
+    const r = await extractHtml(`<article>${P}<img src="data:image/png;base64,AA" alt="pic">${P}</article>`, { extractor: 'readability' });
+    assert.equal(r.source, 'readability');
+    assert.match(r.markdown, /\n\npic\n\n/);
+    assert.ok(!r.markdown.includes('data:'));
+  });
+
+  it('many flat top-level elements stay linear and hit the element budget', async () => {
+    const t0 = Date.now();
+    await assert.rejects(extractHtml('<a></a>'.repeat(200_000)), (err) => err.code === 'document_too_complex');
+    assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
   });
 });

@@ -3,6 +3,19 @@ services:
     image: aeternalabshq/pullmd:latest
     container_name: pullmd
     restart: unless-stopped
+    # No setuid escalation inside the container, and only the capabilities the
+    # entrypoint needs: chown the data volume (DAC_READ_SEARCH lets it walk a
+    # ./data that is private to another user, e.g. mode 700), then drop to the
+    # app user.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - SETUID
+      - SETGID
     # Reachable from the LAN. To keep the port on this host only (e.g. when
     # auth is disabled and provider keys are set), use the loopback variant:
     #   - "127.0.0.1:${PORT:-3000}:3000"
@@ -67,11 +80,16 @@ services:
       - PULLMD_FILE_JOB_MAX_MB=${PULLMD_FILE_JOB_MAX_MB:-}
       # Size limit for fetched pages/documents in bytes. Default 52428800 (50 MB).
       - PULLMD_MAX_FETCH_BYTES=${PULLMD_MAX_FETCH_BYTES:-}
+      # Conversion workers: time limit per conversion in ms (default 60000) and
+      # number of worker threads (default 2; 0 = in-process, no limits).
+      - PULLMD_CONVERT_TIMEOUT_MS=${PULLMD_CONVERT_TIMEOUT_MS:-}
+      - PULLMD_CONVERT_WORKERS=${PULLMD_CONVERT_WORKERS:-}
       - CACHE_DB=/data/cache.db
     volumes:
       - ./data:/data
     networks:
       - pullmd-internal
+      - pullmd-render
     depends_on:
       - trafilatura
       - playwright
@@ -81,6 +99,10 @@ services:
     image: aeternalabshq/pullmd-trafilatura:latest
     container_name: pullmd-trafilatura
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     networks:
       - pullmd-internal
 
@@ -88,13 +110,23 @@ services:
     image: aeternalabshq/pullmd-playwright:latest
     container_name: pullmd-playwright
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Own network shared only with pullmd: page scripts run in this browser,
+    # so it must not see trafilatura, markitdown or anything else.
     networks:
-      - pullmd-internal
+      - pullmd-render
 
   markitdown:
     image: aeternalabshq/pullmd-markitdown:latest
     container_name: pullmd-markitdown
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     # Hard memory bound: a decompression bomb only OOM-kills the sandboxed
     # conversion child, the container stays under this cap and recovers.
     mem_limit: ${MARKITDOWN_MEM_LIMIT:-1g}
@@ -113,4 +145,6 @@ services:
 
 networks:
   pullmd-internal:
+    driver: bridge
+  pullmd-render:
     driver: bridge

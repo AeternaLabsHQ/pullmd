@@ -206,3 +206,71 @@ describe('extractHtml integration', () => {
     assert.equal(r.source, 'readability');
   });
 });
+
+// linkedom writes the decoded text of a <title> back unescaped, so the
+// innerHTML of a nested article can be far more markup than it parsed from.
+describe('seriesToMarkdown - nested article chains', () => {
+  const chainPage = (K, M) => {
+    const txt = (i) => `post ${i} ` + 'words here and there '.repeat(10);
+    const chain = '<article>'.repeat(K) + '<p>inner</p>' + '<b></b>'.repeat(M) + '</article>'.repeat(K);
+    return '<html><body>' + Array.from({ length: 4 }, (_, i) =>
+      `<article><a href="/u/ann">Ann</a><p>${txt(i)}</p>${i === 0 ? chain : ''}</article>`).join('') + '</body></html>';
+  };
+
+  it('quotes a nested article inside a nested article as a nested quote', () => {
+    const { document } = parseHTML('<html><body><article><p>a</p><article><p>b</p><article><p>c</p></article></article></article></body></html>');
+    const md = seriesToMarkdown([document.querySelector('article')], (h) => h);
+    assert.equal(md, '<p>a</p><blockquote><p>b</p><blockquote><p>c</p></blockquote></blockquote>');
+    assert.equal(document.querySelectorAll('article').length, 1);
+  });
+
+  // Each nested article is moved once instead of being serialized and parsed
+  // again at every nesting level (which was quadratic and ran out of memory).
+  for (const [K, M] of [[100, 90_000], [250, 38_000]]) {
+    it(`a chain of ${K} nested articles with ${M / 1000}k siblings finishes fast`, () => {
+      const { document } = parseHTML(chainPage(K, M));
+      const s = findArticleSeries(document);
+      assert.equal(s.blocks.length, 4);
+      const t0 = performance.now();
+      const md = seriesToMarkdown(s.blocks, (h) => h);
+      const ms = performance.now() - t0;
+      assert.ok(ms < 15000, `took ${ms} ms`);
+      assert.equal(md.match(/<blockquote>/g).length, K);
+      assert.ok(md.includes('<p>inner</p>'));
+      assert.equal(md.split('\n---\n').length, 4);
+    });
+  }
+
+  // Standalone this takes about 3.3 s (Readability and the series re-parse on
+  // 38k siblings, all inside the budgets); before the fix it ran for minutes
+  // or out of memory. The bound is a backstop for the parallel suite.
+  it('the K=250 chain page converts through extractHtml, 200 or 422', async () => {
+    const t0 = performance.now();
+    try {
+      const r = await extractHtml(chainPage(250, 38_000), { recipes: [], fetch: async () => { throw new Error('no network'); } });
+      assert.equal(typeof r.markdown, 'string');
+      // The page is a detected series; which extract wins is MIN_GAIN's call.
+      assert.ok(['readability', 'article-series'].includes(r.source), r.source);
+    } catch (err) {
+      assert.equal(err.code, 'document_too_complex');
+    }
+    assert.ok(performance.now() - t0 < 15000, `took ${performance.now() - t0} ms`);
+  });
+
+  // A body <title> inside a nested article: its escaped text would turn into
+  // markup at each innerHTML round-trip. 99k of them stop at the raw-input
+  // check (198k child nodes of the title).
+  it('a nested <title> with escaped markup converts fast, 200 or 422', async () => {
+    const html = '<html><body>' + [1, 2, 3].map((n) => `<article><a href="/u/ann">Ann</a><p>post ${n} ${'words '.repeat(20)}</p>`
+      + (n === 1 ? '<article><p>b</p><title>T&lt;/title&gt;' + '&lt;div&gt;'.repeat(99_000) + '</title></article>' : '') + '</article>').join('')
+      + '</body></html>';
+    const t0 = performance.now();
+    try {
+      const r = await extractHtml(html, { recipes: [], fetch: async () => { throw new Error('no network'); } });
+      assert.equal(typeof r.markdown, 'string');
+    } catch (err) {
+      assert.equal(err.code, 'document_too_complex');
+    }
+    assert.ok(performance.now() - t0 < 15000, `took ${performance.now() - t0} ms`);
+  });
+});

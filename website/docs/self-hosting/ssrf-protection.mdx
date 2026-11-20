@@ -15,7 +15,7 @@ Before every fetch, PullMD resolves the host name and checks each address. It re
 - Carrier-grade NAT (`100.64.0.0/10`), including Alibaba Cloud's metadata address `100.100.100.200`
 - `0.0.0.0/8`, multicast, reserved and documentation ranges
 - IPv6 loopback, link-local, multicast and unique-local (`fc00::/7`, which covers AWS's IPv6 metadata address `fd00:ec2::254`)
-- Any of the blocked IPv4 ranges written in IPv6 form (IPv4-mapped, NAT64, 6to4, IPv4-compatible)
+- Any of the blocked IPv4 ranges written in IPv6 form (IPv4-mapped, IPv4-translated, NAT64 with the IPv4 address in the low 32 bits, under `64:ff9b::/96` or any address in the local-use range `64:ff9b:1::/48`, 6to4, IPv4-compatible)
 
 This request targets the cloud metadata address:
 
@@ -35,6 +35,7 @@ PullMD answers `403`. It refuses a host name that doesn't resolve at all the sam
 - `GET /api/stream` checks it too and reports a refusal as an `error` event, because the stream has already started.
 - Every redirect is checked before it's followed, so a public URL that redirects to an internal address is stopped at the redirect.
 - The browser render (Playwright sidecar) applies the same rules to everything Chromium loads on its own: redirects, meta refresh, script navigation, iframes, subresources and WebSockets. A blocked subresource is dropped and the render continues. With `render=force` or `extractor=playwright`, a page that navigates to a blocked address returns `403`. On the automatic render, PullMD keeps the static result and notes the refusal in `extractorReason` (`extractor_reason` in Markdown frontmatter). This needs v3.15.2 or later on both the `pullmd` and `pullmd-playwright` images.
+- With a v3.20.0 or later `pullmd-playwright` image, the check also covers requests from workers and from any other page the site opens. `window.open` returns `null`, links aimed at another window do nothing, and `SharedWorker` is switched off. The sidecar also removes `<script type="speculationrules">` elements, because speculative loading bypasses the check. This removal is best effort: it runs as a script inside the page (see [Known limit](#known-limit)).
 - A refused URL is never cached and never gets a share link.
 
 ## Allow an internal host
@@ -51,6 +52,6 @@ Entries are CIDR ranges, single IP addresses, or exact host names (matched case-
 
 ## Known limit
 
-Static fetches connect to the addresses the check validated, one DNS query per request, and every redirect hop is pinned the same way. The Playwright sidecar can't pin its connections, because Chromium resolves names itself. A DNS-rebinding attack on a browser render, where a name resolves to a public address for the check and an internal one for the connection, isn't fully prevented.
+Static fetches connect to the addresses the check validated, one DNS query per request, and every redirect hop is pinned the same way. The Playwright sidecar can't pin its connections, because Chromium resolves names itself. A DNS-rebinding attack on a browser render, where a name resolves to a public address for the check and an internal one for the connection, isn't fully prevented. Speculation rules that a site sends in a `Speculation-Rules` response header can't be removed from the page, and rules that a page script gets past the sidecar's removal can still fire. The requests Chromium makes for them bypass the check. They are GET requests whose responses reach neither the page nor the output.
 
-For a boundary that doesn't depend on PullMD's own checks, put the Playwright sidecar on a Docker network shared only with `pullmd`. The sidecar doesn't need to reach your other containers, unless an internal host you list in `PULLMD_ALLOWED_HOSTS` is reachable only on a Docker network, in which case the sidecar needs access to it.
+For a boundary that doesn't depend on PullMD's own checks, the compose files put the Playwright sidecar on its own Docker network, `pullmd-render`, shared only with `pullmd`. If you keep your own compose file, set it up the same way; see [Upgrading](/self-hosting/upgrading). The sidecar doesn't need to reach your other containers, unless an internal host you list in `PULLMD_ALLOWED_HOSTS` is reachable only on a Docker network, in which case the sidecar needs access to it.

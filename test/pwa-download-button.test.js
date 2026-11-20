@@ -80,7 +80,7 @@ describe('PWA index.html: download button', () => {
   it('captures the server suggestion from every result path', () => {
     // showResult owns the state, so a result without a suggestion resets it
     // instead of inheriting the previous conversion's name.
-    assert.match(html, /function showResult\(text, source, shareId, suggestedName\)/);
+    assert.match(html, /function showResult\(text, source, shareId, suggestedName, opts\)/);
     assert.match(html, /currentSuggestedName = suggestedName \|\| '';/);
     // Plain /api + the two upload routes read the header; the SSE path has no
     // headers by then and carries the name in the result event payload.

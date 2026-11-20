@@ -151,7 +151,7 @@ describe('createStatusChecker', () => {
   });
 
   it('rejects malformed or too-old policy markers', async () => {
-    for (const policy of [{ ssrf: 0 }, { ssrf: '1' }, { ssrf: true }, { ssrf: 0.5 }, {}, 'enforced', null]) {
+    for (const policy of [{ ssrf: 0 }, { ssrf: 1 }, { ssrf: '1' }, { ssrf: true }, { ssrf: 0.5 }, {}, 'enforced', null]) {
       const fetch = fakeFetch(() => reply({ ok: true, policy }));
       const status = await createStatusChecker({ fetch, env: { PLAYWRIGHT_URL: ENV.PLAYWRIGHT_URL } })();
       assert.equal(status.services.playwright.status, 'degraded', JSON.stringify(policy));

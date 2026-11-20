@@ -22,7 +22,8 @@ IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 # the policy: an old image ignores allowedHosts and fetches whatever Chromium
 # asks for. The number is the policy revision; bump it when pullmd should
 # start requiring a newer one (lib/status.js holds the minimum).
-POLICY = {"ssrf": 1}
+# 2: the guard covers the whole render context (workers, pages the site opens).
+POLICY = {"ssrf": 2}
 
 # IPv4 ranges that must never be reached via user-supplied URLs.
 # 100.64.0.0/10 (CGNAT/shared) covers Alibaba metadata 100.100.100.200.
@@ -51,17 +52,22 @@ def _build_blocklist() -> list[IPNetwork]:
     for addr, prefix in BLOCKED_V6:
         nets.append(ipaddress.ip_network(f"{addr}/{prefix}", strict=False))
 
-    # Blocked v4 ranges reached via IPv6 transition addressing (NAT64, 6to4,
-    # IPv4-compatible). Per blocked v4 subnet add the matching embedded v6
-    # subnet, so a NAT64 host still resolves legit public v4 while
-    # metadata/private v4 stays blocked in every form. Same construction as
-    # buildBlockList() in lib/ssrf.js.
+    # The blocked v4 ranges reached via IPv6 transition addressing (NAT64
+    # well-known prefix, IPv4-translated, IPv4-compatible, 6to4). Each blocked
+    # v4 subnet gets the matching embedded v6 subnet, so a NAT64 host still
+    # reaches public v4 while private and metadata v4 stays blocked in every
+    # form. NAT64 local-use (64:ff9b:1::/48) is checked in is_blocked_ip(),
+    # because operators put the v4 address under prefixes of their own inside
+    # that /48. Same construction as buildBlockList() in lib/ssrf.js.
     for addr, prefix in BLOCKED_V4:
         a, b, c, d = (int(x) for x in addr.split("."))
         hi = f"{(a << 8) | b:x}"
         lo = f"{(c << 8) | d:x}"
         # NAT64 well-known prefix 64:ff9b::/96 - v4 in the low 32 bits
         nets.append(ipaddress.ip_network(f"64:ff9b::{hi}:{lo}/{96 + prefix}", strict=False))
+        # IPv4-translated ::ffff:0:0:0/96 (RFC 2765 SIIT) - v4 in the low 32 bits.
+        # Not IPv4-mapped (::ffff:a.b.c.d): a 16-bit zero group sits between.
+        nets.append(ipaddress.ip_network(f"::ffff:0:{hi}:{lo}/{96 + prefix}", strict=False))
         # IPv4-compatible ::/96 (deprecated) - v4 in the low 32 bits
         nets.append(ipaddress.ip_network(f"::{hi}:{lo}/{96 + prefix}", strict=False))
         # 6to4 2002::/16 - v4 in bits 16-48
@@ -70,6 +76,11 @@ def _build_blocklist() -> list[IPNetwork]:
 
 
 _BLOCKLIST = _build_blocklist()
+
+# NAT64 local-use prefix 64:ff9b:1::/48 (RFC 8215): operators carve their own
+# prefixes out of it, so the low 32 bits of any address in it are checked as
+# IPv4. Same check as nat64LocalUseV4() in lib/ssrf.js.
+_NAT64_LOCAL_USE = ipaddress.ip_network("64:ff9b:1::/48")
 
 
 def _parse_ip(value: str):
@@ -90,6 +101,10 @@ def is_blocked_ip(value: str) -> bool:
     ip = _parse_ip(value)
     if ip is None:
         return True  # not a parseable IP -> treat as unsafe
+    if isinstance(ip, ipaddress.IPv6Address) and ip in _NAT64_LOCAL_USE:
+        v4 = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+        if any(v4 in net for net in _BLOCKLIST):
+            return True
     return any(ip in net for net in _BLOCKLIST)
 
 

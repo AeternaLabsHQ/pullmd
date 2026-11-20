@@ -27,6 +27,34 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
   <Accordion title="403: URL not allowed">
     The URL points at a private, loopback or metadata address, or its host name doesn't resolve. With `render=force` or `extractor=playwright`, it can also mean the page tried to navigate the browser to one of those addresses. That's server-side request forgery (SSRF) protection; see [SSRF protection](/self-hosting/ssrf-protection). To allow an internal host, set `PULLMD_ALLOWED_HOSTS`, and add it to the compose file's `environment:` list so it reaches the container.
   </Accordion>
+  <Accordion title="422: document_too_complex">
+    ```json
+    { "error": "Document is nested too deeply or has too many elements", "code": "document_too_complex" }
+    ```
+
+    PullMD measures HTML and XML before it parses them and refuses a document over budget. HTML (fetched pages, `POST /api/html`, saved pages, the HTML part of an e-mail) is measured as received and again after PullMD has cleaned it up for extraction. An HTML-only e-mail whose HTML part fails the second measurement is converted by a simpler path that applies only the first. The budgets are 100,000 elements, 200,000 text nodes, 100,000 children of one element, 200,000 attributes, 1,000 attributes on one element, and a ceiling on the nesting depth added up over all elements. The cleaned-up markup is the tree a browser would build; there PullMD also allows 256 levels of nesting and 10,000,000 for the depth sum. Markup as received has no cap on levels of its own and a depth sum of 100,000,000, because old HTML often leaves tags open that a browser closes. Uploaded XML feeds (RSS, Atom, RDF) may nest 256 levels and hold 1,200,000 nodes. In an OpenDocument file, `content.xml` may hold 1,200,000 nodes (elements, attributes and text, five or six per filled cell), which a spreadsheet reaches at roughly 200,000 to 240,000 filled cells (fewer when the cells carry a lot of formatting). The same error comes back when a conversion runs out of the memory of its worker (512 MB). Retrying won't help. Split the document, or for a web page convert a smaller part of it with [`POST /api/html`](/guides/local-html). A page that is over a limit in the first, static pass isn't retried in the browser. If the automatic browser render produces a page over a limit, PullMD keeps the static result; with `render=force` or `extractor=playwright` you get this error.
+  </Accordion>
+  <Accordion title="422: conversion_timeout">
+    ```json
+    { "error": "Document took too long to convert", "code": "conversion_timeout" }
+    ```
+
+    The conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS` (60 seconds by default) inside its worker, and PullMD stopped it. Time spent waiting for a free worker or for the Trafilatura sidecar isn't counted. Retrying won't help. Split the document, or for a web page convert a smaller part of it with [`POST /api/html`](/guides/local-html). To allow more time, raise `PULLMD_CONVERT_TIMEOUT_MS`; see [Configuration](/reference/configuration#document-conversion).
+  </Accordion>
+  <Accordion title="503: converter_busy">
+    ```json
+    { "error": "The converter is busy, try again shortly", "code": "converter_busy" }
+    ```
+
+    Every conversion worker is busy and the queue is full (16 conversions), or a conversion waited 30 seconds for a worker. The response carries `Retry-After: 5`. Try again shortly. An async file job reports it as a job with `status: "error"` and `httpStatus: 503`, and the job status response carries the same `Retry-After`. If only the automatic browser render of a page can't get a worker, PullMD answers with the static result and doesn't cache it; with `render=force` or `extractor=playwright` you get this error. If it happens often, raise `PULLMD_CONVERT_WORKERS`; see [Configuration](/reference/configuration#document-conversion).
+  </Accordion>
+  <Accordion title="500: internal_error">
+    ```json
+    { "error": "Internal server error. / Interner Serverfehler.", "code": "internal_error" }
+    ```
+
+    PullMD hit an unexpected failure. The answer carries no details; the error and its stack are in the server log. Run `docker compose logs pullmd` to read them.
+  </Accordion>
   <Accordion title="401: Authentication required">
     Sign-in is on and the request had no valid credentials. Send an API key as `Authorization: Bearer pmd_…` (create one under **Settings** in the web app). A key from another instance, or one that was revoked, gives the same error. See [Authentication](/self-hosting/authentication#api-keys).
   </Accordion>
@@ -115,7 +143,7 @@ Check `GET /api/status` (are the sidecars up?) and the `X-Source` and `X-Quality
     Check that the instance is reachable from the internet on HTTPS, that `OAUTH_JWT_SECRET` and `PUBLIC_URL` are set, and that sign-in is enabled. A firewall or web-application-firewall rule that blocks some countries or networks can stop claude.ai before the request reaches PullMD, so check your proxy's logs too.
   </Accordion>
   <Accordion title="The admin password in .env doesn't work">
-    The admin is created from `.env` only on the first start. Later changes are ignored. Reset it with `docker compose exec pullmd node scripts/admin.js reset-password you@example.com`.
+    The admin is created from `.env` only on the first start. Later changes are ignored. Reset it with `docker compose exec -u app pullmd node scripts/admin.js reset-password you@example.com`.
   </Accordion>
 </AccordionGroup>
 

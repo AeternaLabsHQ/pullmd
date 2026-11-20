@@ -18,7 +18,7 @@ PullMD is configured with environment variables. With Docker Compose, put them i
 | `HOST_DOMAIN` | | Traefik compose file only. Host name without scheme, used for routing. |
 | `PULLMD_TRUST_PROXY` | off (Traefik file: `1`) | When to believe `X-Forwarded-*` headers: a hop count, `true`, or a list of proxy addresses. See [Reverse proxy](/self-hosting/reverse-proxy). |
 | `TZ` | unset | Time zone, such as `Europe/Berlin`. Used for the `PULLMD_FILENAME_DATE_PREFIX` date, and for dates and times in uploaded e-mails (`.eml`, `.msg`), calendars (`.ics`) and feeds, which use `Europe/Berlin` when `TZ` is unset. The compose files don't set it; add `- TZ=Europe/Berlin` to the `pullmd` service's `environment:` list. |
-| `CACHE_DB` | `/data/cache.db` | Path of the SQLite database (cache, history, accounts). `./data/cache.db` when run without Docker. |
+| `CACHE_DB` | `/data/cache.db` | Path of the SQLite database (cache, history, accounts). `./data/cache.db` when run without Docker. In the Docker image the app user can write only under `/data`, so keep the database there. |
 
 ## Sidecars
 
@@ -43,7 +43,7 @@ PullMD is configured with environment variables. With Docker Compose, put them i
 | Variable | Default | Description |
 | --- | --- | --- |
 | `PULLMD_CACHE_RETENTION_DAYS` | `90` | Days a conversion is kept after it was last written. A cache hit doesn't extend it; a new fetch of the URL does. `0` keeps everything. Range `0` to `36500`. An invalid value logs a warning and uses `90`. |
-| `DISABLE_PUBLIC_HISTORY` | `false` | `true`, `1`, `yes` or `on` (any case) hides everyone's history when sign-in is off: `/api/history`, `/api/archive`, `DELETE /api/cache` and `DELETE /api/cache/:id` return `403` to anonymous callers. Share links keep working. |
+| `DISABLE_PUBLIC_HISTORY` | `false` | `true`, `1`, `yes` or `on` (any case) hides everyone's history when sign-in is off: `/api/history`, `/api/archive`, `DELETE /api/cache` and `DELETE /api/cache/:id` return `403` to anonymous callers. Share links keep working. `/api/stats` and `/api/storage` then answer with `window` or `retentionDays` only. |
 
 ## Fetching
 
@@ -119,6 +119,17 @@ A client holds at most 3 jobs at once, counted per signed-in user or, without si
 
 With the default of 64 MB, one user or address holds at most 16 MB of results. When a new result would go over that share or over the total, that client's older finished results are dropped first, oldest first; results of other clients are never dropped. Once 32 MB of results are held, `POST /api/file?async=1` converts in the request and answers `200`.
 
+## Document conversion
+
+Set on the `pullmd` service. PullMD converts web pages, HTML uploads and the [formats it reads itself](/guides/documents#upload-formats-pullmd-reads-itself) in worker threads, so a document that is slow or memory-hungry to parse can't stall the server. Reddit and Hacker News conversions, and documents that go to the MarkItDown sidecar, don't use the workers.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `PULLMD_CONVERT_TIMEOUT_MS` | `60000` | Time in milliseconds one conversion may run in a worker before PullMD stops it and answers `422` with `"code": "conversion_timeout"`. Time spent waiting for a free worker and for the Trafilatura sidecar doesn't count. A non-numeric or `0` value uses the default. |
+| `PULLMD_CONVERT_WORKERS` | `2` | Number of conversion workers. Each has a 512 MB heap limit; a conversion that exhausts it answers `422` with `"code": "document_too_complex"`. `0` converts inside the server process with no time or memory limit, which isn't safe for an instance that others can reach. A non-numeric value uses `2`. |
+
+When every worker is busy, up to 16 conversions wait for a free one, for at most 30 seconds each. A request that can't wait gets `503` with `"code": "converter_busy"` and `Retry-After: 5`. See [Troubleshooting](/troubleshooting).
+
 ## Document sidecar limits
 
 Set on the `markitdown` service.
@@ -138,6 +149,8 @@ PullMD enforces these limits, and none has a setting:
 | `POST /api/html` body | 10 MB |
 | `POST /api/file` body | 25 MB |
 | `/mcp` request body | 1 MB |
+| Memory per conversion worker | 512 MB of JavaScript heap. Buffers aren't counted; the upload and fetch size limits bound them. |
+| Conversions waiting for a worker | 16, for at most 30 seconds |
 | Login attempts | 10 per minute per address |
 | Signups | 5 per hour per address |
 | Unknown share-link lookups | 120 per minute per address |

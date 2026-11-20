@@ -169,7 +169,7 @@ components:
       type: object
       properties:
         error: { type: string, description: What went wrong. }
-        code: { type: string, description: 'Machine-readable reason, when there is one. `bot_challenge`: the site is behind a bot-protection challenge; retrying won''t help.' }
+        code: { type: string, description: 'Machine-readable reason, when there is one. `bot_challenge`: the site is behind a bot-protection challenge; retrying won''t help. `document_too_complex` (with `422`): the HTML or XML is nested too deeply or too large to parse, or its conversion ran out of memory. `conversion_timeout` (with `422`): the conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS`; retrying won''t help. `converter_busy` (with `503`): every conversion worker is busy; try again after `Retry-After`. `internal_error` (with `500`): an unexpected failure; the details are in the server log. `invalid_body` (with `400`): the request body is not valid JSON. `payload_too_large` (with `413`): the body is over the size limit. `bad_request` (with another `4xx`): the request was rejected before a route handled it.' }
         vendor: { type: string, description: 'With `bot_challenge`: who served the challenge, `Cloudflare` or `Bunny Shield`.' }
     Conversion:
       type: object
@@ -244,7 +244,7 @@ components:
         shareId: { type: string, nullable: true, description: 'With `done`: always `null`, because uploads are not cached.' }
         suggestedFilename: { type: string, description: 'With `done`: a download file name for the result.' }
         error: { type: string, description: 'With `error`: what went wrong, at most 500 characters.' }
-        httpStatus: { type: integer, description: 'With `error`: the status the same conversion would have returned without `async`: `422` or `502`. `504` when the job was still pending after 15 minutes, `507` when the result was too large to hold.' }
+        httpStatus: { type: integer, description: 'With `error`: the status the same conversion would have returned without `async`: `422`, `502` or `503` (every conversion worker was busy). `504` when the job was still pending after 15 minutes, `507` when the result was too large to hold.' }
     ServiceStatus:
       type: object
       properties:
@@ -255,7 +255,7 @@ components:
         latencyMs: { type: integer, description: 'Health-check round trip, in milliseconds. Present when the sidecar answered, including `unhealthy` and `http <status>`. Absent when it is unreachable, timed out or not configured.' }
         error:
           type: string
-          description: 'Why it is down: `timeout`, `unreachable`, `misconfigured` (the URL can''t be parsed), `unhealthy` (it reported itself unhealthy), `http <status>`, or `policy-missing` (`status: degraded`: a Playwright sidecar older than 3.17.0, which doesn''t report its SSRF policy).'
+          description: 'Why it is down: `timeout`, `unreachable`, `misconfigured` (the URL can''t be parsed), `unhealthy` (it reported itself unhealthy), `http <status>`, or `policy-missing` (`status: degraded`: a Playwright sidecar older than 3.20.0, which doesn''t report SSRF policy revision 2).'
     Status:
       type: object
       properties:
@@ -403,12 +403,34 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Post not found }
+        '422':
+          description: 'The page is nested more than 256 levels deep or exceeds another parse budget (100,000 elements, 200,000 text nodes, 100,000 children of one element, 200,000 attributes, 1,000 attributes on one element), or its conversion ran out of memory (`"code": "document_too_complex"`). Or the conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS` (`"code": "conversion_timeout"`). A page over a limit in the static pass is not retried in the browser. On the automatic browser render, an over-limit rendered page keeps the static result; with `render=force` or `extractor=playwright` the request fails.'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                tooComplex:
+                  summary: Over a budget
+                  value: { error: Document is nested too deeply or has too many elements, code: document_too_complex }
+                timeout:
+                  summary: Too slow
+                  value: { error: Document took too long to convert, code: conversion_timeout }
         '500':
           description: An unexpected error while fetching a Reddit post.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Internal server error }
+        '503':
+          description: 'Every conversion worker is busy and the queue is full, or the conversion waited 30 seconds for a worker (`"code": "converter_busy"`). If only the automatic browser render finds no worker, the static result is returned instead and is not cached.'
+          headers:
+            Retry-After:
+              description: Seconds to wait before trying again (`5`).
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'The converter is busy, try again shortly', code: converter_busy }
         '502':
           description: The source could not be fetched or converted, Reddit rate-limited (`Reddit rate limit. Try again later.`) or blocked (`Reddit blocked the request.`) the request, or the site is behind a bot-protection challenge (`code` is `bot_challenge`).
           content:
@@ -498,13 +520,23 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example: { error: File too large (max 10 MB). / Datei zu groß (max. 10 MB). }
+              example: { error: 'File too large (max 10 MB). / Datei zu groß (max. 10 MB).', code: payload_too_large }
         '422':
-          description: The document has under 200 characters of content after extraction, as when a page loads its content with JavaScript.
+          description: 'The document has under 200 characters of content after extraction, as when a page loads its content with JavaScript. Or, with `"code": "document_too_complex"`, the HTML is nested more than 256 levels deep or exceeds another parse budget (100,000 elements, 200,000 text nodes, 100,000 children of one element, 200,000 attributes, 1,000 attributes on one element). With `"code": "conversion_timeout"`, the conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS`.'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: 'Extraction found almost no content - this file looks like a JavaScript app shell. Submit the original URL instead. / Die Extraktion fand kaum Inhalt - die Datei wirkt wie eine JavaScript-App. Bitte übermittle stattdessen die Original-URL.' }
+        '503':
+          description: 'Every conversion worker is busy and the queue is full, or the conversion waited 30 seconds for a worker (`"code": "converter_busy"`).'
+          headers:
+            Retry-After:
+              description: Seconds to wait before trying again (`5`).
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'The converter is busy, try again shortly', code: converter_busy }
         '500':
           description: 'Extraction failed. The message starts with `Failed to extract HTML:`.'
           content:
@@ -598,13 +630,23 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
-              example: { error: File too large (max 25 MB). / Datei zu groß (max. 25 MB). }
+              example: { error: 'File too large (max 25 MB). / Datei zu groß (max. 25 MB).', code: payload_too_large }
         '422':
-          description: The file doesn't match its format, such as an `.eml` file without mail headers.
+          description: 'The file doesn''t match its format, such as an `.eml` file without mail headers. Or, with `"code": "document_too_complex"`, the file is nested too deeply or too large to parse, such as an OpenDocument spreadsheet with more than roughly 200,000 to 240,000 filled cells (fewer when the cells carry a lot of formatting), or its conversion ran out of memory. With `"code": "conversion_timeout"`, the conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS`.'
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: 'Not an e-mail: no From/To/Subject/Date headers found. / Keine E-Mail: keine From/To/Subject/Date-Header gefunden.' }
+        '503':
+          description: 'Every conversion worker is busy and the queue is full, or the conversion waited 30 seconds for a worker (`"code": "converter_busy"`). Only files PullMD reads itself use the workers.'
+          headers:
+            Retry-After:
+              description: Seconds to wait before trying again (`5`).
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'The converter is busy, try again shortly', code: converter_busy }
         '502':
           description: The conversion failed, for example because the MarkItDown sidecar is not configured or not reachable.
           content:
@@ -630,6 +672,9 @@ paths:
             Cache-Control:
               description: Always `no-store`.
               schema: { type: string }
+            Retry-After:
+              description: '`5`, only when the job failed with `httpStatus` `503` (every conversion worker was busy): submit the file again after that many seconds.'
+              schema: { type: integer }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FileJob' }
@@ -710,7 +755,7 @@ paths:
       description: |
         Same conversion as `GET /api`, delivered as Server-Sent Events so you can show progress. `status` events report each stage, and the stream ends with one `result` event or one `error` event. The web app uses this endpoint.
 
-        Errors after the stream has started, including blocked URLs, arrive as an `error` event rather than an HTTP status. To use `query`, call `GET /api`.
+        Errors after the stream has started, including blocked URLs, arrive as an `error` event rather than an HTTP status. A document that is too complex to parse, takes too long to convert or finds every conversion worker busy adds `"code": "document_too_complex"`, `"conversion_timeout"` or `"converter_busy"` to the event data. To use `query`, call `GET /api`.
       security: [{}, { bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/url'
@@ -1153,7 +1198,7 @@ paths:
       tags: [Instance]
       operationId: getStats
       summary: Get extraction stats
-      description: Counts, average quality and latency per extractor over a time window. The per-domain lists (`lowQualityDomains`, `fallbackByDomain`) are included only for the admin, or for everyone when sign-in is off and public history is on.
+      description: 'Counts, average quality and latency per extractor over a time window. The answer is for the admin, or for everyone when sign-in is off and public history is on. Other callers get `200` with only `window`.'
       security: []
       parameters:
         - name: window
@@ -1163,7 +1208,7 @@ paths:
           example: '-30 days'
       responses:
         '200':
-          description: Extraction stats.
+          description: 'Extraction stats. Callers who may not see the global history get only `window`.'
           content:
             application/json:
               schema:
@@ -1185,7 +1230,7 @@ paths:
                         avgMs: { type: integer, nullable: true, description: 'Average time per request, in milliseconds.' }
                   lowQualityDomains:
                     type: array
-                    description: 'Up to 20 domains whose fresh (not cached) results scored below 0.4, most frequent first. Only for the admin, or everyone when sign-in is off and public history is on. Absent when `total` is `0`.'
+                    description: 'Up to 20 domains whose fresh (not cached) results scored below 0.4, most frequent first. Absent when `total` is `0`.'
                     items:
                       type: object
                       properties:
@@ -1194,7 +1239,7 @@ paths:
                         avgQuality: { type: number, description: Their average quality score. }
                   fallbackByDomain:
                     type: array
-                    description: 'Up to 20 domains where extraction fell back, most frequent first. Counts results from `readability-fallback` and results whose extractor reason contains `fell back` or `readability thin`. Same visibility as `lowQualityDomains`. Absent when `total` is `0`.'
+                    description: 'Up to 20 domains where extraction fell back, most frequent first. Counts results from `readability-fallback` and results whose extractor reason contains `fell back` or `readability thin`. Absent when `total` is `0`.'
                     items:
                       type: object
                       properties:
@@ -1214,11 +1259,11 @@ paths:
       tags: [Instance]
       operationId: getStorage
       summary: Get cache size
-      description: 'Size of the cache, how many rows will expire soon, and cache traffic over the last 7 days. The hit rate is `cacheHits7d / requests7d`. The 7-day counts come from the request log, which keeps entries after their cache rows are deleted, so they can be non-zero while `total` is `0`.'
+      description: 'Size of the cache, how many rows will expire soon, and cache traffic over the last 7 days. The hit rate is `cacheHits7d / requests7d`. The 7-day counts come from the request log, which keeps entries after their cache rows are deleted, so they can be non-zero while `total` is `0`. The full answer is for the admin, or for everyone when sign-in is off and public history is on. Other callers get `200` with only `retentionDays`.'
       security: []
       responses:
         '200':
-          description: Cache statistics.
+          description: 'Cache statistics. Callers who may not see the global history get only `retentionDays`.'
           content:
             application/json:
               schema:
@@ -1317,6 +1362,12 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Authentication required }
+        '403':
+          description: 'The browser''s `Origin` header (or, without one, `Referer`) names a host other than this instance''s or `PUBLIC_URL`''s. Requests that send neither header are accepted.'
+          content:
+            text/plain:
+              schema: { type: string }
+              example: 'Forbidden: form posts are accepted from this site only.'
         '404':
           description: 'Sign-in is off (`PULLMD_AUTH_MODE=disabled`), so the endpoint doesn''t exist. The body is the web server''s default HTML page, not JSON.'
           content:
@@ -1380,6 +1431,12 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
               example: { error: Authentication required }
+        '403':
+          description: 'The browser''s `Origin` header (or, without one, `Referer`) names a host other than this instance''s or `PUBLIC_URL`''s. Requests that send neither header are accepted.'
+          content:
+            text/plain:
+              schema: { type: string }
+              example: 'Forbidden: form posts are accepted from this site only.'
         '404':
           description: 'Sign-in is off (`PULLMD_AUTH_MODE=disabled`), so the endpoint doesn''t exist. The body is the web server''s default HTML page, not JSON.'
           content:

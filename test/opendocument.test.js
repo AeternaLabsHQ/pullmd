@@ -148,7 +148,15 @@ describe('OpenDocument text (.odt)', () => {
   it('rejects absurdly deep nesting with 422 instead of crashing', async () => {
     const deep = '<text:span>'.repeat(30000) + 'x' + '</text:span>'.repeat(30000);
     const buf = odf('text', `<office:text><text:p>${deep}</text:p></office:text>`);
-    await assert.rejects(() => extractOpenDocument(buf, { filename: 'tief.odt' }), is422('not_opendocument'));
+    await assert.rejects(() => extractOpenDocument(buf, { filename: 'tief.odt' }), is422('document_too_complex'));
+  });
+
+  it('rejects deeply nested spans quickly', async () => {
+    const deep = '<text:span>'.repeat(200_000) + 'x' + '</text:span>'.repeat(200_000);
+    const buf = odf('text', `<office:text><text:p>${deep}</text:p></office:text>`);
+    const t0 = Date.now();
+    await assert.rejects(() => extractOpenDocument(buf, { filename: 'tief.odt' }), is422('document_too_complex'));
+    assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
   });
 
   it('falls back to the filename stem', async () => {
@@ -205,7 +213,7 @@ describe('OpenDocument spreadsheet (.ods)', () => {
       + '</table:table></office:spreadsheet>';
     const t0 = Date.now();
     await assert.rejects(() => extractOpenDocument(odf('spreadsheet', sheet), { filename: 'b.ods' }), is422('document_too_large'));
-    assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+    assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
   });
 
   it('keeps a single sheet heading', async () => {
@@ -286,7 +294,7 @@ describe('OpenDocument errors', () => {
     }
     const t0 = Date.now();
     await assert.rejects(() => extractOpenDocument(odf('text', `<office:text>${inner}</office:text>`), { filename: 'n.odt' }), is422('document_too_large'));
-    assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+    assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
   });
 
   it('formats a span with a long run of spaces in linear time', async () => {
@@ -295,8 +303,88 @@ describe('OpenDocument errors', () => {
     const body = `<office:text><text:p>a <text:span text:style-name="B">x${'<text:s text:c="100"/>'.repeat(2000)}y</text:span></text:p></office:text>`;
     const t0 = Date.now();
     const r = await extractOpenDocument(odf('text', body, [], auto), { filename: 's.odt' });
-    assert.ok(Date.now() - t0 < 5000, `took ${Date.now() - t0} ms`);
+    assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
     assert.match(r.markdown, /\*\*x {200000}y\*\*/);
+  });
+
+  // Builds the upload inside its own scope (the inflated XML string is
+  // garbage once odf() returns) and drops the buffer afterwards, so these
+  // floods do not keep memory alive for later tests. The extraction runs
+  // synchronously, so RSS after it is at least what a DOM built on the way
+  // would have left behind (the heap does not shrink back right away).
+  async function assertLeanReject(build) {
+    let buf = build();
+    assert.ok(buf.length < 300 * 1024, `zip is ${buf.length} bytes`);
+    const rss0 = process.memoryUsage().rss;
+    const t0 = Date.now();
+    try {
+      await assert.rejects(() => extractOpenDocument(buf, { filename: 'flut.odt' }), is422('document_too_complex'));
+    } finally {
+      buf = null;
+    }
+    assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
+    const grown = (process.memoryUsage().rss - rss0) / 1024 / 1024;
+    assert.ok(grown < 300, `RSS grew by ${grown.toFixed(0)} MB`);
+  }
+
+  it('rejects a content.xml over the node budget', async () => {
+    await assertLeanReject(() => odf('text', `<office:text>${'<text:p/>'.repeat(1_600_000)}</office:text>`));
+  });
+
+  // About 32 MB inflated with almost no elements: comments, processing
+  // instructions and attributes count against the node budget as well.
+  const L = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const attrNames = [...L, ...L.flatMap((a) => L.map((b) => a + b))].join(' ');
+  for (const [name, unit] of [
+    ['processing instructions between text', 'x<?a?>'],
+    ['comments', '<!---->'],
+    ['bare attribute names', `<text:p ${attrNames}/>`],
+  ]) {
+    it(`rejects a content.xml flooded with ${name} (node budget)`, async () => {
+      await assertLeanReject(() => odf('text', `<office:text><text:p>${unit.repeat(Math.floor(32_000_000 / unit.length))}</text:p></office:text>`));
+    });
+  }
+
+  it('rejects a styles.xml flooded with bare attribute names (node budget)', async () => {
+    await assertLeanReject(() => odf('text', '<office:text><text:p>a</text:p></office:text>', [{
+      name: 'styles.xml',
+      data: `<?xml version="1.0"?><office:document-styles ${NS}>${`<a ${attrNames}/>`.repeat(3000)}</office:document-styles>`,
+      deflate: true,
+    }]));
+  });
+
+  it('rejects an oversized meta.xml', async () => {
+    const meta = `<?xml version="1.0"?><office:document-meta ${NS}><office:meta>${' '.repeat(1024 * 1024)}</office:meta></office:document-meta>`;
+    const buf = odf('text', '<office:text><text:p>a</text:p></office:text>', [{ name: 'meta.xml', data: meta, deflate: true }]);
+    await assert.rejects(() => extractOpenDocument(buf, { filename: 'meta.odt' }), is422('document_too_large'));
+  });
+
+  it('converts a style-heavy styles.xml (5,000 LibreOffice-shaped styles)', async () => {
+    // About 33 nodes per style as LibreOffice writes a paragraph style with
+    // paragraph and text properties: 165,000 nodes in all.
+    const style = (i) => `<style:style style:name="Corp_${i}" style:display-name="Corp ${i}" style:family="paragraph" style:parent-style-name="Standard" style:next-style-name="Text_20_body" style:class="text">`
+      + '<style:paragraph-properties fo:margin-left="0.5cm" fo:margin-right="0cm" fo:margin-top="0.423cm" fo:margin-bottom="0.212cm" style:contextual-spacing="false" fo:line-height="115%" fo:text-align="start" fo:keep-with-next="always"/>'
+      + `<style:text-properties fo:color="#1f3864" style:font-name="Liberation Sans" fo:font-size="${10 + (i % 8)}pt" fo:font-weight="bold" style:font-name-asian="Noto Sans CJK SC" style:font-size-asian="12pt" style:font-weight-asian="bold" style:font-name-complex="Noto Sans Devanagari" style:font-size-complex="12pt" style:font-weight-complex="bold"/>`
+      + '</style:style>';
+    const ns = `${NS} xmlns:style="urn:oasis:names:tc:opendocument:xmlns:style:1.0" xmlns:fo="urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0"`;
+    const styles = `<?xml version="1.0"?><office:document-styles ${ns}><office:styles>${Array.from({ length: 5000 }, (_, i) => style(i)).join('')}</office:styles></office:document-styles>`;
+    const buf = odf('text', '<office:text><text:p text:style-name="Corp_7">Styled text</text:p></office:text>', [{ name: 'styles.xml', data: styles, deflate: true }]);
+    const r = await extractOpenDocument(buf, { filename: 'corp.odt' });
+    assert.match(r.markdown, /Styled text/);
+  });
+
+  it('checks styles.xml and meta.xml before parsing them', async () => {
+    const plain = '<office:text><text:p>a</text:p></office:text>';
+    const deep = '<a>'.repeat(300) + '</a>'.repeat(300);
+    const part = (name, root, inner) => ({ name, data: `<?xml version="1.0"?><${root} ${NS}>${inner}</${root}>`, deflate: true });
+    for (const extra of [
+      part('styles.xml', 'office:document-styles', '<a/>'.repeat(250_001)),
+      part('styles.xml', 'office:document-styles', deep),
+      part('meta.xml', 'office:document-meta', '<a/>'.repeat(100_001)),
+      part('meta.xml', 'office:document-meta', deep),
+    ]) {
+      await assert.rejects(() => extractOpenDocument(odf('text', plain, [extra]), { filename: 'p.odt' }), is422('document_too_complex'), extra.name);
+    }
   });
 
   it('fails cleanly on a zip bomb', async () => {

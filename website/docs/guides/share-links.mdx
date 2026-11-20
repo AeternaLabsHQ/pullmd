@@ -76,4 +76,4 @@ With sign-in on, a regular user's delete removes the entry from their own histor
 
 ## Where the cache lives
 
-The cache is a SQLite file at `/data/cache.db` inside the container, which the compose file maps to `./data` next to it. To keep your history and accounts, back up that folder. `GET /api/storage` reports its size, entry counts, and cache hits and requests over the last 7 days.
+The cache is a SQLite file at `/data/cache.db` inside the container, which the compose file maps to `./data` next to it. To keep your history and accounts, back up that folder. `GET /api/storage` reports its size, entry counts, and cache hits and requests over the last 7 days, to the admin, or to everyone when sign-in is off and public history is on.

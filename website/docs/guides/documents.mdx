@@ -46,6 +46,8 @@ Run through these steps before every release so nothing ships half-finished.
 
 In the web app, drag a file onto the page or use the file picker.
 
+The web app doesn't load images when it shows an uploaded file's result, such as an e-mail or a saved page. A bar above the result says so and offers **Load images**, which loads them for that result. The Raw view shows such an image as its Markdown text, and the Rendered view as its alt text and address. Only `data:` and `blob:` images aren't held back. Images with an address on the instance itself wait for the click too. The web app requests the images in a result without a referrer.
+
 ## Leave the app during a long conversion
 
 Audio transcription, OCR and image descriptions can take longer than a browser keeps a request open. With `async=1`, PullMD takes the upload, answers at once with a job id, and converts the file in the background. You collect the result with a second request, so the connection doesn't have to stay open while the conversion runs.
@@ -72,7 +74,7 @@ In the web app, a document upload uses this by default. After the upload finishe
     curl "http://localhost:3000/api/file/jobs/2f2f4a7b37f071b7e3137d42eb9dbec3"
     ```
 
-    The answer is `{ "status": "pending" }` while the file converts. When it is `done`, the body holds `markdown`, `metadata`, `source`, `shareId` (always `null`) and `suggestedFilename`. When it is `error`, the body holds `error` and `httpStatus`, the status the same conversion would have returned without `async`: `422` or `502`.
+    The answer is `{ "status": "pending" }` while the file converts. When it is `done`, the body holds `markdown`, `metadata`, `source`, `shareId` (always `null`) and `suggestedFilename`. When it is `error`, the body holds `error` and `httpStatus`, the status the same conversion would have returned without `async`: `422`, `502` or `503` (every conversion worker was busy).
   </Step>
   <Step title="Delete the job">
     ```bash
@@ -115,7 +117,7 @@ These uploaded formats work without the MarkItDown sidecar. PullMD picks the rea
 
 With `frontmatter=true`, e-mail results carry `title`, `author`, `published` and `source: email`.
 
-A file that doesn't match its format, such as an `.eml` file without mail headers, returns `422`.
+A file that doesn't match its format, such as an `.eml` file without mail headers, returns `422`. So does a file nested too deeply or too large to parse, with `"code": "document_too_complex"`: for example a spreadsheet with more than roughly 200,000 to 240,000 filled cells (fewer when the cells carry a lot of formatting), or an e-mail whose HTML part is over the [HTML limits](/guides/local-html#differences-from-a-url-conversion) and has no plain-text part. See [Troubleshooting](/troubleshooting). A conversion that runs longer than `PULLMD_CONVERT_TIMEOUT_MS` (60 seconds by default) returns `422` with `"code": "conversion_timeout"`, and when every conversion worker is busy you get `503` with `"code": "converter_busy"` and a `Retry-After` header. An upload with `async=1` reports each of these as a job with `status: "error"`, the message in `error` and the `httpStatus` (`422` or `503`), without the `code`; the status response for a `503` job carries the `Retry-After` header.
 
 ## Tables in PDFs: use OCR
 

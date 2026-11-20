@@ -53,6 +53,14 @@ describe('POST /api/file - formats read by pullmd itself', () => {
     });
   }
 
+  it('an over-nested feed answers 422 document_too_complex quickly', async () => {
+    const t0 = Date.now();
+    const res = await post(Buffer.from('<rss>' + '<a>'.repeat(400_000)), 'feed.xml');
+    assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
+    assert.equal(res.status, 422, res.body);
+    assert.equal(JSON.parse(res.body).code, 'document_too_complex');
+  });
+
   it('a broken OpenDocument file answers 422, not 502', async () => {
     const res = await post(Buffer.from('not a zip at all'), 'kaputt.odt');
     assert.equal(res.status, 422);

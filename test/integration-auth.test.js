@@ -111,24 +111,49 @@ describe('integration: auth gating in createApp', () => {
     });
   });
 
-  it('aggregate /api/stats and /api/storage stay public', async () => {
-    await withApp('multi-user', async (base) => {
+  it('/api/stats and /api/storage answer 200 to anonymous callers but without counts', async () => {
+    await withApp('multi-user', async (base, { cache }) => {
+      cache.logExtraction({ url: 'https://x.com/a', source: 'readability', quality: 0.1, markdownLen: 10, extractorReason: null, durationMs: 5, client: 'api', cached: false });
       const a = await fetch(base + '/api/stats');
       assert.equal(a.status, 200);
+      const stats = await a.json();
+      assert.deepEqual(stats, { window: '-7 days' });
       const b = await fetch(base + '/api/storage');
       assert.equal(b.status, 200);
+      assert.deepEqual(await b.json(), { retentionDays: 90 });
     });
   });
 
-  it('/api/stats omits per-domain lists for anonymous callers', async () => {
-    await withApp('multi-user', async (base, { cache }) => {
-      cache.logExtraction({ url: 'https://x.com/a', source: 'readability', quality: 0.1, markdownLen: 10, extractorReason: null, durationMs: 5, client: 'api', cached: false });
-      const r = await fetch(base + '/api/stats');
+  it('/api/stats and /api/storage give a non-admin user the short answers', async () => {
+    await withApp('multi-user', async (base, { auth }) => {
+      const bob = await auth.createUser({ email: 'bob@example.com', password: 'pw1234567' });
+      const { fullKey } = auth.createApiKey(bob.id, 'k');
+      const conv = await fetch(base + '/api?url=https://x.com&nocache=1', { headers: { Authorization: `Bearer ${fullKey}` } });
+      assert.equal(conv.status, 200);
+      const headers = { Authorization: `Bearer ${fullKey}` };
+      const a = await fetch(base + '/api/stats', { headers });
+      assert.equal(a.status, 200);
+      assert.deepEqual(await a.json(), { window: '-7 days' });
+      const b = await fetch(base + '/api/storage', { headers });
+      assert.equal(b.status, 200);
+      assert.deepEqual(await b.json(), { retentionDays: 90 });
+    });
+  });
+
+  it('/api/storage gives the admin the full answer', async () => {
+    await withApp('multi-user', async (base, { auth, cache }) => {
+      const adminId = cache.db.prepare("SELECT id FROM users").get().id;
+      const { fullKey } = auth.createApiKey(adminId, 'k');
+      const headers = { Authorization: `Bearer ${fullKey}` };
+      const conv = await fetch(base + '/api?url=https://x.com&nocache=1', { headers });
+      assert.equal(conv.status, 200);
+      const r = await fetch(base + '/api/storage', { headers });
       assert.equal(r.status, 200);
       const body = await r.json();
-      assert.equal(body.total, 1);
-      assert.equal(body.lowQualityDomains, undefined);
-      assert.equal(body.fallbackByDomain, undefined);
+      assert.ok(body.total >= 1);
+      assert.equal(typeof body.requests7d, 'number');
+      assert.equal(typeof body.dbSizeBytes, 'number');
+      assert.equal(body.retentionDays, 90);
     });
   });
 
@@ -143,20 +168,6 @@ describe('integration: auth gating in createApp', () => {
       assert.ok(body.total >= 1);
       assert.ok(Array.isArray(body.lowQualityDomains));
       assert.ok(Array.isArray(body.fallbackByDomain));
-    });
-  });
-
-  it('/api/stats omits per-domain lists for a non-admin user', async () => {
-    await withApp('multi-user', async (base, { auth }) => {
-      const bob = await auth.createUser({ email: 'bob@example.com', password: 'pw1234567' });
-      const { fullKey } = auth.createApiKey(bob.id, 'k');
-      const conv = await fetch(base + '/api?url=https://x.com&nocache=1', { headers: { Authorization: `Bearer ${fullKey}` } });
-      assert.equal(conv.status, 200);
-      const r = await fetch(base + '/api/stats', { headers: { Authorization: `Bearer ${fullKey}` } });
-      const body = await r.json();
-      assert.ok(body.total >= 1);
-      assert.equal(body.lowQualityDomains, undefined);
-      assert.equal(body.fallbackByDomain, undefined);
     });
   });
 

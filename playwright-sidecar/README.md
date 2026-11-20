@@ -6,13 +6,13 @@ This image is **not** useful on its own. Use it together with `aeternalabshq/pul
 
 ## Endpoints
 
-- `GET /health` → `{"ok": true, "playwright": "<version>", "browser": "chromium", "policy": {"ssrf": 1}}`. `policy.ssrf` is the revision of the outbound address policy (see below); pullmd's `/api/status` reports a sidecar without it as `degraded`.
+- `GET /health` → `{"ok": true, "playwright": "<version>", "browser": "chromium", "policy": {"ssrf": 2}}`. `policy.ssrf` is the revision of the outbound address policy (see below); pullmd's `/api/status` reports a sidecar that reports none, or a revision below 2, as `degraded` (`policy-missing`).
 - `POST /render` body `{"url": "https://…"}` → `text/html` (rendered DOM after JavaScript execution)
 - Returns `503 Retry-After: 5` when the concurrency limit (default 4) is saturated, `504` on render timeout (20s hard cap).
 
 ## Wiring
 
-In your `docker-compose.yml`, run alongside `pullmd` on a shared internal network and set `PLAYWRIGHT_URL=http://playwright:8002/render` on the pullmd service:
+In your `docker-compose.yml`, run it alongside `pullmd` on a network of its own that only `pullmd` joins, and set `PLAYWRIGHT_URL=http://playwright:8002/render` on the pullmd service. The shipped compose files call this network `pullmd-render`; `pullmd` also sits on `pullmd-internal` with the other sidecars, the browser does not:
 
 ```yaml
 services:
@@ -23,15 +23,15 @@ services:
     depends_on:
       - playwright
     networks:
-      - pullmd-internal
+      - pullmd-render
 
   playwright:
     image: aeternalabshq/pullmd-playwright:latest
     networks:
-      - pullmd-internal
+      - pullmd-render
 
 networks:
-  pullmd-internal:
+  pullmd-render:
     driver: bridge
 ```
 
@@ -64,13 +64,28 @@ with `403` and a JSON body `{"detail":{"code":"ssrf_blocked","url":...,"reason":
 a blocked subresource is dropped and the render continues. Service workers are
 disabled.
 
+The guard covers the whole browser context, not just the page being rendered,
+so requests from workers and from any page the site opens itself are checked
+too. The renderer only reads the main document: `window.open` returns `null`,
+links and forms aimed at another window (`target="_blank"` and the like) do
+nothing, any other page that still appears gets no HTTP traffic (its
+WebSockets go through the same address policy as everything else), and
+`SharedWorker` is switched off in Chromium. Dedicated workers keep working
+under the same address policy. An in-page script removes
+`<script type="speculationrules">` elements as they are created or parsed,
+because speculative prefetch and prerender bypass the request guard. This is
+best effort: rules a page script gets past it, and rules sent in a
+`Speculation-Rules` response header, can still fire; that residual is
+described in [SECURITY.md](../SECURITY.md).
+
 Exceptions come from pullmd: it forwards its `PULLMD_ALLOWED_HOSTS` in the
 render request as `allowedHosts` (same grammar: CIDRs, bare IPs, exact
 hostnames). Setting `PULLMD_ALLOWED_HOSTS` on the sidecar container works as a
 fallback when the request carries none.
 
-For a boundary that does not depend on the application, give the sidecar its
-own bridge network with no other service on it.
+For a boundary that does not depend on the application, the shipped compose
+files put the sidecar on its own bridge network (`pullmd-render`) that only
+pullmd joins; trafilatura and markitdown are not reachable from it.
 
 ## Resource footprint
 

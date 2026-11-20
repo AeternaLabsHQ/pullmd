@@ -1,3 +1,76 @@
+# Migrating from v3.19.x to v3.20.0
+
+v3.20.0 has no breaking API change and no database schema change. Nothing stops working if you skip the two recommended steps below, but you keep a weaker boundary around the browser sidecar and a container with more privileges than it needs.
+
+## Recommended: move the Playwright sidecar to its own network
+
+The browser in the Playwright sidecar runs the scripts of every page it renders. The shipped compose files now put it on a bridge network of its own, `pullmd-render`, that only `pullmd` joins, so those scripts cannot reach trafilatura, markitdown or anything else on `pullmd-internal`. A compose file you downloaded or edited before v3.20.0 still has the sidecar on `pullmd-internal`; `docker compose pull` updates the images, not the file. Change three places:
+
+```yaml
+services:
+  pullmd:
+    networks:
+      - pullmd-internal
+      - pullmd-render        # new
+
+  playwright:
+    networks:
+      - pullmd-render        # was: pullmd-internal
+
+networks:
+  pullmd-internal:
+    driver: bridge
+  pullmd-render:             # new
+    driver: bridge
+```
+
+The Traefik compose file keeps `proxy` on the `pullmd` service as well. Then run `docker compose up -d`. If a host you list in `PULLMD_ALLOWED_HOSTS` is reachable only on a Docker network, the sidecar needs that network too.
+
+## Recommended: run the containers with fewer privileges
+
+The shipped compose files now set `no-new-privileges` on all four services and drop every Linux capability. `pullmd` keeps four, which its entrypoint needs to fix the ownership of the data folder and then drop to the app user. The `pullmd` image also no longer lets that user write to `/app`: the application files stay owned by root, and only `/data` belongs to the app user. A compose file you downloaded or edited before v3.20.0 keeps working without these lines, so nothing breaks if you skip this. To get the same settings, add them to your services:
+
+```yaml
+services:
+  pullmd:
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - SETUID
+      - SETGID
+
+  trafilatura:             # the same two keys on playwright and markitdown
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+```
+
+Then run `docker compose up -d`. Services you renamed or added need the same treatment under their own names.
+
+Because the app can no longer write under `/app`, keep everything it writes under `/data`: a `CACHE_DB` that points into `/app` stops working. The compose files set `CACHE_DB=/data/cache.db` and mount `./data` there.
+
+Run the admin commands as the app user, which owns the database: `docker compose exec -u app pullmd node scripts/admin.js ...`. Without the dropped capabilities root could write the database; with them it cannot, so `scripts/admin.js` started as root switches to the app user itself.
+
+## Other changes to check
+
+- **`422 document_too_complex`.** HTML and XML that is nested too deeply or has too many elements, text nodes or attributes is refused before parsing. Ordinary pages stay far below the budgets; a very long page (over 100,000 elements or 200,000 text nodes) or a spreadsheet with more than roughly 200,000 to 240,000 filled cells (fewer when the cells carry a lot of formatting) now gets `422` where it used to convert slowly. The exact budgets are in `CHANGELOG.md`.
+- **Conversion workers: `422 conversion_timeout` and `503 converter_busy`.** Web pages, HTML uploads and the formats PullMD reads itself are converted in worker threads. A conversion that runs longer than `PULLMD_CONVERT_TIMEOUT_MS` (default `60000`) answers `422` with `"code": "conversion_timeout"`; one that exhausts a worker's 512 MB heap answers `422` with `document_too_complex`. When all `PULLMD_CONVERT_WORKERS` (default `2`) are busy and 16 conversions already wait, or a conversion waited 30 seconds, the answer is `503` with `"code": "converter_busy"` and `Retry-After: 5`; clients should retry after that. The workers run in the `pullmd` container and use up to 512 MB of heap each. The shipped compose files pass both variables through; if you keep your own compose file, add a line such as `- PULLMD_CONVERT_WORKERS=${PULLMD_CONVERT_WORKERS:-}` for each to the `pullmd` service. `PULLMD_CONVERT_WORKERS=0` converts in the server process without a time or memory limit and isn't safe for an instance others can reach.
+- **Update `pullmd-playwright` together with `pullmd`.** The sidecar's address policy is at revision 2, and `/api/status` reports a sidecar image older than 3.20.0 as `degraded` with `"error": "policy-missing"` and answers `503` until the image is updated. Renders keep working. `docker compose pull` updates both.
+- **`reset-password` signs OAuth clients out.** `scripts/admin.js reset-password` revokes the user's OAuth refresh tokens in addition to ending their sessions. Connected clients such as claude.ai have to be connected again; API keys stay.
+- **`/api/stats` and `/api/storage` return their counts only to callers who may see the global history.** That is the admin, or anyone when sign-in is off and `DISABLE_PUBLIC_HISTORY` is not set. Everyone else, including a signed-in user who is not the admin, gets `200` with only `window` (`/api/stats`) or only `retentionDays` (`/api/storage`). A monitor that reads `total`, `dbSizeBytes` or `requests7d` has to send an admin API key. With sign-in off and public history on, the answers are unchanged. The web app's footer counts show only when the answer carries them.
+- **Errors answer JSON without a stack trace.** An unexpected failure answers `500` with `{"error": "Internal server error. / Interner Serverfehler.", "code": "internal_error"}`, a body that is not valid JSON `400` with `"code": "invalid_body"`, and a body over the size limit `413` with `"code": "payload_too_large"` (the 413 message is unchanged). Any other `4xx` that reaches the error handler answers `"code": "bad_request"`. Clients that matched the old HTML error page need to read the JSON instead; the details of a `500` are in the server log (`docker compose logs pullmd`). The image sets `NODE_ENV=production`.
+- **Security headers on every response.** PullMD sends `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, a `Content-Security-Policy` that includes `frame-ancestors 'self'`, and `Referrer-Policy: same-origin`. A page on another origin can no longer embed PullMD in a frame; if you do that, serve it from the same origin or through a proxy that shares the origin. Nothing else changes for browsers or scripts.
+- **Images in uploads wait for a click.** In the web app, images in an uploaded e-mail, saved page or document are not loaded when the result opens, except `data:` and `blob:` images. A bar above the result offers **Load images**. `/api` and the other endpoints are not affected.
+- **More IPv6 forms of blocked addresses are refused.** The address guard also blocks the blocked IPv4 ranges when they are embedded in the low 32 bits of an address under `64:ff9b:1::/48` or `::ffff:0:0:0/96`. Such addresses are refused like the other blocked ranges.
+- **Same-origin check on API key routes.** `POST /api/keys` and `POST /api/keys/:id/revoke` answer `403` when the browser's `Origin` (or `Referer`) names another host, the same rule as `/login`. Behind a proxy that rewrites `Host`, set `PUBLIC_URL` as described in the v3.13.0 section below. Scripts that send neither header are not affected.
+
+---
+
 # Migrating from v3.12.x to v3.13.0
 
 v3.13.0 has no breaking API change and no database schema change. It changes how PullMD reads forwarding headers, which matters if a reverse proxy sits in front of it. Instances started from the bundled `docker-compose.traefik.yml` are configured correctly out of the box; instances reached directly on their port are not affected.
@@ -215,7 +288,7 @@ If you were using the Caddy workaround (or any other reverse-proxy bearer-token 
 If the admin loses their password, the env vars do **not** override the stored hash. Use the CLI:
 
 ```
-docker compose exec pullmd node scripts/admin.js reset-password admin@example.com
+docker compose exec -u app pullmd node scripts/admin.js reset-password admin@example.com
 ```
 
 You'll be prompted for the new password. All existing sessions for that user are invalidated.

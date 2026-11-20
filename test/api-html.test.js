@@ -1,11 +1,23 @@
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../server.js';
+import { Readability } from '@mozilla/readability';
 import { createCache } from '../lib/cache.js';
 import { loadRecipes } from '../lib/recipes.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+// Readability spies and patches live in this thread, so the conversions they
+// watch run here too, not in the worker pool (lib/convert-pool.js).
+function convertInProcess() {
+  let saved;
+  before(() => { saved = process.env.PULLMD_CONVERT_WORKERS; process.env.PULLMD_CONVERT_WORKERS = '0'; });
+  after(() => {
+    if (saved === undefined) delete process.env.PULLMD_CONVERT_WORKERS;
+    else process.env.PULLMD_CONVERT_WORKERS = saved;
+  });
+}
 
 async function request(app, path, opts = {}) {
   return new Promise((resolve, reject) => {
@@ -149,6 +161,183 @@ describe('POST /api/html - errors', () => {
     const res = await post(app, '/api/html', '<p>x</p>');
     assert.equal(res.status, 500);
     assert.ok(JSON.parse(res.body).error.includes('boom'));
+  });
+});
+
+describe('POST /api/html - over-nested markup (real extractHtml path)', () => {
+  it('answers 422 document_too_complex quickly', async () => {
+    const app = createApp({});
+    const t0 = Date.now();
+    const res = await post(app, '/api/html', '<html><body>' + '<div>'.repeat(100_000) + 'x</body></html>');
+    assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
+    assert.equal(res.status, 422, res.body);
+    const j = JSON.parse(res.body);
+    assert.equal(j.code, 'document_too_complex');
+    assert.equal(j.error, 'Document is nested too deeply or has too many elements');
+  });
+
+  it('rejects attribute floods quickly: one element and many elements', async () => {
+    const app = createApp({});
+    const names = Array.from({ length: 250_000 }, (_, i) => 'a' + i.toString(36));
+    const one = '<html><body><article><p>Text.</p><p ' + names.join(' ') + '>x</p></article></body></html>';
+    const many = '<html><body><article>' + ('<p ' + names.slice(0, 2500).join(' ') + '>x</p>').repeat(100) + '</article></body></html>';
+    for (const body of [one, many]) {
+      const t0 = Date.now();
+      const res = await post(app, '/api/html', body);
+      assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
+      assert.equal(res.status, 422, res.body.slice(0, 200));
+      assert.equal(JSON.parse(res.body).code, 'document_too_complex');
+    }
+  });
+
+  it('also guards uploads with inlined data: images', async () => {
+    const app = createApp({});
+    const t0 = Date.now();
+    const res = await post(app, '/api/html', '<img src="data:image/png;base64,AA">' + '<div>'.repeat(100_000));
+    assert.ok(Date.now() - t0 < 10000, `took ${Date.now() - t0} ms`);
+    assert.equal(res.status, 422, res.body);
+    assert.equal(JSON.parse(res.body).code, 'document_too_complex');
+  });
+});
+
+describe('POST /api/html - raw-text contexts in foreign content', () => {
+  for (const prefix of ['<svg><title>', '<svg><style>', '<svg><script>', '<math><mtext><textarea>']) {
+    it(`${prefix} + 10k <div> answers fast and never 500`, async () => {
+      const app = createApp({});
+      const t0 = Date.now();
+      const res = await post(app, '/api/html?extractor=readability', prefix + '<div>'.repeat(10_000));
+      assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+      assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
+    });
+  }
+});
+
+describe('POST /api/html - escaped markup inside unencoded elements', () => {
+  it('a guaranteed 422 carries error and code only', async () => {
+    const app = createApp({});
+    const res = await post(app, '/api/html', '<div>'.repeat(300));
+    assert.equal(res.status, 422, res.body);
+    const body = JSON.parse(res.body);
+    assert.equal(body.code, 'document_too_complex');
+    assert.equal('limit' in body, false, 'the exceeded budget stays internal');
+  });
+
+  for (const tag of ['noscript', 'iframe', 'noembed', 'noframes', 'plaintext']) {
+    it(`<${tag}> + 20k escaped <div> answers fast and never 500`, async () => {
+      const app = createApp({});
+      const t0 = Date.now();
+      const close = tag === 'plaintext' ? '' : `</${tag}>`;
+      const res = await post(app, '/api/html?extractor=readability', `<p>x</p><${tag}>` + '&lt;div&gt;'.repeat(20_000) + close);
+      assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+      assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
+      if (res.status === 422) assert.equal('limit' in JSON.parse(res.body), false, 'the exceeded budget stays internal');
+    });
+  }
+});
+
+describe('POST /api/html - escaped markup in <head><title> with a url', () => {
+  it('answers fast and never 500', async () => {
+    const app = createApp({});
+    const html = '<html><head><title>T&lt;/title&gt;' + '&lt;div&gt;'.repeat(20_000) + '</title></head><body><p>x</p></body></html>';
+    const t0 = Date.now();
+    const res = await post(app, `/api/html?extractor=readability&url=${encodeURIComponent('https://example.org/a')}`, html);
+    assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+    assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
+  });
+});
+
+// See the matching extractHtml test in parse-guard.test.js: the spy proves
+// the 422 comes before Readability.parse(). All three stop at the raw-input
+// check (99k by MAX_CHILD_NODES, 150k and 199k by MAX_TEXT_NODES too).
+describe('POST /api/html - escaped markup in a body <title>', () => {
+  convertInProcess();
+
+  for (const n of [99_000, 150_000, 199_000]) {
+    it(`${n / 1000}k escaped <div> answers without a 500, rejected before Readability`, async () => {
+      const app = createApp({});
+      const html = '<html><body><p>x</p><title>T&lt;/title&gt;' + '&lt;div&gt;'.repeat(n) + '</title></body></html>';
+      const parse = Readability.prototype.parse;
+      let calls = 0;
+      Readability.prototype.parse = function (...args) { calls++; return parse.apply(this, args); };
+      const t0 = Date.now();
+      let res;
+      try {
+        res = await post(app, '/api/html?extractor=readability', html);
+      } finally {
+        Readability.prototype.parse = parse;
+      }
+      assert.ok([200, 422].includes(res.status), `${res.status} ${res.body.slice(0, 200)}`);
+      if (res.status === 422) assert.equal(calls, 0, 'Readability.parse() ran before the 422');
+      assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+    });
+  }
+});
+
+// 79k stop at the raw-input check. 45k stay inside the budgets and take
+// tens of seconds (linkedom writes the title text back as markup for
+// Readability), so they end at the conversion time limit.
+describe('POST /api/html - body <title> behind <br> runs', () => {
+  const page = (n) => '<html><body>' + '<span>a<br><br>'.repeat(125) + '<title>T&lt;/title&gt;' + '&lt;br&gt;'.repeat(n)
+    + '</title>' + '</span>'.repeat(125) + '</body></html>';
+
+  it('79k escaped <br> answer 422 document_too_complex fast', async () => {
+    const app = createApp({});
+    const t0 = Date.now();
+    const res = await post(app, '/api/html?extractor=readability', page(79_000));
+    assert.equal(res.status, 422, res.body.slice(0, 200));
+    assert.equal(JSON.parse(res.body).code, 'document_too_complex');
+    assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+  });
+
+  it('45k escaped <br> end within the conversion time limit, never 500', async () => {
+    const saved = process.env.PULLMD_CONVERT_TIMEOUT_MS;
+    process.env.PULLMD_CONVERT_TIMEOUT_MS = '2000';
+    try {
+      const app = createApp({});
+      const t0 = Date.now();
+      const res = await post(app, '/api/html?extractor=readability', page(45_000));
+      assert.ok(Date.now() - t0 < 15000, `took ${Date.now() - t0} ms`);
+      assert.equal(res.status, 422, res.body.slice(0, 200));
+      assert.equal(JSON.parse(res.body).code, 'conversion_timeout');
+    } finally {
+      if (saved === undefined) delete process.env.PULLMD_CONVERT_TIMEOUT_MS;
+      else process.env.PULLMD_CONVERT_TIMEOUT_MS = saved;
+    }
+  });
+});
+
+describe('POST /api/html - many siblings and a stack overflow inside Readability', () => {
+  convertInProcess();
+
+  it('140k empty siblings answer 422 document_too_complex before Readability runs', async () => {
+    const app = createApp({});
+    const html = '<html><body><p>x</p>' + '<b></b>'.repeat(140_000) + '</body></html>';
+    const parse = Readability.prototype.parse;
+    let calls = 0;
+    Readability.prototype.parse = function (...args) { calls++; return parse.apply(this, args); };
+    let res;
+    try {
+      res = await post(app, '/api/html?extractor=readability', html);
+    } finally {
+      Readability.prototype.parse = parse;
+    }
+    assert.equal(res.status, 422, res.body.slice(0, 200));
+    assert.deepEqual(JSON.parse(res.body), { error: 'Document is nested too deeply or has too many elements', code: 'document_too_complex' });
+    assert.equal(calls, 0);
+  });
+
+  it('a RangeError inside Readability answers 422 document_too_complex, not 500', async () => {
+    const app = createApp({});
+    const parse = Readability.prototype.parse;
+    Readability.prototype.parse = function () { throw new RangeError('Maximum call stack size exceeded'); };
+    let res;
+    try {
+      res = await post(app, '/api/html?extractor=readability', `<html><body><p>${LONG_PARAGRAPH}</p></body></html>`);
+    } finally {
+      Readability.prototype.parse = parse;
+    }
+    assert.equal(res.status, 422, res.body.slice(0, 200));
+    assert.equal(JSON.parse(res.body).code, 'document_too_complex');
   });
 });
 

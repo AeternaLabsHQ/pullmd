@@ -46,6 +46,23 @@ def test_blocked_v6_and_transition_addresses():
         assert not is_blocked_ip(ip), ip
 
 
+def test_nat64_local_use_and_ipv4_translated():
+    for ip in ("64:ff9b:1::7f00:1", "64:ff9b:1::a9fe:a9fe", "::ffff:0:7f00:1", "::ffff:0:a00:1"):
+        assert is_blocked_ip(ip), ip
+    for ip in ("64:ff9b:1::808:808", "::ffff:0:808:808"):
+        assert not is_blocked_ip(ip), ip
+
+
+def test_nat64_local_use_whole_48():
+    # Operators carve their own NAT64 prefixes out of the local-use /48.
+    for ip in ("64:ff9b:1:fffe::7f00:1", "64:ff9b:1:abcd::a9fe:a9fe", "64:FF9B:1:ABCD::A9FE:A9FE",
+               "64:ff9b:1:abcd::169.254.169.254", "64:ff9b:1:1:2:3:a00:1",
+               "64:ff9b:1:ffff:ffff:ffff:c0a8:101"):
+        assert is_blocked_ip(ip), ip
+    for ip in ("64:ff9b:1:abcd::808:808", "64:ff9b:1:abcd::8.8.8.8", "64:ff9b:2::7f00:1"):
+        assert not is_blocked_ip(ip), ip
+
+
 def test_unparseable_is_blocked():
     assert is_blocked_ip("not-an-ip")
     assert is_blocked_ip("")
@@ -136,9 +153,9 @@ def test_cache_memoises_lookups():
 
 
 def test_policy_marker_is_a_positive_revision():
-    # lib/status.js reads policy.ssrf and requires an integer >= 1.
+    # lib/status.js reads policy.ssrf and requires an integer >= 2.
     assert isinstance(POLICY["ssrf"], int) and not isinstance(POLICY["ssrf"], bool)
-    assert POLICY["ssrf"] >= 1
+    assert POLICY["ssrf"] >= 2
 
 
 def test_health_reports_the_policy_marker():

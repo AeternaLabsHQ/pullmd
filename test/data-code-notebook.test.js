@@ -245,6 +245,14 @@ describe('feeds', () => {
     assert.ok(r.markdown.includes('a < b'));
   });
 
+  it('rejects a 24 MB feed of empty elements before building a DOM', async () => {
+    const big = '<rss version="2.0"><channel>' + '<a/>'.repeat(6_000_000) + '</channel></rss>';
+    const t0 = Date.now();
+    await assert.rejects(() => extractDataFile(Buffer.from(big), { filename: 'big.rss' }),
+      (err) => err.status === 422 && err.code === 'document_too_complex');
+    assert.ok(Date.now() - t0 < 10_000, `took ${Date.now() - t0} ms`);
+  });
+
   it('falls back to stripping tags without a converter', async () => {
     const r = await extractDataFile(Buffer.from(RSS), { filename: 'feed.rss' });
     assert.ok(r.markdown.includes('Hallo Welt & mehr'));

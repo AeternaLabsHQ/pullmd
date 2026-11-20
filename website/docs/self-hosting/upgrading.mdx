@@ -1,6 +1,6 @@
 ---
 title: Upgrading
-description: Update PullMD, what to check when upgrading across 3.19.2, 3.18, 3.17, 3.16, 3.15.2, 3.13 and 3.0, and how to roll back.
+description: Update PullMD, what to check when upgrading across 3.20, 3.19.2, 3.18, 3.17, 3.16, 3.15.2, 3.13 and 3.0, and how to roll back.
 ---
 
 # Upgrading
@@ -13,6 +13,64 @@ docker compose up -d
 ```
 
 This updates all four containers to the version your compose file names (`:latest` by default). The database upgrades itself on start. Read the [changelog](/changelog) first, and the notes below if you're crossing one of these versions.
+
+## To 3.20 or later: browser sidecar network and document limits
+
+The compose files put the Playwright sidecar on its own network, `pullmd-render`, that only `pullmd` joins, so scripts on rendered pages can't reach the other sidecars. `docker compose pull` doesn't change your compose file. To get the same layout, add `pullmd-render` to the `pullmd` service's `networks:`, replace `pullmd-internal` with `pullmd-render` on the `playwright` service, declare the network, and run `docker compose up -d`:
+
+```yaml
+services:
+  pullmd:
+    networks:
+      - pullmd-internal
+      - pullmd-render
+  playwright:
+    networks:
+      - pullmd-render
+
+networks:
+  pullmd-internal:
+    driver: bridge
+  pullmd-render:
+    driver: bridge
+```
+
+Keep the `proxy` network on `pullmd` if you use the Traefik file. Nothing breaks if you skip this. See [SSRF protection](/self-hosting/ssrf-protection#known-limit).
+
+The compose files also run the containers with fewer privileges now, and the `pullmd` image no longer lets the app write to `/app`. A compose file you downloaded earlier keeps working without this, so nothing breaks if you skip it. To get the same settings, add these keys to the services, then run `docker compose up -d`:
+
+```yaml
+services:
+  pullmd:
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - SETUID
+      - SETGID
+  trafilatura:   # and the same two keys on playwright and markitdown
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+```
+
+Keep what the app writes under `/data`. A `CACHE_DB` that points into `/app` stops working. See [Container privileges](/self-hosting/installation#container-privileges).
+
+Also changed in 3.20:
+
+- Update `pullmd-playwright` together with `pullmd`. The sidecar's address policy is at revision 2, and `/api/status` reports a `pullmd-playwright` image older than 3.20.0 as `degraded` with `"error": "policy-missing"` and answers `503` until it is updated. See [Health check](/self-hosting/monitoring#health-check).
+- HTML and XML that is nested too deeply or too large returns `422` with `"code": "document_too_complex"`. This affects very long pages (over 100,000 elements or 200,000 text nodes) and spreadsheets with more than roughly 200,000 to 240,000 filled cells (fewer when the cells carry a lot of formatting). See [Output format](/reference/output-format#errors).
+- Web pages, HTML uploads and the formats PullMD reads itself are converted in worker threads. A conversion that runs longer than `PULLMD_CONVERT_TIMEOUT_MS` (60 seconds) returns `422` with `"code": "conversion_timeout"`, one that exceeds a worker's 512 MB heap returns `422` with `document_too_complex`, and when both of the `PULLMD_CONVERT_WORKERS` (2) workers are busy and 16 conversions are already waiting, a request gets `503` with `"code": "converter_busy"` and `Retry-After: 5`. The workers run inside the `pullmd` container, and each can use up to 512 MB of heap. The compose files pass both variables through; see [Configuration](/reference/configuration#document-conversion).
+- `node scripts/admin.js reset-password` also revokes the user's OAuth refresh tokens, so connected apps such as claude.ai have to be connected again.
+- `POST /api/keys` and `POST /api/keys/:id/revoke` answer `403` to a browser request from another site, like `/login`.
+- Errors answer JSON without a stack trace. Errors that reach the central error handler carry a `code`: `500` with `"code": "internal_error"`, `400` with `invalid_body` for a body that isn't valid JSON, `413` with `payload_too_large`, and other `4xx` with `bad_request`. See [Output format](/reference/output-format#errors).
+- Every response carries `X-Content-Type-Options`, `X-Frame-Options`, `frame-ancestors` and `Referrer-Policy` headers, so a page on another origin can't embed PullMD in a frame. See [Reverse proxy](/self-hosting/reverse-proxy#response-headers).
+- In the web app, images in an uploaded e-mail, saved page or document load only after you click **Load images**, except `data:` and `blob:` images. See [Documents](/guides/documents#upload-a-file).
+- `/api/stats` and `/api/storage` return their counts only to the admin, or to everyone when sign-in is off and public history is on. Other callers get `200` with only `window` or `retentionDays`. A monitor that reads these counts needs an admin API key. See [Monitoring](/self-hosting/monitoring#extraction-stats).
 
 ## To 3.19.2 or later: a removed `PULLMD_AUTH_TOKEN` stops working
 
@@ -47,7 +105,7 @@ Also changed in 3.13:
 
 - OAuth access tokens work only on `/mcp`. Scripts calling `/api` need an API key.
 - MCP `list_recent` shows signed-in users their own conversions only.
-- `/api/stats` shows per-domain lists only to the admin, or to everyone when sign-in is off and public history is on.
+- `/api/stats` shows per-domain lists only to the admin, or to everyone when sign-in is off and public history is on. From 3.20 the counts follow the same rule.
 - Image captions, audio transcripts and PDF OCR share an hourly budget, `PULLMD_LLM_RATE_LIMIT` (default 30).
 - Fetched pages and documents are limited to `PULLMD_MAX_FETCH_BYTES` (default 50 MB), and a page fetch has a 60-second timeout.
 - New accounts need an email address with a dotted domain.

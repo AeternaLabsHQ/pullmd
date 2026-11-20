@@ -58,10 +58,62 @@ and was an accepted residual until then. Reddit short-link resolution
 The Playwright sidecar applies the same address policy to every request
 Chromium makes (since 3.15.2, [GHSA-26wr-prg5-vr77](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-26wr-prg5-vr77)),
 but Chromium resolves names itself, so the DNS-rebinding residual remains on
-that path and is accepted. Operators who want a boundary that does not depend
-on the application can put the sidecar on its own bridge network with no
-other service on it; nothing in pullmd needs the sidecar to see the other
-containers. Please do not re-report it.
+that path and is accepted. For a boundary that does not depend on the
+application, the shipped compose files (since 3.20.0) put the sidecar on its
+own bridge network, `pullmd-render`, whose only other member is pullmd;
+nothing in pullmd needs the sidecar to see the other containers. Operators
+with their own compose file should do the same (see `MIGRATION.md`). Please
+do not re-report it.
+
+Since 3.20.0 the sidecar's guard covers every page and worker in the render
+context, not just the rendered page. Chromium's speculative loading is the
+exception: speculation rules delivered by the `Speculation-Rules` response
+header, or rules a page script gets past the sidecar's removal of
+`<script type="speculationrules">`, can still make Chromium send GET requests
+that bypass the guard. These requests are blind: the response reaches neither
+the page nor the output. In our tests they reached loopback addresses, while
+plain-http targets on the LAN were not reached. The shipped compose files put
+the sidecar on its own network that only pullmd joins. Please do not re-report
+it.
+
+Since 3.20.0 the boundary for converting documents is the conversion worker
+limit, not the input budgets alone. Web pages, HTML uploads and the formats
+pullmd reads itself are converted in worker threads (`PULLMD_CONVERT_WORKERS`,
+2 by default) with a time limit per conversion (`PULLMD_CONVERT_TIMEOUT_MS`,
+60 s of worker time) and a 512 MB heap limit per worker. The markup budgets
+measure a document with a tokenizer, without building a tree, and answer
+`422 document_too_complex` when it is over; they run before the first parse
+and again on the normalised markup. They catch the common cases cheaply; what
+they miss is stopped by the limit. This leaves residuals, all accepted:
+
+- An attacker who can send documents can keep the workers busy with slow ones.
+  Up to 16 conversions then wait for a worker, at most 30 s each; beyond that
+  conversions answer `503 converter_busy` while the rest of the server (cache
+  hits, share links, Reddit and Hacker News conversions) keeps answering.
+- `PULLMD_CONVERT_WORKERS=0` converts in the server process and removes this
+  boundary: a pathological document can then stall or crash the whole server.
+  Do not use it on an instance others can reach.
+- The heap limit covers each worker's JavaScript heap, not Buffers. Those are
+  bounded by the existing size limits for uploads (25 MB, 10 MB for HTML),
+  fetched documents (`PULLMD_MAX_FETCH_BYTES`) and the size limit for ZIP
+  entries.
+- The old.reddit fallback page (`parseOldRedditHtml` in `lib/reddit.js`) is
+  parsed without the markup budgets by design, and Hacker News comment HTML
+  gets only the raw-input markup budgets. Both are converted on the main
+  thread, outside the worker pool, so neither has a time or memory limit
+  beyond the size the Reddit and Hacker News APIs return.
+
+The conversion cache is keyed by URL and shared by all accounts on an
+instance. A URL that another account converted within the last hour is
+answered from the cache without contacting the source, so someone who already
+knows an exact URL can learn that it was converted in that time. A request
+that bypasses the cache (`nocache=1`, for one) replaces the shared entry for
+everyone: a share link created from it keeps its id and then serves the newer
+conversion. The caller has to know the exact URL and can only store what that
+URL serves to the server. Each account's history stays scoped to what that
+account fetched. Keying the cache per account would remove this and the
+cache's deduplication with it; it is an accepted residual. Please do not
+re-report it.
 
 Text transcribed from Reddit post images (`PULLMD_EMBEDDED_IMAGES`, since 3.16.0)
 is untrusted third-party content and can carry prompt injection. The output
@@ -76,7 +128,15 @@ This is the documented open mode, not a vulnerability. Operators who share an
 instance should enable sign-in or set `DISABLE_PUBLIC_HISTORY=true`, which
 also refuses anonymous deletes, or keep the port off public networks.
 
-An upload sent with `async=1` (`POST /api/file`) is converted in the background, and its result waits in memory under a random 128-bit job id until the client deletes it or the retention time passes (`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default). It is never written to disk or to the cache, and a restart loses it. With sign-in enabled, a job is bound to the account that created it, and any other account gets the same `404` as for an unknown id. Without sign-in, the job id is the only credential, as with share links: anyone who has the id can read and delete the result.
+An upload sent with `async=1` (`POST /api/file`) is converted in the
+background, and its result waits in memory under a random 128-bit job id until
+the client deletes it or the retention time passes
+(`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default). It is never written to
+disk or to the cache, and a restart loses it. With sign-in enabled, a job is
+bound to the account that created it, and any other account gets the same
+`404` as for an unknown id. Without sign-in, the job id is the only
+credential, as with share links: anyone who has the id can read and delete the
+result.
 
 ## Supported versions
 

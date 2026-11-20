@@ -513,6 +513,42 @@
       font-size: 0.8125rem;
     }
     .permalink-bar.visible { display: flex; }
+
+    /* Uploaded documents: remote images wait for a click (tracking pixels). */
+    .remote-images-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.625rem;
+      margin-bottom: 0.625rem;
+      padding: 0.625rem 0.75rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.8125rem;
+      color: var(--fg-muted);
+    }
+    .remote-images-bar[hidden] { display: none; }
+    .remote-images-bar .remote-images-text { flex: 1; }
+    .remote-images-bar button {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--fg);
+      font: inherit;
+      padding: 0.25rem 0.625rem;
+      cursor: pointer;
+    }
+    .remote-images-bar button:hover { color: var(--accent); border-color: var(--accent); }
+    .blocked-image {
+      display: inline-block;
+      padding: 0.125rem 0.375rem;
+      border: 1px dashed var(--border);
+      border-radius: 4px;
+      color: var(--fg-dim);
+      font-size: 0.8125rem;
+      word-break: break-all;
+    }
     .permalink-bar-label {
       font-family: 'JetBrains Mono', ui-monospace, monospace;
       font-size: 0.625rem;
@@ -1127,6 +1163,8 @@
        ========================================================= */
     body[data-lang="de"] .auth-warning [lang="en"] { display: none; }
     body[data-lang="en"] .auth-warning [lang="de"] { display: none; }
+    body[data-lang="de"] .remote-images-bar [lang="en"] { display: none; }
+    body[data-lang="en"] .remote-images-bar [lang="de"] { display: none; }
 
     /* Drag-and-drop overlay (local HTML file conversion, #28) */
     #drop-overlay {
@@ -1325,6 +1363,10 @@
             <span class="label" data-i18n="download.btn">Download</span>
           </button>
         </div>
+      </div>
+      <div id="remote-images-bar" class="remote-images-bar" hidden>
+        <span class="remote-images-text"><span lang="de">Externe Bilder in diesem Dokument wurden nicht geladen.</span><span lang="en">Remote images in this document were not loaded.</span></span>
+        <button type="button" id="remote-images-load"><span lang="de">Bilder laden</span><span lang="en">Load images</span></button>
       </div>
       <pre id="result"></pre>
       <div id="result-rendered" class="hidden"></div>
@@ -1771,6 +1813,44 @@
         ADD_ATTR: ['target','rel'],
       };
 
+      // Uploaded documents (a mail, a saved page) can carry tracking pixels:
+      // their images stay unloaded until the user asks. Held back is every
+      // image that is not data: or blob:, this origin included (its /api
+      // fetches whatever URL it is given). URL results never set the flag.
+      var blockRemoteImages = false;
+      function isRemoteImageSrc(src) {
+        if (!src) return false;
+        try {
+          var protocol = new URL(src, location.href).protocol;
+          return protocol !== 'data:' && protocol !== 'blob:';
+        }
+        catch (e) { return true; }
+      }
+      // True only for the duration of a sanitize() call that must hold
+      // remote images back, so the hook leaves every other result alone.
+      var purifyHoldsRemoteImages = false;
+      // Set only by renderedHeldCount(): the counter its pass fills.
+      var purifyHeldCounter = null;
+      // How many images the last Raw render held back.
+      var rawHeldCount = 0;
+      if (window.DOMPurify && typeof window.DOMPurify.addHook === 'function') {
+        window.DOMPurify.addHook('afterSanitizeAttributes', function (node) {
+          if (node.nodeName !== 'IMG') return;
+          // The marker is ours alone: a document must not bring its own
+          // (ALLOW_DATA_ATTR would let it through) and get swapped for a
+          // placeholder, in URL results too.
+          node.removeAttribute('data-blocked-src');
+          node.setAttribute('referrerpolicy', 'no-referrer');
+          var src = node.getAttribute('src');
+          if (purifyHoldsRemoteImages && isRemoteImageSrc(src)) {
+            // Never a src: the placeholder below shows the URL as text.
+            node.removeAttribute('src');
+            node.setAttribute('data-blocked-src', src);
+            if (purifyHeldCounter) purifyHeldCounter.n++;
+          }
+        });
+      }
+
       if (window.marked && typeof window.marked.setOptions === 'function') {
         window.marked.setOptions({ gfm: true, breaks: false, pedantic: false });
       }
@@ -1793,8 +1873,20 @@
           return;
         }
         var html = window.marked.parse(rawBody || '');
-        var clean = window.DOMPurify.sanitize(html, PURIFY_CONFIG);
+        purifyHoldsRemoteImages = blockRemoteImages;
+        var clean;
+        try { clean = window.DOMPurify.sanitize(html, PURIFY_CONFIG); }
+        finally { purifyHoldsRemoteImages = false; }
         resultRenderedEl.innerHTML = clean;
+        var held = resultRenderedEl.querySelectorAll('img[data-blocked-src]');
+        for (var h = 0; h < held.length; h++) {
+          var ph = document.createElement('span');
+          ph.className = 'blocked-image';
+          var alt = held[h].getAttribute('alt');
+          // textContent: the URL comes from the uploaded document.
+          ph.textContent = (alt ? alt + ': ' : '') + held[h].getAttribute('data-blocked-src');
+          held[h].replaceWith(ph);
+        }
         if (frontmatterToggle.checked && rawFrontmatter) {
           var pre = document.createElement('pre');
           pre.className = 'fm-block';
@@ -1922,6 +2014,7 @@
 
       function renderMarkdownWithImages(container, text) {
         container.innerHTML = '';
+        rawHeldCount = 0;
         var lines = text.split('\n');
         var imgPattern = /!\[([^\]]*)\]\(([^)]+)\)/g;
         for (var i = 0; i < lines.length; i++) {
@@ -1935,7 +2028,15 @@
             if (match.index > lastIndex) {
               lineSpan.appendChild(document.createTextNode(line.slice(lastIndex, match.index)));
             }
+            if (blockRemoteImages && isRemoteImageSrc(match[2])) {
+              // Held back: the markdown stays visible as plain text.
+              lineSpan.appendChild(document.createTextNode(match[0]));
+              rawHeldCount++;
+              lastIndex = imgPattern.lastIndex;
+              continue;
+            }
             var img = document.createElement('img');
+            img.referrerPolicy = 'no-referrer';
             img.src = match[2];
             img.alt = match[1];
             img.style.cssText = 'max-width:100%; height:auto; border-radius:6px; margin:0.5rem 0; display:block;';
@@ -1983,15 +2084,41 @@
         setCharsBadge(rawMarkdown.length);
       }
 
-      function showResult(text, source, shareId, suggestedName) {
+      // How many images the Rendered view holds back for the current body.
+      // The same marked + DOMPurify pass the view uses, so every form marked
+      // knows (reference links, entities in raw tags) is counted. DOMPurify
+      // parses in an inert document: this pass loads nothing.
+      function renderedHeldCount() {
+        if (!window.marked || !window.DOMPurify) return 0;
+        var counter = { n: 0 };
+        purifyHoldsRemoteImages = true;
+        purifyHeldCounter = counter;
+        try { window.DOMPurify.sanitize(window.marked.parse(rawBody || ''), PURIFY_CONFIG); }
+        finally { purifyHoldsRemoteImages = false; purifyHeldCounter = null; }
+        return counter.n;
+      }
+
+      var remoteImagesBar = document.getElementById('remote-images-bar');
+      document.getElementById('remote-images-load').addEventListener('click', function () {
+        // For this result only: the next showResult() decides afresh.
+        blockRemoteImages = false;
+        remoteImagesBar.hidden = true;
+        applyFrontmatterView();
+      });
+
+      function showResult(text, source, shareId, suggestedName, opts) {
         hideLoading();
         errorEl.classList.remove('visible');
         var parts = splitFrontmatter(text);
         rawFrontmatter = parts.frontmatter;
         rawBody = parts.body;
+        blockRemoteImages = Boolean(opts && opts.blockRemoteImages);
         currentShareId = shareId || '';
         currentSuggestedName = suggestedName || '';
         applyFrontmatterView();
+        // The block holds for every upload; the bar only shows when an image
+        // was actually held back by either view.
+        remoteImagesBar.hidden = !(blockRemoteImages && (rawHeldCount > 0 || renderedHeldCount() > 0));
         resultContainer.classList.add('visible');
         // Bring the result into view when triggered from a list entry deeper
         // down the page (history / archive). No-op when already scrolled top.
@@ -2372,7 +2499,7 @@
             }
             var d = await res.json();
             if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
-            showResult(d.markdown, d.source || '', '', res.headers.get('X-Suggested-Filename') || '');
+            showResult(d.markdown, d.source || '', '', res.headers.get('X-Suggested-Filename') || '', { blockRemoteImages: true });
           } catch (err) {
             showError(t('err.network'));
           }
@@ -2475,7 +2602,7 @@
           pushOpenState();
           if (d.status === 'done') {
             if (!d.markdown || !d.markdown.trim()) showError(t('err.empty'));
-            else showResult(d.markdown, d.source || '', '', d.suggestedFilename || '');
+            else showResult(d.markdown, d.source || '', '', d.suggestedFilename || '', { blockRemoteImages: true });
           } else {
             showError(d.error || t('err.unknown', { code: d.httpStatus }));
           }
@@ -2546,7 +2673,7 @@
           if (xhr.status >= 200 && xhr.status < 300) {
             if (!d) { showError(t('err.network')); return; }
             if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
-            showResult(d.markdown, d.source || '', '', xhr.getResponseHeader('X-Suggested-Filename') || '');
+            showResult(d.markdown, d.source || '', '', xhr.getResponseHeader('X-Suggested-Filename') || '', { blockRemoteImages: true });
             return;
           }
           showError((d && d.error) || t('err.unknown', { code: xhr.status }));

@@ -24,6 +24,7 @@
     "better-sqlite3": "^13.0.3",
     "cheerio": "^1.2.0",
     "express": "^5.2.1",
+    "htmlparser2": "10.1.0",
     "image-size": "^2.0.4",
     "jose": "^6.2.12",
     "linkedom": "^0.18.13",
@@ -34,5 +35,8 @@
   },
   "devDependencies": {
     "playwright": "^1.65.0"
+  },
+  "overrides": {
+    "htmlparser2": "10.1.0"
   }
 }

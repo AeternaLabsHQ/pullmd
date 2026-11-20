@@ -48,6 +48,109 @@ except (ImportError, AttributeError):
         log.warning("playwright-stealth not installed; running without bot-detection mitigation")
 
 
+# The renderer reads one document. Anything that would open a second page or
+# a shared worker is switched off before page scripts run; the context-wide
+# route stays the hard boundary for requests, this only avoids extra pages.
+# SharedWorker requests never reach context.route(), so for them this script
+# (and the launch flag in lifespan) is the guard.
+SINGLE_PAGE_INIT_SCRIPT = """
+(() => {
+  // A link or form aimed at another browsing context is dropped, not
+  // retargeted: retargeting would let it replace the main document.
+  const sameContext = new Set(['', '_self', '_top', '_parent']);
+  const baseTarget = () => {
+    const base = document.querySelector('base[target]');
+    return base ? base.getAttribute('target') : '';
+  };
+  const opensNewContext = (el, submitter) => {
+    const target = submitter && submitter.hasAttribute && submitter.hasAttribute('formtarget')
+      ? submitter.getAttribute('formtarget')
+      : (el && el.hasAttribute && el.hasAttribute('target') ? el.getAttribute('target') : baseTarget());
+    const name = (target || '').trim();
+    if (sameContext.has(name.toLowerCase())) return false;
+    // A named iframe of this document is not a new page.
+    return !document.querySelector('iframe[name="' + CSS.escape(name) + '"]');
+  };
+  // Plain assignment, not locked: pages that wrap window.open themselves
+  // must not throw in strict mode. The route stays the hard boundary.
+  try { window.open = function open() { return null; }; } catch (e) {}
+  try { delete window.SharedWorker; } catch (e) {}
+  if (typeof window.SharedWorker !== 'undefined') {
+    try {
+      Object.defineProperty(window, 'SharedWorker', {
+        value: function SharedWorker() { throw new DOMException('SharedWorker is disabled', 'SecurityError'); },
+        configurable: false, writable: false,
+      });
+    } catch (e) {}
+  }
+  const proto = window.HTMLFormElement && window.HTMLFormElement.prototype;
+  if (proto) {
+    const submit = proto.submit;
+    proto.submit = function () {
+      if (opensNewContext(this)) return;
+      return submit.call(this);
+    };
+  }
+  document.addEventListener('submit', (e) => {
+    if (opensNewContext(e.target, e.submitter)) e.preventDefault();
+  }, true);
+  document.addEventListener('click', (e) => {
+    const link = e.target && e.target.closest ? e.target.closest('a[href], area[href]') : null;
+    if (link && opensNewContext(link)) e.preventDefault();
+  }, true);
+
+  // Speculation rules make Chromium prefetch and prerender outside
+  // context.route(). A rules script never gets the type: setters rewrite
+  // it, and parsed ones are caught by the observer, which runs before the
+  // parser prepares the script. Rules sent as a response header are out of
+  // reach here (SECURITY.md, known residuals).
+  const isRules = (v) => String(v).trim().toLowerCase() === 'speculationrules';
+  const INERT = 'text/x-pullmd-disabled-speculationrules';
+  const Script = window.HTMLScriptElement;
+  const setAttr = Element.prototype.setAttribute;
+  if (Script) {
+    const typeProp = Object.getOwnPropertyDescriptor(Script.prototype, 'type');
+    if (typeProp && typeProp.set) {
+      Object.defineProperty(Script.prototype, 'type', {
+        ...typeProp,
+        set(v) { typeProp.set.call(this, isRules(v) ? INERT : v); },
+      });
+    }
+    Element.prototype.setAttribute = function (name, value) {
+      if (this instanceof Script && String(name).toLowerCase() === 'type' && isRules(value)) value = INERT;
+      return setAttr.call(this, name, value);
+    };
+    const setAttrNS = Element.prototype.setAttributeNS;
+    Element.prototype.setAttributeNS = function (ns, name, value) {
+      if (this instanceof Script && !ns && String(name).toLowerCase() === 'type' && isRules(value)) value = INERT;
+      return setAttrNS.call(this, ns, name, value);
+    };
+    const supports = Script.supports;
+    if (typeof supports === 'function') {
+      Script.supports = function (type) { return isRules(type) ? false : supports.call(this, type); };
+    }
+  }
+  const neuter = (node) => {
+    if (!node || node.nodeType !== 1) return;
+    const found = node.matches && node.matches('script') ? [node] : [];
+    if (node.querySelectorAll) found.push(...node.querySelectorAll('script'));
+    for (const el of found) {
+      if (isRules(el.getAttribute('type') || '')) {
+        setAttr.call(el, 'type', INERT);
+        el.remove();
+      }
+    }
+  };
+  new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type === 'attributes') neuter(r.target);
+      else r.addedNodes.forEach(neuter);
+    }
+  }).observe(document, { childList: true, subtree: true, attributes: true, attributeFilter: ['type'] });
+})();
+"""
+
+
 class BlockedNavigation(Exception):
     """The page tried to navigate its main frame to a host the policy forbids."""
 
@@ -69,10 +172,11 @@ class AddressGuard:
 
     Node validates the submitted URL once; from there on Chromium navigates on
     its own (3xx, meta refresh, `location` changes, iframes, subresources,
-    WebSockets) and none of that passes through Node. This guard is installed
-    unconditionally on every page and checks each request before it leaves
-    the browser. A blocked main-frame navigation is remembered so the render
-    can fail loudly instead of returning whatever page Chromium stayed on.
+    WebSockets, popups, workers) and none of that passes through Node. This
+    guard is installed unconditionally on the whole browser context and checks
+    each request before it leaves the browser. A blocked main-frame navigation
+    is remembered so the render can fail loudly instead of returning whatever
+    page Chromium stayed on.
     """
 
     def __init__(self, allow: AllowList, strip_client_hints: bool):
@@ -81,6 +185,7 @@ class AddressGuard:
         self.cache: dict[str, list[str]] = {}
         self.blocked_navigation: BlockedNavigation | None = None
         self.session = None
+        self.page = None
         self.main_frame_id: str | None = None
 
     async def _check(self, url: str) -> str | None:
@@ -90,11 +195,38 @@ class AddressGuard:
             return str(exc)
         return None
 
+    def _is_main_navigation(self, request) -> bool:
+        # Only the main page's main frame decides the render's fate. Popups
+        # and worker requests (SharedWorker requests carry no frame at all)
+        # are dropped like subresources.
+        try:
+            return request.is_navigation_request() and request.frame == self.page.main_frame
+        except Exception:  # noqa: BLE001 - no frame means not the main document
+            return False
+
+    def _is_extra_page(self, request) -> bool:
+        try:
+            return request.frame.page is not self.page
+        except Exception:  # noqa: BLE001 - frame not available
+            # A navigation issued before its frame exists opens a new page
+            # (window.open, target=_blank); iframes and the main page already
+            # have theirs. Other frameless requests take the normal check
+            # (dedicated workers carry their owner frame, SharedWorker
+            # requests never get here, see SINGLE_PAGE_INIT_SCRIPT).
+            return request.is_navigation_request()
+
     async def route(self, route):
         request = route.request
+        if self._is_extra_page(request):
+            # The renderer only reads the main document, so any other page
+            # (popup, target=_blank) gets no network at all. Aborting beats
+            # closing it: a page closed mid-load sends requests nobody routes.
+            log.warning("blocked request from extra page to %s", request.url)
+            await route.abort("blockedbyclient")
+            return
         reason = await self._check(request.url)
         if reason is not None:
-            is_main = request.is_navigation_request() and request.frame == request.frame.page.main_frame
+            is_main = self._is_main_navigation(request)
             log.warning("blocked %s request to %s: %s", "navigation" if is_main else "subresource", request.url, reason)
             if is_main and self.blocked_navigation is None:
                 self.blocked_navigation = BlockedNavigation(request.url, reason)
@@ -107,7 +239,7 @@ class AddressGuard:
             await route.continue_()
 
     async def route_web_socket(self, ws):
-        # page.route() does not see WebSockets; a page script could still open
+        # context.route() does not see WebSockets; a page script could still open
         # ws://internal-host and read whatever comes back. Same policy here.
         url = ws.url.replace("wss://", "https://", 1).replace("ws://", "http://", 1)
         reason = await self._check(url)
@@ -121,7 +253,7 @@ class AddressGuard:
         request_id = event["requestId"]
         try:
             if not event.get("redirectedRequestId"):
-                # First hop of a request: page.route() above already decided.
+                # First hop of a request: context.route() above already decided.
                 await self.session.send("Fetch.continueRequest", {"requestId": request_id})
                 return
             url = event["request"]["url"]
@@ -142,9 +274,14 @@ class AddressGuard:
                 pass
 
     async def install(self, context, page):
-        await page.route("**/*", self.route)
-        await page.route_web_socket("**/*", self.route_web_socket)
-        # Playwright never hands a redirect hop to page.route(): its network
+        self.page = page
+        # Context-wide, not per page: popups, `target=_blank` submissions and
+        # worker requests belong to the context, and page.route() on the main
+        # page never sees them.
+        await context.route("**/*", self.route)
+        await context.route_web_socket("**/*", self.route_web_socket)
+        await context.add_init_script(SINGLE_PAGE_INIT_SCRIPT)
+        # Playwright never hands a redirect hop to context.route(): its network
         # manager continues redirected requests itself (crNetworkManager,
         # `if (redirectedFrom ...) Fetch.continueRequest`). Chromium does pause
         # them for any Fetch client though, so a second CDP session catches
@@ -205,7 +342,12 @@ async def lifespan(_app: FastAPI):
     state["pw"] = await async_playwright().start()
     # Site isolation off: every frame of a page lives in the page's own
     # target, so the redirect guard's CDP session sees cross-site iframes too.
-    state["browser"] = await state["pw"].chromium.launch(headless=True, args=["--disable-site-isolation-trials"])
+    # SharedWorker off in Blink: its requests bypass context.route(), so the
+    # API must not exist at all (SINGLE_PAGE_INIT_SCRIPT removes it as well).
+    state["browser"] = await state["pw"].chromium.launch(
+        headless=True,
+        args=["--disable-site-isolation-trials", "--disable-blink-features=SharedWorker"],
+    )
     log.info("playwright launched, chromium ready")
     try:
         yield
@@ -241,7 +383,7 @@ def health():
 
 async def _render(url: str, allow: AllowList, wait_for: str | None = None, wait_timeout_ms: int | None = None, mobile_ua: bool = False, user_agent: str | None = None) -> str:
     # Service workers would answer fetches from their own cache or network
-    # without passing through page.route(); the renderer has no use for them.
+    # without passing through context.route(); the renderer has no use for them.
     context_opts = {"service_workers": "block"}
     if mobile_ua:
         device = state["pw"].devices.get("iPhone 13")

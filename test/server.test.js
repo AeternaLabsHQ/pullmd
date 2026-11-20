@@ -430,7 +430,7 @@ describe('GET /api/stats', () => {
     assert.ok(Array.isArray(stats.fallbackByDomain));
   });
 
-  it('omits per-domain lists when DISABLE_PUBLIC_HISTORY is on', async () => {
+  it('answers anonymous callers with the window only when DISABLE_PUBLIC_HISTORY is on', async () => {
     const cache = createCache(':memory:');
     const app = createApp({
       extractWeb: async () => ({ markdown: '# Web\n\nContent', title: 'Web', source: 'trafilatura', metadata: { quality: 0.8 } }),
@@ -440,11 +440,9 @@ describe('GET /api/stats', () => {
     await request(app, '/api?url=https://example.com/a');
     const res = await request(app, '/api/stats');
     assert.equal(res.status, 200);
-    const stats = JSON.parse(res.body);
-    assert.equal(stats.total, 1);
-    assert.equal(stats.bySource[0].source, 'trafilatura');
-    assert.equal(stats.lowQualityDomains, undefined);
-    assert.equal(stats.fallbackByDomain, undefined);
+    assert.deepEqual(JSON.parse(res.body), { window: '-7 days' });
+    const custom = await request(app, '/api/stats?window=-30%20days');
+    assert.deepEqual(JSON.parse(custom.body), { window: '-30 days' });
   });
 
   it('returns empty when cache absent', async () => {
@@ -1267,13 +1265,27 @@ describe('DISABLE_PUBLIC_HISTORY', () => {
     assert.ok(res.body.includes('# Hidden but reachable'));
   });
 
-  it('keeps /api/storage public when flag is on (footer stats are aggregate-only)', async () => {
-    const cache = createCache(':memory:');
+  it('answers /api/storage with the retention only when the flag is on', async () => {
+    const cache = createCache(':memory:', { retentionDays: 30 });
     cache.put({ url: 'https://a.com', title: 'A', markdown: '# A', source: 'readability' });
-    const app = createApp({ cache, disablePublicHistory: true });
+    const app = createApp({ cache, retentionDays: 30, disablePublicHistory: true });
     const res = await request(app, '/api/storage');
     assert.equal(res.status, 200);
-    const data = JSON.parse(res.body);
+    assert.deepEqual(JSON.parse(res.body), { retentionDays: 30 });
+  });
+
+  it('answers /api/storage with the retention only when the flag is on and there is no cache', async () => {
+    const app = createApp({ disablePublicHistory: true, retentionDays: 7 });
+    const res = await request(app, '/api/storage');
+    assert.equal(res.status, 200);
+    assert.deepEqual(JSON.parse(res.body), { retentionDays: 7 });
+  });
+
+  it('keeps the full /api/storage answer when the flag is off', async () => {
+    const cache = createCache(':memory:');
+    cache.put({ url: 'https://a.com', title: 'A', markdown: '# A', source: 'readability' });
+    const app = createApp({ cache, disablePublicHistory: false });
+    const data = JSON.parse((await request(app, '/api/storage')).body);
     assert.equal(data.total, 1);
     assert.ok(typeof data.dbSizeBytes === 'number');
   });
