@@ -7,9 +7,16 @@ description: Highlights of recent PullMD releases. The full history is in CHANGE
 
 Highlights of recent releases. Every change, with issue links, is in [CHANGELOG.md](https://github.com/AeternaLabsHQ/pullmd/blob/main/CHANGELOG.md). Before upgrading across 3.0, 3.13 or 3.20, read [Upgrading](/self-hosting/upgrading).
 
+## 3.21.0
+
+November 21, 2026 · <Badge tone="brand">Latest</Badge>
+
+- Security: a request with `query` no longer stalls the server on crafted Markdown. Query extraction runs in a conversion worker, so such a request can answer `422` or `503` like a conversion. Same class as the document limits in 3.20.0; update if others can reach your instance.
+- A built-in [site recipe](/guides/site-recipes) for amazon.de product pages.
+
 ## 3.20.0
 
-November 20, 2026 · <Badge tone="brand">Latest</Badge>
+November 20, 2026
 
 Security fixes from an internal review. Read [Upgrading](/self-hosting/upgrading) first: two compose changes are recommended, and `pullmd-playwright` should be updated together with `pullmd`.
 
