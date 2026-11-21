@@ -40,6 +40,15 @@ const PRODUCT_PAGE = `<html><head><title>Amazon.de: FILLER Wasserkocher 1,7 l</t
             <div class="a-popover-preload"><span>LEGAL-POPOVER Der Statt-Preis ist der mittlere Verkaufspreis.</span></div></span>
         </div>
       </div>
+      <div id="newerVersion_feature_div"><div id="newer-version"><div id="newerVersionFeature">
+        <h4>Für diesen Artikel ist eine neuere Version vorhanden:</h4>
+        <div class="a-fixed-left-grid"><div class="a-fixed-left-grid-inner">
+          <div class="a-fixed-left-grid-col a-col-left"><a href="/dp/B000000009"><img alt="FILLER-THUMB Wasserkocher 2026" src="https://m.media-amazon.com/images/I/thumb.jpg"></a></div>
+          <div class="a-fixed-left-grid-col a-col-right"><a href="/dp/B000000009">FILLER Wasserkocher 2026</a><br><span class="a-color-price">44,99&#160;€</span><br>
+            <a aria-label="4,6 von 5 Sternen" class="a-link-normal reviewsLink" href="/product-reviews/B000000009"><i aria-hidden="true" class="a-icon a-icon-star"></i></a>
+            <a aria-label="1.234 Kundenrezensionen für dieses Produkt" href="/product-reviews/B000000009">(1.234)</a></div>
+        </div></div>
+      </div></div></div>
       <div id="productOverview_feature_div"><table><tr><td>Marke</td><td>FILLER</td></tr><tr><td>Kapazität</td><td>1,7 Liter</td></tr></table></div>
       <div id="featurebullets_feature_div"><div id="feature-bullets"><h1>Info zu diesem Artikel</h1>
         <ul><li><span>${BULLET}</span></li><li><span>${BULLET}</span></li></ul>
@@ -93,6 +102,15 @@ describe('amazon.de product built-in recipe', () => {
     assert.equal(markdown.match(/39,99/g).length, 1);
     assert.doesNotMatch(markdown, /LEGAL-POPOVER/);
     assert.doesNotMatch(markdown, /sash\/info\.svg/);
+  });
+
+  it('keeps the notice about a newer version, without the thumbnail', async () => {
+    const { markdown } = await extractHtml(PRODUCT_PAGE, { url: PAGE_URL, recipes });
+    assert.match(markdown, /Für diesen Artikel ist eine neuere Version vorhanden:/);
+    assert.match(markdown, /\[FILLER Wasserkocher 2026\]\(https:\/\/www\.amazon\.de\/dp\/B000000009\)/);
+    assert.match(markdown, /44,99 €/);
+    assert.match(markdown, /4,6 von 5 Sternen/);
+    assert.doesNotMatch(markdown, /FILLER-THUMB/);
   });
 
   it('turns the star widget into text', async () => {
