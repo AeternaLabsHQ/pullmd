@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Security
+
+- **`query` extraction no longer stalls the server on crafted Markdown.** With a `query` parameter (REST) or argument (MCP `read_url`), a line made of spaces and pipes after a line containing a pipe made the search for table rows take seconds on a few kilobytes, growing with the cube of the line length, and held up the whole server meanwhile. A page can serve such Markdown directly (`Content-Type: text/markdown`), and a cached copy triggered it again on every request with `query`. The check for a table delimiter row now takes time proportional to the line's length and accepts the same lines as before. Query extraction also runs in a conversion worker, with the same time and memory limit as a conversion: a request with `query` can now answer `422` (`conversion_timeout`, `document_too_complex`) or `503 converter_busy`. Same class as [GHSA-8c93-h6v6-7537](https://github.com/AeternaLabsHQ/pullmd/security/advisories/GHSA-8c93-h6v6-7537), which 3.20.0 did not fully close.
+
 ### Added
 
 - **Built-in site recipe for amazon.de product pages (`amazon-de-product`).** The output keeps the product itself: price with reference price and savings, unit price, availability, rating, the notice about a newer version of the product, bullet points, description, manufacturer content and the product data tables. Navigation, recommendation rails, reviews, the price-feedback form and carousel buttons are left out. Before, the price was missing or appeared doubled. It also applies to `amzn.eu` and `amzn.to` short links. Other pages on amazon.de are unchanged.

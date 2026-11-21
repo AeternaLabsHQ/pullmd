@@ -84,7 +84,8 @@ pullmd reads itself are converted in worker threads (`PULLMD_CONVERT_WORKERS`,
 measure a document with a tokenizer, without building a tree, and answer
 `422 document_too_complex` when it is over; they run before the first parse
 and again on the normalised markup. They catch the common cases cheaply; what
-they miss is stopped by the limit. This leaves residuals, all accepted:
+they miss is stopped by the limit. Since 3.21.0 the `query` extraction over the
+converted Markdown runs in the same workers. This leaves residuals, all accepted:
 
 - An attacker who can send documents can keep the workers busy with slow ones.
   Up to 16 conversions then wait for a worker, at most 30 s each; beyond that

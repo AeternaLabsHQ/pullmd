@@ -3,13 +3,12 @@ import { extractPost, normalizeRedditUrl, RedditUnsupportedPageError } from './l
 import { RedditAuthError } from './lib/reddit-auth.js';
 import { extractHn, normalizeHnUrl } from './lib/hackernews.js';
 import { finalErrorHandler } from './lib/error-handler.js';
-import { extractWeb, extractHtml, extractFile } from './lib/web.js';
+import { extractWeb, extractHtml, extractFile, queryExtractIsolated } from './lib/web.js';
 import { createCache, readCacheRetentionDays } from './lib/cache.js';
 import { createAuth, formatBootstrapError } from './lib/auth.js';
 import { createOAuth, mountOAuthRoutes, oauthCors } from './lib/oauth/index.js';
 import { qualityScore } from './lib/scoring.js';
 import { buildFrontmatter, mergeMediaFrontmatter, mergeFrontmatter, validateFrontmatterFields } from './lib/frontmatter.js';
-import { queryExtract } from './lib/query-extract.js';
 import { suggestFilename } from './lib/filename.js';
 import { mcpHandler } from './lib/mcp.js';
 import { refreshShareEntry as refreshShare } from './lib/share-refresh.js';
@@ -52,6 +51,18 @@ function sendConversionError(res, err) {
     return true;
   }
   return false;
+}
+
+// Query extraction for a route: the block parse runs in a conversion worker
+// (the markdown is a foreign page's). Returns null after answering 422 / 503
+// itself; the caller just returns.
+async function runQueryExtract(res, markdown, query, maxTokens) {
+  try {
+    return await queryExtractIsolated(markdown, query, { maxTokens });
+  } catch (err) {
+    if (sendConversionError(res, err)) return null;
+    throw err;
+  }
 }
 
 function isRedditUrl(url) {
@@ -509,7 +520,8 @@ export function createApp(overrides = {}) {
           let bodyMd = baseMd;
           let ex = null;
           if (queryActive) {
-            ex = queryExtract(bodyMd, trimmedQuery, { maxTokens });
+            ex = await runQueryExtract(res, bodyMd, trimmedQuery, maxTokens);
+            if (!ex) return;
             bodyMd = ex.markdown;
             logQueryExtract(url, trimmedQuery, ex);
           }
@@ -576,7 +588,8 @@ export function createApp(overrides = {}) {
         let bodyMd = baseMd;
         let ex = null;
         if (queryActive) {
-          ex = queryExtract(bodyMd, trimmedQuery, { maxTokens });
+          ex = await runQueryExtract(res, bodyMd, trimmedQuery, maxTokens);
+          if (!ex) return;
           bodyMd = ex.markdown;
           logQueryExtract(url, trimmedQuery, ex);
         }
@@ -668,7 +681,8 @@ export function createApp(overrides = {}) {
         let bodyMd = baseMd;
         let ex = null;
         if (queryActive) {
-          ex = queryExtract(bodyMd, trimmedQuery, { maxTokens });
+          ex = await runQueryExtract(res, bodyMd, trimmedQuery, maxTokens);
+          if (!ex) return;
           bodyMd = ex.markdown;
           logQueryExtract(url, trimmedQuery, ex);
         }
@@ -740,7 +754,8 @@ export function createApp(overrides = {}) {
       let bodyMd = result.markdown;
       let ex = null;
       if (queryActive) {
-        ex = queryExtract(bodyMd, trimmedQuery, { maxTokens });
+        ex = await runQueryExtract(res, bodyMd, trimmedQuery, maxTokens);
+        if (!ex) return;
         bodyMd = ex.markdown;
         logQueryExtract(url, trimmedQuery, ex);
       }

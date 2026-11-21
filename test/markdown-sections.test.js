@@ -438,3 +438,29 @@ describe('stripCommentsSection', () => {
     assert.equal(stripCommentsSection(`${body}\n\n---\n\n## Comments (3 of 3)\n\nreal`), body);
   });
 });
+
+describe('parseBlocks — table delimiter row is linear', () => {
+  // The delimiter check used to be /^\s*\|?[\s:|-]+\|[\s:|-]*$/, which
+  // backtracked cubically on a long line of spaces and pipes.
+  const OLD = /^\s*\|?[\s:|-]+\|[\s:|-]*$/;
+  const isTable = (delim) => parseBlocks(`a|b\n${delim}\nc|d`)[0].type === 'table';
+
+  it('accepts exactly the lines the earlier pattern accepted', () => {
+    const lines = [
+      '|---|---|', '---|---', '|:--|--:|', ' | - | - | ', ':-:|:-:', '--|', '-|-',
+      '|', '||', ' |', '| |', '|-', '-|', ':|', '---', ' ', '', '|a|', 'a|-', '-|a', '- | x', '\t|\t-\t|',
+    ];
+    for (const line of lines) {
+      assert.equal(isTable(line), OLD.test(line), JSON.stringify(line));
+    }
+  });
+
+  it('parses a long line of spaces and pipes without backtracking', () => {
+    const line = ' '.repeat(20000) + '| '.repeat(20000) + 'a';
+    const start = performance.now();
+    const blocks = parseBlocks(`a|b\n${line}\n\ntext`);
+    const ms = performance.now() - start;
+    assert.equal(blocks[0].type, 'paragraph');
+    assert.ok(ms < 2000, `took ${Math.round(ms)} ms`);
+  });
+});
