@@ -658,6 +658,7 @@ recipes. Each demonstrates a different feature:
 | `booking-hotel-noise` | `preprocess` with a run of `remove-element` actions on `data-capla-component-boundary` attributes — strips breadcrumbs, gallery, share and similar widgets from Booking.com hotel pages. |
 | `booking-hotel-frontmatter` | `frontmatter` from JSON-LD (`Hotel` node) — description, address, rating and price range of a hotel page. |
 | `finanzfluss-vergleich` | `replace-with-text` + `grid-to-table` + `prepend-text` + `select.content` — rebuilds the CSS-grid comparison table on finanzfluss.de comparison pages as a real table (icons become `ja`/`nein`, card logos and support channels become words) and pulls it into the output between intro and article. The provider cards keep only their desktop copy, and their pro and con bullets get `Vorteil:` / `Nachteil:` in front. |
+| `amazon-de-product` | `select.content` over many optional containers, with `preprocess` scoped to the product page root (`#dp`) so other pages on the host stay as they were. Keeps price, rating, product data, bullet points, descriptions and the data tables of amazon.de product pages, including books and grocery items, and drops recommendation rails, reviews and the navigation. The price block keeps only its visible text, so each amount appears once. Short links on `amzn.eu` and `amzn.to` are matched by host, because recipes match the URL as requested, not the redirect target. |
 
 ---
 

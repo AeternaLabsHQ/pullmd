@@ -144,5 +144,43 @@
         "price_range": { "jsonld": "priceRange" }
       }
     }
+  },
+  {
+    "name": "amazon-de-product",
+    "host": ["www.amazon.de", "amazon.de", "amzn.eu", "amzn.to"],
+    "preprocess": [
+      { "action": "remove-element", "selector": "#corePriceDisplay_desktop_feature_div .a-offscreen, #corePriceDisplay_desktop_feature_div .aok-offscreen, #corePriceDisplay_desktop_feature_div .basisPriceLegalMessage" },
+      { "action": "prepend-text", "selector": "#apex_desktop_snsAccordionRowMiddle #corePriceDisplay_desktop_feature_div", "text": "Spar-Abo: " },
+      { "action": "replace-with-text", "selector": "#dp #acrPopover[title]", "attr": "title" },
+      { "action": "replace-with-text", "selector": "#dp #acrCustomerReviewText[aria-label]", "attr": "aria-label" },
+      { "action": "remove-element", "selector": "#dp div:has(> h3):has(#pricingFeedbackDiv), #dp .a-popover-preload, #dp .caretnext, #seeMoreDetailsLink, #bookDescription_feature_div .a-expander-prompt, #topHighlight .a-expander-prompt, #dp a[href=\"#\"]:has(> img)" },
+      { "action": "remove-element", "selector": "#dp .a-carousel-goto-prevpage, #dp .a-carousel-goto-nextpage, #dp .aplus-carousel-nav, #dp .aplus-pagination-dots" },
+      { "action": "replace-with-text", "selector": "#dp img[src*=\"grey-pixel\"]:not([alt=\"aplus content image\"]), #dp img[src*=\"transparent-pixel\"]:not([alt=\"aplus content image\"])", "attr": "alt" },
+      { "action": "remove-element", "selector": "#dp img[src*=\"grey-pixel\"], #dp img[src*=\"transparent-pixel\"]" },
+      { "action": "unwrap", "selector": "#dp a[href^=\"javascript:\"]" }
+    ],
+    "select": {
+      "content": [
+        "#desktop_qualifiedBuyBox #availability",
+        "#bylineInfo",
+        "#averageCustomerReviews_feature_div",
+        "#corePriceDisplay_desktop_feature_div",
+        "#tmmSwatches",
+        "#productOverview_feature_div",
+        "#voyagerNorthstarATF #topHighlight",
+        "#featurebullets_feature_div",
+        "#bookDescription_feature_div",
+        "#bundleComponentDetails_feature_div",
+        "#productDescription_feature_div",
+        "#importantInformation_feature_div",
+        "#aplus_feature_div",
+        "#editorialReviews_feature_div",
+        "#tech",
+        "#productDetails_feature_div",
+        "#voyagerNorthstarBTF #item_details",
+        "#voyagerNorthstarBTF #measurements",
+        "#detailBulletsWrapper_feature_div"
+      ]
+    }
   }
 ]
