@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Added
+
+- **Built-in site recipe for amazon.de product pages (`amazon-de-product`).** The output keeps the product itself: price with reference price and savings, unit price, availability, rating, the notice about a newer version of the product, bullet points, description, manufacturer content and the product data tables. Navigation, recommendation rails, reviews, the price-feedback form and carousel buttons are left out. Before, the price was missing or appeared doubled. It also applies to `amzn.eu` and `amzn.to` short links. Other pages on amazon.de are unchanged.
+
 ## [3.20.0] - 2026-11-20
 
 Found in an internal security review.
