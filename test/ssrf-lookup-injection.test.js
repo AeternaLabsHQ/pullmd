@@ -77,7 +77,7 @@ describe('injected lookup reaches the SSRF guard', () => {
     const { app, calls } = spyApp({ cache });
     await get(app, '/api?nocache=1&url=' + encodeURIComponent('https://public.test/a'));
     await get(app, '/api?url=' + encodeURIComponent('https://www.reddit.com/r/x/comments/abc123/t/'));
-    const shareId = cache.put({ url: 'https://public.test/b', title: 'b', markdown: '# b', source: 'readability' });
+    const shareId = cache.put({ url: 'https://public.test/b', title: 'b', markdown: '# b', source: 'readability' }).shareId;
     cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE url = ?").run('https://public.test/b');
     await get(app, `/s/${shareId}`);
     assert.equal(calls.web.length, 2);

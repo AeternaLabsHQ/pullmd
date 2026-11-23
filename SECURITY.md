@@ -120,24 +120,30 @@ Text transcribed from Reddit post images (`PULLMD_EMBEDDED_IMAGES`, since 3.16.0
 is untrusted third-party content and can carry prompt injection. The output
 labels it as machine-derived from the image; consumers should treat it like any
 other fetched page text. This is inherent to describing arbitrary images and
-not a vulnerability in pullmd.
+not a vulnerability in pullmd. The same holds for the figure descriptions of
+PDF OCR (`pdf_images=caption` or `hosted`), which the OCR provider writes from
+the document.
 
 Without sign-in (`PULLMD_AUTH_MODE` unset or `disabled`) and with public
-history on (the default), every client that can reach the port can list
-recent conversions including their share ids, and can delete cache entries.
-This is the documented open mode, not a vulnerability. Operators who share an
-instance should enable sign-in or set `DISABLE_PUBLIC_HISTORY=true`, which
-also refuses anonymous deletes, or keep the port off public networks.
+history on (the default), every client that can reach the port can list recent
+conversions including their share ids, and can delete cache entries. That
+includes uploads kept with `store=true` (`POST /api/file`), listed with their
+file name as title. This is the documented open mode, not a vulnerability.
+Operators who share an instance should enable sign-in or set
+`DISABLE_PUBLIC_HISTORY=true`, which also refuses anonymous deletes, or keep
+the port off public networks.
 
 An upload sent with `async=1` (`POST /api/file`) is converted in the
 background, and its result waits in memory under a random 128-bit job id until
 the client deletes it or the retention time passes
-(`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default). It is never written to
-disk or to the cache, and a restart loses it. With sign-in enabled, a job is
-bound to the account that created it, and any other account gets the same
-`404` as for an unknown id. Without sign-in, the job id is the only
-credential, as with share links: anyone who has the id can read and delete the
-result.
+(`PULLMD_FILE_JOB_TTL_MINUTES`, 60 minutes by default). The held result is
+never written to disk, and a restart loses it. Only an upload sent with
+`store=true` also goes to the cache, like a URL conversion, with a share link
+and a history entry; the uploaded file itself is never stored. With sign-in
+enabled, a job is bound to the account that created it, and any other account
+gets the same `404` as for an unknown id. Without sign-in, the job id is the
+only credential, as with share links: anyone who has the id can read and delete
+the result.
 
 ## Supported versions
 

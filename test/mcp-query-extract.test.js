@@ -333,7 +333,7 @@ describe('MCP read_url - query-extract: reddit path with query', () => {
 describe('MCP read_url - query-extract: get_share and list_recent untouched', () => {
   it('get_share ignores query-like args and returns the full document', async () => {
     const cache = createCache(':memory:');
-    const shareId = cache.put({ url: 'https://example.com/z', title: 'Big Article', markdown: bigMarkdown(), source: 'readability', client: 'api' });
+    const shareId = cache.put({ url: 'https://example.com/z', title: 'Big Article', markdown: bigMarkdown(), source: 'readability', client: 'api' }).shareId;
     const app = createApp({ cache });
     // The same args cut this page down to one section on read_url.
     const j = await callTool(app, 'get_share', { id: shareId, query: 'zebra', max_tokens: 64 });

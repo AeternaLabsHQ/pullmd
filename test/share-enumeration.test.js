@@ -22,7 +22,7 @@ async function withServer(app, fn) {
 describe('/s/:id enumeration guard (#58)', () => {
   it('throttles unknown-id lookups per IP and never a valid link', async () => {
     const cache = createCache(':memory:');
-    const id = cache.put({ url: 'https://ok.example', title: 'Ok', markdown: '# Ok', source: 'readability' });
+    const id = cache.put({ url: 'https://ok.example', title: 'Ok', markdown: '# Ok', source: 'readability' }).shareId;
     // The test clients all connect via loopback; trusting it lets
     // X-Forwarded-For stand in for a second client address.
     const app = createApp({ cache, trustProxy: 'loopback', shareMissLimiter: createRateLimiter({ windowMs: 60_000, max: 3 }) });

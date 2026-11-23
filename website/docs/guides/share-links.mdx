@@ -1,11 +1,11 @@
 ---
 title: Share links and cache
-description: How PullMD caches conversions, how share links stay fresh, and how long anything is kept.
+description: How PullMD caches conversions, how share links stay fresh, which ones are snapshots, and how long anything is kept.
 ---
 
 # Share links and cache
 
-A conversion of a URL is cached and gets a share link. Some results are served without being cached, so they get no share link: a stand-in result served because the hourly [provider budget](/guides/images-and-audio#hourly-budget) ran out, a YouTube result whose transcript was blocked or failed, and a Reddit post where an image transcript failed for a transient reason. A later request can then get the full result. The link works without sign-in and refreshes when it's opened after an hour, so a teammate or an agent can use it as a current Markdown version of the page.
+A conversion of a URL is cached and gets a share link. Some results are served without being cached, so they get no share link: a stand-in result served because the hourly [provider budget](/guides/images-and-audio#hourly-budget) ran out, a YouTube result whose transcript was blocked or failed, and a Reddit post where an image transcript failed for a transient reason. A later request can then get the full result. The link works without sign-in and refreshes when it's opened after an hour, so a teammate or an agent can use it as a current Markdown version of the page. [Snapshots](#snapshots) are the exception.
 
 ## Get a share link
 
@@ -23,9 +23,9 @@ To open the share link, request `/s/<id>`:
 curl http://localhost:3000/s/2f2f4a7b37f071b7e3137d42eb9dbec3
 ```
 
-Add `?format=text` for plain text. `?format=json` isn't supported on share links. For a URL conversion, the web app shows a **Share** bar with the link and a copy button.
+Add `?format=text` for plain text. `?format=json` isn't supported on share links. For a URL conversion or a stored upload, the web app shows a **Share** bar with the link and a copy button.
 
-Uploads (`POST /api/file` and `POST /api/html`) are never cached and have no share link.
+Uploads (`POST /api/file` and `POST /api/html`) aren't cached and have no share link, unless you keep a file upload with [`store=true`](/guides/documents#keep-an-upload).
 
 ## How the cache works
 
@@ -33,19 +33,23 @@ Uploads (`POST /api/file` and `POST /api/html`) are never cached and have no sha
 | --- | --- |
 | `GET /api` with the same URL within an hour | Served from the cache |
 | `GET /api` after an hour | Fetched again and the cache updated |
-| `/s/<id>` older than an hour | Fetched again before it's served |
+| `/s/<id>` older than an hour | Fetched again before it's served, except [snapshots](#snapshots) |
 | `/s/<id>`, source gone when refreshing | The last good copy is served |
 | `nocache=true` | Always fetched again |
 
 Parameters that change the output also skip the cache: `render` (when `force` or `skip`), `extractor` (when valid), `comment_depth`, `comment_limit`, `pdf=ocr`, `yt_timecodes` and `yt_chunk`. The fresh result then replaces the cached copy. `nocache=1` works like `nocache=true`.
 
-A `/s/<id>` refresh extracts the page with default options, so `render`, `extractor`, `pdf=ocr` and the YouTube parameters don't carry over. A Reddit or Hacker News refresh uses comment depth `3` and no `comment_limit`. It includes comments only if the cached copy has them, with the same heading language.
+A `/s/<id>` refresh extracts the page with default options, so `render`, `extractor` and the YouTube parameters don't carry over. A Reddit or Hacker News refresh uses comment depth `3` and no `comment_limit`. It includes comments only if the cached copy has them, with the same heading language.
 
 The cache is keyed by URL, so everyone who converts the same URL shares one cached copy and one share id.
 
+### Snapshots
+
+Two kinds of conversion are served as stored and never fetched again, however old they are: a PDF converted with OCR (`X-Source: pdf-ocr`), and an upload kept with [`store=true`](/guides/documents#keep-an-upload), which has no URL to fetch. This applies to `/s/<id>` and to the MCP tool `get_share`, which reports `refreshed: false`. A new conversion of the same URL still replaces an OCR conversion's cached copy.
+
 ## How long things are kept
 
-A cached conversion is deleted `PULLMD_CACHE_RETENTION_DAYS` days after it was last fetched (default `90`). Its share link stops working at the same time. Opening a share link that refreshes the copy counts as a fetch and resets the clock. Reading a fresh copy doesn't.
+A cached conversion is deleted `PULLMD_CACHE_RETENTION_DAYS` days after it was last fetched (default `90`). Its share link stops working at the same time. Opening a share link that refreshes the copy counts as a fetch and resets the clock. Reading a fresh copy or a [snapshot](#snapshots) doesn't. [Hosted figures](/guides/documents#hosted-figures) are deleted together with their conversion.
 
 ```bash
 PULLMD_CACHE_RETENTION_DAYS=0     # keep everything forever
@@ -72,7 +76,7 @@ Share links work in every setup.
 
 To delete one entry, call [`DELETE /api/cache/{id}`](/reference/api/history-and-cache/delete-a-conversion) with the numeric `id` from the history. To delete everything, call [`DELETE /api/cache`](/reference/api/history-and-cache/delete-all-conversions).
 
-With sign-in on, a regular user's delete removes the entry from their own history, and the shared copy and its share link stay. An admin's delete (or anyone's, with sign-in off) removes the shared copy for everyone. The response's `scope` says which happened: `user` or `global`. With sign-in off and `DISABLE_PUBLIC_HISTORY=true`, both delete calls return `403`.
+With sign-in on, a regular user's delete removes the entry from their own history, and the shared copy and its share link stay. An admin's delete (or anyone's, with sign-in off) removes the shared copy for everyone. The response's `scope` says which happened: `user` or `global`. A [stored upload](/guides/documents#keep-an-upload) belongs to the user who uploaded it, so that user's delete removes it for everyone, along with its share link and figures, and the response still says `user`. A regular user's `DELETE /api/cache` does the same for all of their stored uploads. With sign-in off and `DISABLE_PUBLIC_HISTORY=true`, both delete calls return `403`.
 
 ## Where the cache lives
 

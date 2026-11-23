@@ -304,7 +304,7 @@
         <li><strong>Sauberer Body</strong> - der Markdown-Body ist standardmäßig nur noch <code># Titel</code> + Inhalt; Quell-URL, Datum und Metadaten liegen im YAML-Frontmatter, statt im Text wiederholt zu werden (spart Tokens).</li>
         <li><strong>Dokumente</strong> - PDF, Word, PowerPoint, Excel, EPUB u. a. per URL oder Upload (Drag-and-drop in der Web-Oberfläche).</li>
         <li><strong>Formate ohne Sidecar</strong> - E-Mails (<code>.eml</code>, <code>.msg</code>), gespeicherte Seiten (<code>.mhtml</code>), OpenDocument, RTF, Kalender und Kontakte, CSV/JSON/XML, Notebooks, Quelltext, Text und Untertitel per Upload.</li>
-        <li><strong>PDF-Tabellen (OCR)</strong> - optionaler, hochwertiger PDF-Pfad mit <code>?pdf=ocr</code> für saubere Tabellen.</li>
+        <li><strong>PDF-Tabellen (OCR)</strong> - optionaler, hochwertiger PDF-Pfad mit <code>?pdf=ocr</code> für saubere Tabellen; mit <code>pdf_images</code> werden Abbildungen beschrieben oder als Bilder abgelegt.</li>
         <li><strong>Bilder & Audio</strong> - optionale Bildbeschreibung und Audio-Transkription.</li>
         <li><strong>YouTube</strong> - Titel, Beschreibung und Transkript mit klickbaren Timecodes, ohne API-Key.</li>
       </ul>
@@ -312,7 +312,7 @@
         <li><strong>Clean body</strong> - the Markdown body is now just <code># Title</code> + content; the source URL, date and metadata live in the YAML frontmatter instead of being repeated in the text (saves tokens).</li>
         <li><strong>Documents</strong> - PDF, Word, PowerPoint, Excel, EPUB and more, by URL or upload (drag-and-drop in the web UI).</li>
         <li><strong>Formats without a sidecar</strong> - e-mails (<code>.eml</code>, <code>.msg</code>), saved pages (<code>.mhtml</code>), OpenDocument, RTF, calendars and contacts, CSV/JSON/XML, notebooks, source code, text and subtitles as uploads.</li>
-        <li><strong>PDF tables (OCR)</strong> - an optional high-quality PDF path with <code>?pdf=ocr</code> for clean tables.</li>
+        <li><strong>PDF tables (OCR)</strong> - an optional high-quality PDF path with <code>?pdf=ocr</code> for clean tables; with <code>pdf_images</code>, figures are described or stored as images.</li>
         <li><strong>Images & audio</strong> - optional image captioning and audio transcription.</li>
         <li><strong>YouTube</strong> - title, description and transcript with clickable timecodes, no API key.</li>
       </ul>
@@ -402,10 +402,10 @@
           <tr>
             <td lang="de"><strong>Share-Link-Lebensdauer</strong></td>
             <td lang="de"><code>90 Tage</code> (Standard)</td>
-            <td lang="de">Bei jedem Re-Fetch (=> Cache schreibt). Auch <code>/s/:id</code>-Aufrufe verlängern, da sie nach 1 h einen Re-Fetch auslösen. Einstellbar über <code>PULLMD_CACHE_RETENTION_DAYS</code>; <code>0</code> = unbegrenzt.</td>
+            <td lang="de">Bei jedem Re-Fetch (=> Cache schreibt). Auch <code>/s/:id</code>-Aufrufe verlängern, da sie nach 1 h einen Re-Fetch auslösen (außer bei PDF-OCR-Konvertierungen und gespeicherten Uploads). Einstellbar über <code>PULLMD_CACHE_RETENTION_DAYS</code>; <code>0</code> = unbegrenzt.</td>
             <td lang="en"><strong>Share link lifetime</strong></td>
             <td lang="en"><code>90 days</code> (default)</td>
-            <td lang="en">On every re-fetch (= cache write). <code>/s/:id</code> requests extend it too, since they trigger a re-fetch after 1h. Configurable via <code>PULLMD_CACHE_RETENTION_DAYS</code>; <code>0</code> = unlimited.</td>
+            <td lang="en">On every re-fetch (= cache write). <code>/s/:id</code> requests extend it too, since they trigger a re-fetch after 1h (except for PDF OCR conversions and stored uploads). Configurable via <code>PULLMD_CACHE_RETENTION_DAYS</code>; <code>0</code> = unlimited.</td>
           </tr>
         </tbody>
       </table>
@@ -417,12 +417,14 @@
         <li>Cache ≥ 1 h alt → ruft die Quelle frisch ab, schreibt zurück, liefert das neue Markdown.</li>
         <li>Quelle nicht erreichbar (404, Netzwerk, …) → liefert den letzten gespeicherten Stand als Snapshot. Keine Stille-Failure-Lücke.</li>
         <li>Cache &gt; Aufbewahrungsfrist (Standard 90 Tage) ohne Re-Fetch → Eintrag wird beim nächsten Schreibvorgang gelöscht; Share-Link gibt 404 zurück.</li>
+        <li>PDF-OCR-Konvertierungen und gespeicherte Uploads → immer der gespeicherte Stand, nie ein neuer Abruf (siehe <a href="#share">Share-Links</a>).</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li>Cache &lt; 1 h old → returns the stored version immediately.</li>
         <li>Cache ≥ 1 h old → re-fetches the source, writes back, serves the new markdown.</li>
         <li>Source unreachable (404, network, …) → falls back to the last stored snapshot. No silent failure.</li>
         <li>Cache &gt; the retention period (default 90 days) without a re-fetch → entry is pruned on next write; share link returns 404.</li>
+        <li>PDF OCR conversions and stored uploads → always the stored version, never a new fetch (see <a href="#share">Share links</a>).</li>
       </ul>
 
       <h3 lang="de">Tipp: Subreddit als Live-Feed</h3>
@@ -513,8 +515,8 @@ unzip pullmd.zip -d ~/.claude/skills/
 
       <h3 lang="de">Option 3 — MCP-Server (remote)</h3>
       <h3 lang="en">Option 3 — MCP server (remote)</h3>
-      <p lang="de">PullMD läuft als <strong>remote MCP-Server</strong> unter <code>__PULLMD_URL__/mcp</code> (Streamable-HTTP-Transport, stateless). Drei Tools: <code>read_url</code>, <code>get_share</code>, <code>list_recent</code>. Server-seitige Updates erreichen automatisch alle Clients — keine lokale Installation nötig. Ist eine Anmeldung aktiv, listet <code>list_recent</code> nur die eigenen Konversionen.</p>
-      <p lang="en">PullMD runs as a <strong>remote MCP server</strong> at <code>__PULLMD_URL__/mcp</code> (Streamable-HTTP transport, stateless). Three tools: <code>read_url</code>, <code>get_share</code>, <code>list_recent</code>. Server-side updates reach every client automatically — no local install needed. With sign-in enabled, <code>list_recent</code> lists only your own conversions.</p>
+      <p lang="de">PullMD läuft als <strong>remote MCP-Server</strong> unter <code>__PULLMD_URL__/mcp</code> (Streamable-HTTP-Transport, stateless). Tools: <code>read_url</code>, <code>get_share</code>, <code>list_recent</code>, dazu <code>get_image</code>, wenn die Instanz PDF-Abbildungen ablegt (<code>PULLMD_IMAGE_HOSTING</code>). Server-seitige Updates erreichen automatisch alle Clients - keine lokale Installation nötig. Ist eine Anmeldung aktiv, listet <code>list_recent</code> nur die eigenen Konversionen.</p>
+      <p lang="en">PullMD runs as a <strong>remote MCP server</strong> at <code>__PULLMD_URL__/mcp</code> (Streamable-HTTP transport, stateless). Tools: <code>read_url</code>, <code>get_share</code>, <code>list_recent</code>, plus <code>get_image</code> when the instance stores PDF figures (<code>PULLMD_IMAGE_HOSTING</code>). Server-side updates reach every client automatically - no local install needed. With sign-in enabled, <code>list_recent</code> lists only your own conversions.</p>
 
       <p class="muted" lang="de"><strong>Claude Code</strong> — Prompt einfügen, Claude installiert es selbst:</p>
       <p class="muted" lang="en"><strong>Claude Code</strong> — paste this prompt and Claude will install it for you:</p>
@@ -572,11 +574,11 @@ Then: claude mcp list to verify.</pre>
 }</pre>
       </div>
 
-      <p class="muted" lang="de">Sobald registriert, erscheinen die drei Tools nativ im Agent — keine Prompt-Anweisungen nötig, das LLM erkennt sie über ihre Schema-Beschreibungen.</p>
-      <p class="muted" lang="en">Once registered, the three tools surface natively in the agent — no prompt instructions needed, the LLM picks them up via their schema descriptions.</p>
+      <p class="muted" lang="de">Sobald registriert, erscheinen die Tools nativ im Agent - keine Prompt-Anweisungen nötig, das LLM erkennt sie über ihre Schema-Beschreibungen.</p>
+      <p class="muted" lang="en">Once registered, the tools surface natively in the agent - no prompt instructions needed, the LLM picks them up via their schema descriptions.</p>
 
-      <p class="muted" lang="de"><code>read_url</code> kennt dieselben Stellschrauben wie die REST-API: <code>comments</code>, <code>comment_depth</code>, <code>comment_limit</code>, <code>frontmatter</code>, <code>lang</code>, <code>nocache</code>, <code>extractor</code>, <code>yt_timecodes</code>, <code>yt_chunk</code>, <code>pdf_ocr</code> (statt <code>pdf=ocr</code>), <code>query</code> und <code>max_tokens</code> sowie, nur für Reddit, <code>images</code> (<code>"on"</code> / <code>"off"</code>). MCP-Antworten haben keine Response-Header; findet die Query-Extraktion nichts, steht stattdessen ein Kommentar im Markdown.</p>
-      <p class="muted" lang="en"><code>read_url</code> exposes the same knobs as the REST API: <code>comments</code>, <code>comment_depth</code>, <code>comment_limit</code>, <code>frontmatter</code>, <code>lang</code>, <code>nocache</code>, <code>extractor</code>, <code>yt_timecodes</code>, <code>yt_chunk</code>, <code>pdf_ocr</code> (instead of <code>pdf=ocr</code>), <code>query</code> and <code>max_tokens</code>, plus <code>images</code> (<code>"on"</code> / <code>"off"</code>) for Reddit only. MCP responses carry no headers; when query extraction finds no match it prepends an in-band comment to the markdown instead.</p>
+      <p class="muted" lang="de"><code>read_url</code> kennt dieselben Stellschrauben wie die REST-API: <code>comments</code>, <code>comment_depth</code>, <code>comment_limit</code>, <code>frontmatter</code>, <code>lang</code>, <code>nocache</code>, <code>extractor</code>, <code>yt_timecodes</code>, <code>yt_chunk</code>, <code>pdf_ocr</code> (statt <code>pdf=ocr</code>), <code>pdf_images</code>, <code>query</code> und <code>max_tokens</code> sowie, nur für Reddit, <code>images</code> (<code>"on"</code> / <code>"off"</code>). MCP-Antworten haben keine Response-Header; findet die Query-Extraktion nichts, steht stattdessen ein Kommentar im Markdown.</p>
+      <p class="muted" lang="en"><code>read_url</code> exposes the same knobs as the REST API: <code>comments</code>, <code>comment_depth</code>, <code>comment_limit</code>, <code>frontmatter</code>, <code>lang</code>, <code>nocache</code>, <code>extractor</code>, <code>yt_timecodes</code>, <code>yt_chunk</code>, <code>pdf_ocr</code> (instead of <code>pdf=ocr</code>), <code>pdf_images</code>, <code>query</code> and <code>max_tokens</code>, plus <code>images</code> (<code>"on"</code> / <code>"off"</code>) for Reddit only. MCP responses carry no headers; when query extraction finds no match it prepends an in-band comment to the markdown instead.</p>
 
       <div class="callout">
         <p lang="de" style="margin:0;"><strong>Instanz mit Login?</strong> Dann brauchen <code>/api</code> und <code>/mcp</code> Zugangsdaten: einen API-Key als <code>Authorization: Bearer pmd_…</code> oder OAuth für Claude Desktop und claude.ai. Details unter <a href="#auth">Authentifizierung</a>.</p>
@@ -619,8 +621,12 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">Fetch or delete the result of an async upload.</td>
           </tr>
           <tr><td><code>GET /s/:id</code></td>
-            <td lang="de">Share-Link, aktualisiert sich selbst. Siehe <a href="#share">Share-Links</a>.</td>
-            <td lang="en">Share link, refreshes itself. See <a href="#share">Share links</a>.</td>
+            <td lang="de">Share-Link, aktualisiert sich selbst (außer OCR-Konvertierungen und gespeicherten Uploads). Siehe <a href="#share">Share-Links</a>.</td>
+            <td lang="en">Share link, refreshes itself (except OCR conversions and stored uploads). See <a href="#share">Share links</a>.</td>
+          </tr>
+          <tr><td><code>GET /img/:file</code></td>
+            <td lang="de">Abgelegte PDF-Abbildung aus <code>pdf_images=hosted</code>, ohne Anmeldung wie ein Share-Link. Nur mit <code>PULLMD_IMAGE_HOSTING</code>. Siehe <a href="#files">Dateien konvertieren</a>.</td>
+            <td lang="en">A stored PDF figure from <code>pdf_images=hosted</code>, without sign-in like a share link. Only with <code>PULLMD_IMAGE_HOSTING</code>. See <a href="#files">Converting files</a>.</td>
           </tr>
           <tr><td><code>GET /api/history</code></td>
             <td lang="de">Letzte Konversionen als JSON (<code>?limit=</code>, Default 20, 1 bis 100). Angemeldete sehen ihre eigenen.</td>
@@ -639,8 +645,8 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">Extraction telemetry: sources, quality, latency (<code>?window=-7 days</code>). The answer is for the admin, or for everyone when auth is off and public history is on. Otherwise it holds only <code>window</code>.</td>
           </tr>
           <tr><td><code>GET /api/config</code></td>
-            <td lang="de">Was auf dieser Instanz aktiv ist (Auth-Modus, Dokumente, Vision, STT, PDF-OCR, YouTube). Die PWA blendet danach ihre Bedienelemente ein oder aus.</td>
-            <td lang="en">What is enabled on this instance (auth mode, documents, vision, STT, PDF OCR, YouTube). The PWA shows or hides its controls accordingly.</td>
+            <td lang="de">Was auf dieser Instanz aktiv ist (Auth-Modus, Dokumente, Vision, STT, PDF-OCR, Bildablage, gespeicherte Uploads, YouTube). Die PWA blendet danach ihre Bedienelemente ein oder aus.</td>
+            <td lang="en">What is enabled on this instance (auth mode, documents, vision, STT, PDF OCR, image hosting, stored uploads, YouTube). The PWA shows or hides its controls accordingly.</td>
           </tr>
           <tr><td><code>GET /api/recipes/status</code></td>
             <td lang="de">Welche <a href="#recipes">Site-Recipes</a> geladen bzw. abgelehnt wurden.</td>
@@ -651,8 +657,8 @@ Then: claude mcp list to verify.</pre>
             <td lang="en">Health of the extraction sidecars (trafilatura, Playwright, markitdown). <code>200</code> when every configured one answers, <code>503</code> as soon as one is down - meant for external monitoring. Also <code>503</code> (<code>degraded</code>, <code>policy-missing</code>): a Playwright sidecar that does not report the current address-policy revision (2), i.e. a <code>pullmd-playwright</code> image older than v3.20.0. It still renders but guards fewer requests; images older than v3.15.2 also follow redirects into internal networks. Update it to the same release as <code>pullmd</code>.</td>
           </tr>
           <tr><td><code>POST /mcp</code></td>
-            <td lang="de">MCP-Server (Streamable-HTTP, stateless), drei Tools.</td>
-            <td lang="en">MCP server (Streamable HTTP, stateless), three tools.</td>
+            <td lang="de">MCP-Server (Streamable-HTTP, stateless), siehe <a href="#agent">In KI-Agenten einrichten</a>.</td>
+            <td lang="en">MCP server (Streamable HTTP, stateless), see <a href="#agent">Set up in AI agents</a>.</td>
           </tr>
           <tr><td><code>GET /pullmd.zip</code></td>
             <td lang="de">Claude-Code-Skill mit der URL dieser Instanz. <code>/web-reader.zip</code> leitet hierher weiter.</td>
@@ -716,6 +722,10 @@ Then: claude mcp list to verify.</pre>
             <td lang="de"><code>ocr</code> schickt PDFs durch die hochwertige OCR-Stufe (saubere Tabellen). Braucht einen serverseitigen OCR-Key; ohne ihn bleibt es beim normalen Pfad. Umgeht den Cache.</td>
             <td lang="en"><code>ocr</code> routes PDFs through the high-quality OCR tier (clean tables). Needs a server-side OCR key; without one the normal path is used. Bypasses the cache.</td>
           </tr>
+          <tr><td><code>pdf_images</code></td><td><code>strip</code></td>
+            <td lang="de">Was bei OCR an die Stelle jeder Abbildung tritt: <code>strip</code> = Textzeile mit ID und Maßen, <code>caption</code> = kurze Beschreibung des OCR-Anbieters, <code>hosted</code> = die Abbildung als Bildlink unter <code>/img/&lt;id&gt;.&lt;ext&gt;</code> (braucht <code>PULLMD_IMAGE_HOSTING</code> und <code>PUBLIC_URL</code>, sonst wie <code>caption</code>). Siehe <a href="#files">Dateien konvertieren</a>. Umgeht den Cache allein nicht.</td>
+            <td lang="en">What replaces each figure when OCR runs: <code>strip</code> = a text line with id and size, <code>caption</code> = a short description from the OCR provider, <code>hosted</code> = the figure as an image link at <code>/img/&lt;id&gt;.&lt;ext&gt;</code> (needs <code>PULLMD_IMAGE_HOSTING</code> and <code>PUBLIC_URL</code>, otherwise like <code>caption</code>). See <a href="#files">Converting files</a>. Does not bypass the cache on its own.</td>
+          </tr>
           <tr><td><code>yt_timecodes</code></td><td><code>links</code></td>
             <td lang="de">YouTube-Transkript: <code>links</code> = klickbare Zeitstempel, <code>plain</code> = <code>[MM:SS]</code>, <code>none</code> = nur Text. Umgeht den Cache.</td>
             <td lang="en">YouTube transcript: <code>links</code> = clickable timestamps, <code>plain</code> = <code>[MM:SS]</code>, <code>none</code> = text only. Bypasses the cache.</td>
@@ -769,8 +779,8 @@ Then: claude mcp list to verify.</pre>
             <td lang="en"><code>0.0</code>–<code>1.0</code> extraction confidence. Low values mean thin or noisy output.</td>
           </tr>
           <tr><td><code>X-Share-Id</code></td>
-            <td lang="de">32-stellige Hex-ID, aufrufbar als <code>/s/&lt;id&gt;</code>. Fehlt bei <code>/api/html</code> und <code>/api/file</code>, weil lokale Dateien nicht gecacht werden.</td>
-            <td lang="en">32-hex id, openable as <code>/s/&lt;id&gt;</code>. Absent on <code>/api/html</code> and <code>/api/file</code>, since local files are never cached.</td>
+            <td lang="de">32-stellige Hex-ID, aufrufbar als <code>/s/&lt;id&gt;</code>. Fehlt bei <code>/api/html</code> und bei <code>/api/file</code> ohne <code>store=true</code>, weil lokale Dateien sonst nicht gecacht werden.</td>
+            <td lang="en">32-hex id, openable as <code>/s/&lt;id&gt;</code>. Absent on <code>/api/html</code> and on <code>/api/file</code> without <code>store=true</code>, since local files are not cached otherwise.</td>
           </tr>
           <tr><td><code>X-Suggested-Filename</code></td>
             <td lang="de">Vorgeschlagener Dateiname für den Download, z. B. <code>YT-vortrag-titel-dQw4w9WgXcQ.md</code>. YouTube bekommt Titel plus Video-ID, Bilder, Audio und Dokumente den ursprünglichen Dateinamen, alles andere den Titel. Self-Hoster können mit <code>PULLMD_FILENAME_DATE_PREFIX</code> ein Datum voranstellen (Vorlage mit den Platzhaltern <code>YYYY MM DD HH mm ss</code>, z. B. <code>YYYY-MM-DD-</code>). Der Download-Button in der Web-Oberfläche speichert das Ergebnis unter genau diesem Namen. Bei <code>/api/stream</code> gibt es keine Header, dort steckt derselbe Wert als <code>suggestedFilename</code> im <code>result</code>-Event.</td>
@@ -843,8 +853,8 @@ Then: claude mcp list to verify.</pre>
     <!-- ===================================================== -->
     <section id="files">
       <h2><span lang="de">Dateien konvertieren</span><span lang="en">Converting files</span><span class="kicker">POST /api/html · /api/file</span></h2>
-      <p lang="de">Nicht alles steht als abrufbare URL im Netz. Zwei Upload-Wege decken den Rest ab. Die hochgeladene Datei wird <strong>nie</strong> gespeichert; es gibt keinen History-Eintrag, keinen Share-Link und keine <code>X-Share-Id</code>.</p>
-      <p lang="en">Not everything lives at a fetchable URL. Two upload paths cover the rest. The uploaded file is <strong>never</strong> stored; there is no history entry, no share link and no <code>X-Share-Id</code>.</p>
+      <p lang="de">Nicht alles steht als abrufbare URL im Netz. Zwei Upload-Wege decken den Rest ab. Die hochgeladene Datei wird <strong>nie</strong> gespeichert. Ohne <code>store=true</code> (nur <code>/api/file</code>, siehe unten) gibt es keinen History-Eintrag, keinen Share-Link und keine <code>X-Share-Id</code>.</p>
+      <p lang="en">Not everything lives at a fetchable URL. Two upload paths cover the rest. The uploaded file is <strong>never</strong> stored. Without <code>store=true</code> (<code>/api/file</code> only, see below) there is no history entry, no share link and no <code>X-Share-Id</code>.</p>
 
       <h3 lang="de">Gespeicherte HTML-Seiten</h3>
       <h3 lang="en">Saved HTML pages</h3>
@@ -923,12 +933,16 @@ Then: claude mcp list to verify.</pre>
   -H 'X-Filename: report.pdf' \
   "__PULLMD_URL__/api/file"</pre>
       </div>
-      <p lang="de">Optionale Parameter: <code>format=json|text</code>, <code>frontmatter=true</code>, <code>pdf=ocr</code>. Die Dokument-Konvertierung braucht den markitdown-Sidecar; ist er nicht konfiguriert, antworten Dokument-URLs und <code>/api/file</code> mit <code>502</code>. Ob diese Instanz ihn hat, verrät <code>/api/config</code>.</p>
-      <p lang="en">Optional parameters: <code>format=json|text</code>, <code>frontmatter=true</code>, <code>pdf=ocr</code>. Document conversion needs the markitdown sidecar; without it, document URLs and <code>/api/file</code> return <code>502</code>. Whether this instance has it is reported by <code>/api/config</code>.</p>
-      <p lang="de">Die Web-Oberfläche lädt Bilder in einem hochgeladenen Dokument (E-Mail, gespeicherte Seite) erst auf Klick, auch solche mit einer Adresse auf dieser Instanz: Eine Leiste über dem Ergebnis bietet <strong>Bilder laden</strong> an. Die Raw-Ansicht zeigt solche Bilder als Markdown-Text, die Rendered-Ansicht als Alt-Text mit Adresse. Nur <code>data:</code>- und <code>blob:</code>-Bilder bleiben unberührt, ebenso Ergebnisse von URL-Abrufen, History und Share-Links.</p>
-      <p lang="en">The web UI does not load images in an uploaded document (e-mail, saved page) until you click, including images with an address on this instance: a bar above the result offers <strong>Load images</strong>. The Raw view shows such images as Markdown text, the Rendered view as alt text with the address. Only <code>data:</code> and <code>blob:</code> images are left alone, as are results of URL conversions, history and share links.</p>
-      <p lang="de">Mit <code>?async=1</code> antwortet <code>/api/file</code> sofort mit <code>202</code> und einer Job-ID und konvertiert im Hintergrund; das Ergebnis (immer JSON) holst du mit <code>GET /api/file/jobs/:id</code> ab und löschst es mit <code>DELETE</code>. Es liegt bis dahin höchstens 60 Minuten (einstellbar) im Arbeitsspeicher und geht bei einem Neustart verloren. Kann der Server den Job nicht annehmen, antwortet er normal mit <code>200</code>; Skripte müssen beides behandeln. Die Web-Oberfläche nutzt das, damit du die App während einer langen Konvertierung verlassen kannst.</p>
-      <p lang="en">With <code>?async=1</code>, <code>/api/file</code> answers at once with <code>202</code> and a job id and converts in the background; you fetch the result (always JSON) with <code>GET /api/file/jobs/:id</code> and remove it with <code>DELETE</code>. Until then it is held in memory for up to 60 minutes (configurable) and is lost on a restart. If the server cannot queue the job, it answers normally with <code>200</code>; scripts have to handle both. The web UI uses this so you can leave the app during a long conversion.</p>
+      <p lang="de">Optionale Parameter: <code>format=json|text</code>, <code>frontmatter=true</code>, <code>pdf=ocr</code>, <code>pdf_images=strip|caption|hosted</code>, <code>store=true</code>. Die Dokument-Konvertierung braucht den markitdown-Sidecar; ist er nicht konfiguriert, antworten Dokument-URLs und <code>/api/file</code> mit <code>502</code>. Ob diese Instanz ihn hat, verrät <code>/api/config</code>.</p>
+      <p lang="en">Optional parameters: <code>format=json|text</code>, <code>frontmatter=true</code>, <code>pdf=ocr</code>, <code>pdf_images=strip|caption|hosted</code>, <code>store=true</code>. Document conversion needs the markitdown sidecar; without it, document URLs and <code>/api/file</code> return <code>502</code>. Whether this instance has it is reported by <code>/api/config</code>.</p>
+      <p lang="de">Die Web-Oberfläche lädt Bilder in einem hochgeladenen Dokument (E-Mail, gespeicherte Seite) erst auf Klick, auch solche mit einer Adresse auf dieser Instanz: Eine Leiste über dem Ergebnis bietet <strong>Bilder laden</strong> an. Die Raw-Ansicht zeigt solche Bilder als Markdown-Text, die Rendered-Ansicht als Alt-Text mit Adresse. Nur <code>data:</code>- und <code>blob:</code>-Bilder und abgelegte Abbildungen dieser Instanz (<code>/img/&lt;id&gt;.&lt;ext&gt;</code> auf derselben Adresse, ohne Query oder Fragment) bleiben unberührt, ebenso Ergebnisse von URL-Abrufen, History und Share-Links.</p>
+      <p lang="en">The web UI does not load images in an uploaded document (e-mail, saved page) until you click, including images with an address on this instance: a bar above the result offers <strong>Load images</strong>. The Raw view shows such images as Markdown text, the Rendered view as alt text with the address. Only <code>data:</code> and <code>blob:</code> images and this instance's stored figures (<code>/img/&lt;id&gt;.&lt;ext&gt;</code> on the same address, without a query or fragment) are left alone, as are results of URL conversions, history and share links.</p>
+      <p lang="de">Mit <code>?async=1</code> antwortet <code>/api/file</code> sofort mit <code>202</code> und einer Job-ID und konvertiert im Hintergrund; das Ergebnis (immer JSON) holst du mit <code>GET /api/file/jobs/:id</code> ab und löschst es mit <code>DELETE</code>. Es liegt bis dahin höchstens 60 Minuten (einstellbar) im Arbeitsspeicher und geht bei einem Neustart verloren. Kann der Server den Job nicht annehmen, antwortet er normal mit <code>200</code>; Skripte müssen beides behandeln. Die Web-Oberfläche nutzt das, damit du die App während einer langen Konvertierung verlassen kannst. Ein mit <code>store=true</code> gespeichertes Ergebnis liegt zusätzlich im Cache und bleibt, wenn der fertige Job gelöscht wird oder abläuft.</p>
+      <p lang="en">With <code>?async=1</code>, <code>/api/file</code> answers at once with <code>202</code> and a job id and converts in the background; you fetch the result (always JSON) with <code>GET /api/file/jobs/:id</code> and remove it with <code>DELETE</code>. Until then it is held in memory for up to 60 minutes (configurable) and is lost on a restart. If the server cannot queue the job, it answers normally with <code>200</code>; scripts have to handle both. The web UI uses this so you can leave the app during a long conversion. A result kept with <code>store=true</code> is also stored in the cache and stays when the finished job is deleted or expires.</p>
+      <p lang="de"><strong>Upload speichern:</strong> Mit <code>store=true</code> (oder <code>store=1</code>) behält PullMD das Ergebnis wie eine URL-Konvertierung. Die hochgeladene Datei selbst wird weiterhin nie gespeichert. Das Ergebnis bekommt eine Share-ID (<code>X-Share-Id</code>, bei <code>format=json</code> und im Async-Ergebnis <code>shareId</code>) und einen History-Eintrag mit dem Dateinamen als Titel. Auf einer Instanz ohne Anmeldung und mit öffentlicher History sieht diesen Eintrag jeder, der die Instanz erreicht. Mit Anmeldung steht er nur in deiner eigenen History; dein Löschen entfernt ihn samt Share-Link und Abbildungen für alle. Er hält <code>PULLMD_CACHE_RETENTION_DAYS</code> lang (Standard 90 Tage), und sein Share-Link liefert immer den gespeicherten Stand. Schaltet die Instanz <code>PULLMD_UPLOAD_STORE=false</code>, wird <code>store</code> ignoriert. In der Web-Oberfläche heißt der Schalter <strong>Speichern</strong>, mit Bildablage <strong>Speichern + Bilder</strong>; er erscheint nur, wenn die Instanz gespeicherte Uploads erlaubt.</p>
+      <p lang="en"><strong>Keeping an upload:</strong> with <code>store=true</code> (or <code>store=1</code>) PullMD keeps the result like a URL conversion. The uploaded file itself is still never stored. The result gets a share id (<code>X-Share-Id</code>, <code>shareId</code> with <code>format=json</code> and in the async result) and a history entry with the file name as its title. On an instance without sign-in and with public history, everyone who can reach the instance sees that entry. With sign-in, it is in your own history only; your delete removes it for everyone, with its share link and figures. It is kept for <code>PULLMD_CACHE_RETENTION_DAYS</code> (default 90 days), and its share link always returns the stored version. If the instance sets <code>PULLMD_UPLOAD_STORE=false</code>, <code>store</code> is ignored. In the web UI the toggle is called <strong>Store</strong>, with image hosting <strong>Store + images</strong>; it only shows when the instance allows stored uploads.</p>
+      <p lang="de"><strong>Abbildungen in OCR-PDFs:</strong> <code>pdf_images</code> bestimmt, was an die Stelle jeder Abbildung tritt, sobald OCR läuft (<code>/api</code>, <code>/api/stream</code>, <code>/api/file</code>, MCP <code>read_url</code>). <code>strip</code> (Standard) schreibt eine Zeile wie <code>*[Abbildung: img-0.jpeg, 648×523 px]*</code>, <code>caption</code> eine kurze Beschreibung des OCR-Anbieters (<code>&gt; **Abbildung** (img-0.jpeg, 648×523): …</code>), <code>hosted</code> einen Bildlink auf <code>/img/&lt;id&gt;.&lt;ext&gt;</code>. Mit <code>lang=en</code> heißt die Beschriftung <code>Figure</code> (nicht bei MCP). <code>hosted</code> braucht <code>PULLMD_IMAGE_HOSTING</code> und <code>PUBLIC_URL</code>, bei Uploads außerdem <code>store=true</code>, sonst gilt <code>caption</code>; eine Abbildung, die sich nicht ablegen lässt, bekommt die <code>caption</code>-Form, eine ohne Beschreibung die <code>strip</code>-Zeile. Die Bilder haben die Auflösung, die der OCR-Anbieter liefert (beim Standardanbieter in unseren Tests etwa 650 px Breite für eine seitenbreite Abbildung). Höchstens 40 Abbildungen pro Dokument, weitere fehlen ohne Hinweis; Bilder unter 50 px werden übergangen. Grenzen fürs Ablegen: 4 MB pro Bild, 20 MB pro Dokument. Abgelegte Abbildungen sind ohne Anmeldung abrufbar (128-Bit-ID, nicht erratbar) und leben so lange wie ihre Konvertierung: Löschen, Ablauf der Aufbewahrung oder eine neue Konvertierung derselben URL, wenn das neue Ergebnis gespeichert wird, entfernt sie. Ein eigener OCR-Endpunkt muss <code>image_min_size</code>, <code>image_limit</code>, <code>bbox_annotation_format</code> und <code>include_image_base64</code> annehmen; lehnt er sie ab, fällt PullMD auf die normale Konvertierung zurück.</p>
+      <p lang="en"><strong>Figures in OCR PDFs:</strong> <code>pdf_images</code> decides what replaces each figure whenever OCR runs (<code>/api</code>, <code>/api/stream</code>, <code>/api/file</code>, MCP <code>read_url</code>). <code>strip</code> (default) writes a line such as <code>*[Abbildung: img-0.jpeg, 648×523 px]*</code>, <code>caption</code> a short description from the OCR provider (<code>&gt; **Abbildung** (img-0.jpeg, 648×523): …</code>), <code>hosted</code> an image link to <code>/img/&lt;id&gt;.&lt;ext&gt;</code>. With <code>lang=en</code> the label is <code>Figure</code> (not on MCP). <code>hosted</code> needs <code>PULLMD_IMAGE_HOSTING</code> and <code>PUBLIC_URL</code>, and on uploads also <code>store=true</code>, otherwise <code>caption</code> applies; a figure that cannot be stored gets the <code>caption</code> form, one without a description the <code>strip</code> line. The images come at the resolution the OCR provider returns (with the default provider, about 650 px wide for a page-wide figure in our tests). At most 40 figures per document, further ones are left out without a marker; images under 50 px are skipped. Storage limits: 4 MB per image, 20 MB per document. Stored figures can be fetched without sign-in (128-bit id, not guessable) and live as long as their conversion: deleting it, the end of retention or a new conversion of the same URL, when the new result is cached, removes them. A custom OCR endpoint has to accept <code>image_min_size</code>, <code>image_limit</code>, <code>bbox_annotation_format</code> and <code>include_image_base64</code>; if it rejects them, PullMD falls back to the standard conversion.</p>
 
       <h3 lang="de">Bilder, Audio, YouTube</h3>
       <h3 lang="en">Images, audio, YouTube</h3>
@@ -950,6 +964,7 @@ Then: claude mcp list to verify.</pre>
         <li>Damit ist der Share-Link auch ein <em>Live-Endpoint</em>: ein KI-Agent kann ihn als festen URL benutzen und kriegt automatisch frisches Markdown.</li>
         <li>Maximales Alter im Cache: <code>PULLMD_CACHE_RETENTION_DAYS</code> (Standard 90 Tage, <code>0</code> = unbegrenzt) ohne Re-Fetch. Da aber jeder <code>/s/:id</code>-Aufruf nach 1 h einen Re-Fetch auslöst, verlängert sich die Lebensdauer mit jeder Nutzung.</li>
         <li>Ist die Quelle nicht erreichbar, wird der letzte Snapshot zurückgegeben — der Link bleibt also auch bei toten Seiten nutzbar.</li>
+        <li>Ausnahme: PDF-OCR-Konvertierungen (<code>source: pdf-ocr</code>) und gespeicherte Uploads werden immer so ausgeliefert, wie sie gespeichert sind, und nie neu geholt. Ihr Aufruf verlängert die Aufbewahrung nicht.</li>
       </ul>
       <ul class="doc-list" lang="en">
         <li><code>GET /s/:id</code> returns the markdown (Content-Type <code>text/markdown</code>).</li>
@@ -958,6 +973,7 @@ Then: claude mcp list to verify.</pre>
         <li>This makes the share link a <em>live endpoint</em>: an AI agent can pin it as a fixed URL and automatically get refreshed markdown.</li>
         <li>Max age in cache: <code>PULLMD_CACHE_RETENTION_DAYS</code> (default 90 days, <code>0</code> = unlimited) without a refresh. But since every <code>/s/:id</code> hit older than 1h triggers a refresh, lifetime extends with usage.</li>
         <li>If the source is unreachable, the last snapshot is returned — so the link keeps working even if the source dies.</li>
+        <li>Exception: PDF OCR conversions (<code>source: pdf-ocr</code>) and stored uploads are always served as stored and never fetched again. Opening them does not extend their retention.</li>
       </ul>
     </section>
 
@@ -1045,8 +1061,8 @@ share_id: a3f9c2b7
           </tr>
         </tbody>
       </table>
-      <p lang="de">Ist ein Modus aktiv, brauchen <code>/api</code>, <code>/api/stream</code>, die Upload-Endpunkte, <code>/mcp</code> sowie History und Archiv Zugangsdaten. Öffentlich bleiben die Startseite, diese Hilfeseite, das Skill-Zip und vor allem die <a href="#share">Share-Links</a> unter <code>/s/:id</code> - geteilte Inhalte bleiben also teilbar.</p>
-      <p lang="en">With a mode active, <code>/api</code>, <code>/api/stream</code>, the upload endpoints, <code>/mcp</code>, history and archive all need credentials. The start page, this help page, the skill zip and above all the <a href="#share">share links</a> at <code>/s/:id</code> stay public - shared content stays shareable.</p>
+      <p lang="de">Ist ein Modus aktiv, brauchen <code>/api</code>, <code>/api/stream</code>, die Upload-Endpunkte, <code>/mcp</code> sowie History und Archiv Zugangsdaten. Öffentlich bleiben die Startseite, diese Hilfeseite, das Skill-Zip und vor allem die <a href="#share">Share-Links</a> unter <code>/s/:id</code> und abgelegte Abbildungen unter <code>/img/:file</code> - geteilte Inhalte bleiben also teilbar.</p>
+      <p lang="en">With a mode active, <code>/api</code>, <code>/api/stream</code>, the upload endpoints, <code>/mcp</code>, history and archive all need credentials. The start page, this help page, the skill zip and above all the <a href="#share">share links</a> at <code>/s/:id</code> and stored figures at <code>/img/:file</code> stay public - shared content stays shareable.</p>
       <h3 lang="de">Drei Wege hinein</h3>
       <h3 lang="en">Three ways in</h3>
       <ul class="doc-list" lang="de">

@@ -214,6 +214,8 @@ describe('MCP get_share description', () => {
       assert.doesNotMatch(text, /8-hex/);
       assert.match(tool.description, /32-hex/);
       assert.match(tool.inputSchema.properties.id.description, /32-hex/);
+      // Not every row is refreshed: snapshots are returned as stored.
+      assert.match(tool.description, /OCR conversions and stored uploads are returned as stored snapshots/);
     });
   });
 });

@@ -10,6 +10,11 @@ describe('stripMarkdown', () => {
     );
   });
 
+  it('keeps the alt text of an inline data: image instead of its payload', () => {
+    const out = stripMarkdown('x ![alt](data:image/png;base64,AAAA) y');
+    assert.equal(out, 'x alt y');
+  });
+
   it('keeps the space after inline emphasis in list items (#60)', () => {
     assert.equal(
       stripMarkdown('- *New!* This update\n- a new **Preview anyway** button'),

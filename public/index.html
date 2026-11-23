@@ -1315,6 +1315,11 @@
             <span class="toggle-track"></span>
             <span data-i18n="toggle.ocr">PDF-OCR</span>
           </label>
+          <label class="toggle-label" id="store-images-label" style="display:none;" data-i18n-attr="title" data-i18n-attr-key="toggle.storeImages.title">
+            <input type="checkbox" id="store-images-toggle">
+            <span class="toggle-track"></span>
+            <span data-i18n="toggle.storeImages">Speichern + Bilder</span>
+          </label>
           <button id="go-btn">
             <span data-i18n="btn.pull">Pull</span>
             <span class="arrow" aria-hidden="true">→</span>
@@ -1500,6 +1505,11 @@
           'toggle.comments':   'Kommentare',
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF-OCR',
+          'toggle.storeImages': 'Speichern + Bilder',
+          'toggle.storeImages.title': 'Ergebnis bekommt einen Share-Link und erscheint im Verlauf. Abbildungen aus OCR-PDFs werden mitgespeichert.',
+          'toggle.store':       'Speichern',
+          'toggle.store.title': 'Ergebnis bekommt einen Share-Link und erscheint im Verlauf.',
+          'history.stored':     'Datei',
           'toggle.depth':      'Tiefe',
           'toggle.allComments': 'Alle',
           'toggle.allComments.title': 'Alle Kommentare ohne Tiefengrenze. Lädt bei Reddit eingeklappte Kommentare mit zusätzlichen Abrufen nach, das kann bei großen Threads einige Sekunden dauern.',
@@ -1570,6 +1580,11 @@
           'toggle.comments':   'Comments',
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF OCR',
+          'toggle.storeImages': 'Store + images',
+          'toggle.storeImages.title': 'The result gets a share link and shows up in the history. Figures from OCR PDFs are stored with it.',
+          'toggle.store':       'Store',
+          'toggle.store.title': 'The result gets a share link and shows up in the history.',
+          'history.stored':     'File',
           'toggle.depth':      'Depth',
           'toggle.allComments': 'All',
           'toggle.allComments.title': 'All comments, no depth limit. Loads comments Reddit collapses with extra requests, which can take a few seconds on large threads.',
@@ -1760,6 +1775,7 @@
       const commentsToggle = document.getElementById('comments-toggle');
       const frontmatterToggle = document.getElementById('frontmatter-toggle');
       const ocrToggle = document.getElementById('ocr-toggle');
+      const storeToggle = document.getElementById('store-images-toggle');
       const depthInput = document.getElementById('depth-input');
       const depthLabel = document.getElementById('depth-label');
       const allCommentsToggle = document.getElementById('all-comments-toggle');
@@ -1817,12 +1833,21 @@
       // their images stay unloaded until the user asks. Held back is every
       // image that is not data: or blob:, this origin included (its /api
       // fetches whatever URL it is given). URL results never set the flag.
+      // One exception: a hosted OCR figure, /img/<32 lowercase hex>.<ext> on
+      // this origin with no query and no fragment. The markdown of an upload
+      // is attacker-controlled text, so the pattern is deliberately narrow:
+      // /img/ on another origin, with a query, or any other path of this
+      // origin stays held back.
       var blockRemoteImages = false;
+      var HOSTED_FIGURE_PATH = /^\/img\/[0-9a-f]{32}\.(?:jpe?g|png|webp|gif)$/;
       function isRemoteImageSrc(src) {
         if (!src) return false;
         try {
-          var protocol = new URL(src, location.href).protocol;
-          return protocol !== 'data:' && protocol !== 'blob:';
+          var u = new URL(src, location.href);
+          if (u.protocol === 'data:' || u.protocol === 'blob:') return false;
+          if (u.origin === location.origin && u.search === '' && u.hash === ''
+              && HOSTED_FIGURE_PATH.test(u.pathname)) return false;
+          return true;
         }
         catch (e) { return true; }
       }
@@ -2167,6 +2192,8 @@
           if (v !== null) frontmatterToggle.checked = v === 'true';
           v = localStorage.getItem('pullmd-pdf-ocr');
           if (v !== null) ocrToggle.checked = v === 'true';
+          v = localStorage.getItem('pullmd-store-images');
+          if (v !== null) storeToggle.checked = v === 'true';
           v = localStorage.getItem('pullmd-comment-depth');
           if (v !== null) {
             var n = parseInt(v, 10);
@@ -2190,6 +2217,9 @@
       ocrToggle.addEventListener('change', function () {
         try { localStorage.setItem('pullmd-pdf-ocr', String(ocrToggle.checked)); } catch (e) {}
       });
+      storeToggle.addEventListener('change', function () {
+        try { localStorage.setItem('pullmd-store-images', String(storeToggle.checked)); } catch (e) {}
+      });
       depthInput.addEventListener('change', function () {
         const n = parseInt(depthInput.value, 10);
         if (!(n >= 1)) depthInput.value = '3';
@@ -2211,6 +2241,10 @@
       commentsToggle.addEventListener('change', updateDepthVisibility);
       updateDepthVisibility();
 
+      // The toggle only counts while the server offers storing: a state left
+      // in localStorage must not reach a server that would ignore it.
+      function storeIsOn() { return uploadStoreEnabled && storeToggle.checked; }
+
       async function fetchPost(url, withComments) {
         const params = new URLSearchParams({ url });
         if (!withComments) params.set('comments', 'false');
@@ -2221,6 +2255,8 @@
         // display (applyFrontmatterView), so flipping it needs no re-pull.
         params.set('frontmatter', 'true');
         if (ocrToggle.checked) params.set('pdf', 'ocr');
+        // Hosted figures need the toggle and a server that hosts them.
+        if (ocrToggle.checked && storeIsOn() && imageHostingEnabled) params.set('pdf_images', 'hosted');
         params.set('lang', getLang());
         if (clientMode) params.set('client_mode', clientMode);
 
@@ -2360,6 +2396,8 @@
       var MEDIA_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|tiff?|mp3|wav|m4a|ogg|flac|aac)$/i;
       var markitdownEnabled = false;
       var markitdownMediaEnabled = false;
+      var uploadStoreEnabled = false;
+      var imageHostingEnabled = false;
       fetch('/api/config').then(function (r) { return r.json(); })
         .then(function (c) {
           markitdownEnabled = !!c.markitdown;
@@ -2367,6 +2405,20 @@
           if (c.pdfOcr) {
             var ocrLabel = document.getElementById('ocr-label');
             if (ocrLabel) ocrLabel.style.display = '';
+          }
+          uploadStoreEnabled = !!c.uploadStore;
+          imageHostingEnabled = !!c.imageHosting;
+          if (uploadStoreEnabled) {
+            var storeLabel = document.getElementById('store-images-label');
+            if (storeLabel) {
+              // Without hosting there are no figures to store: plain "Store".
+              if (!imageHostingEnabled) {
+                storeLabel.setAttribute('data-i18n-attr-key', 'toggle.store.title');
+                storeLabel.querySelector('[data-i18n]').setAttribute('data-i18n', 'toggle.store');
+              }
+              storeLabel.style.display = '';
+              window.PullMD.setLang(window.PullMD.getLang());
+            }
           }
           if (markitdownEnabled) {
             var hint = document.querySelector('#drop-overlay .drop-box');
@@ -2602,7 +2654,7 @@
           pushOpenState();
           if (d.status === 'done') {
             if (!d.markdown || !d.markdown.trim()) showError(t('err.empty'));
-            else showResult(d.markdown, d.source || '', '', d.suggestedFilename || '', { blockRemoteImages: true });
+            else showResult(d.markdown, d.source || '', d.shareId || '', d.suggestedFilename || '', { blockRemoteImages: true });
           } else {
             showError(d.error || t('err.unknown', { code: d.httpStatus }));
           }
@@ -2638,7 +2690,12 @@
         var params = new URLSearchParams({ format: 'json' });
         // Always fetch WITH frontmatter; the toggle swaps the view client-side.
         params.set('frontmatter', 'true');
-        if (ocrToggle.checked && /\.pdf$/i.test(file.name || '')) params.set('pdf', 'ocr');
+        var isPdf = /\.pdf$/i.test(file.name || '');
+        if (ocrToggle.checked && isPdf) params.set('pdf', 'ocr');
+        if (storeIsOn()) {
+          params.set('store', 'true');
+          if (ocrToggle.checked && isPdf && imageHostingEnabled) params.set('pdf_images', 'hosted');
+        }
         params.set('lang', window.PullMD.getLang());
         // 202 + job id, or a plain 200 with the full result when the server
         // runs the conversion synchronously after all.
@@ -2673,7 +2730,7 @@
           if (xhr.status >= 200 && xhr.status < 300) {
             if (!d) { showError(t('err.network')); return; }
             if (!d.markdown || !d.markdown.trim()) { showError(t('err.empty')); return; }
-            showResult(d.markdown, d.source || '', '', xhr.getResponseHeader('X-Suggested-Filename') || '', { blockRemoteImages: true });
+            showResult(d.markdown, d.source || '', d.shareId || '', xhr.getResponseHeader('X-Suggested-Filename') || '', { blockRemoteImages: true });
             return;
           }
           showError((d && d.error) || t('err.unknown', { code: xhr.status }));
@@ -2820,6 +2877,34 @@
         }
       }
 
+      // A stored upload has no URL to convert again: its history row opens the
+      // stored markdown through its share link. Like every upload result it
+      // holds remote images back.
+      async function openStoredShare(item) {
+        if (!item.share_id) return;
+        if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
+        abandonFileJob();
+        pushOpenState();
+        showLoading();
+        try {
+          const res = await fetch('/s/' + encodeURIComponent(item.share_id), { headers: { 'X-Client-Mode': clientMode } });
+          if (!res.ok) {
+            let msg = t('err.unknown', { code: res.status });
+            try {
+              const body = await res.json();
+              if (body.error) msg = body.error;
+            } catch (_) {}
+            showError(msg);
+            return;
+          }
+          const text = await res.text();
+          if (!text.trim()) { showError(t('err.empty')); return; }
+          showResult(text, item.source || '', item.share_id, '', { blockRemoteImages: true });
+        } catch (err) {
+          showError(t('err.network'));
+        }
+      }
+
       // ---- History ----
       const historySection = document.getElementById('history-section');
       const historyList = document.getElementById('history-list');
@@ -2856,7 +2941,10 @@
 
             var fav = document.createElement('div');
             fav.className = 'h-favicon';
-            try {
+            if (!item.url) {
+              // Stored upload: no site, so no favicon; the initial stands in.
+              fav.textContent = ((item.title || '?')[0] || '?').toUpperCase();
+            } else try {
               var domain = new URL(item.url).hostname.replace(/^www\./, '');
               var favImg = document.createElement('img');
               favImg.src = faviconUrl(item.url);
@@ -2883,7 +2971,7 @@
             var domain2 = '';
             try { domain2 = new URL(item.url).hostname.replace(/^www\./, ''); } catch(e) {}
             var domainSpan = document.createElement('span');
-            domainSpan.textContent = domain2;
+            domainSpan.textContent = item.url ? domain2 : t('history.stored');
             metaDiv.appendChild(domainSpan);
 
             if (item.source) {
@@ -2955,6 +3043,7 @@
             el.addEventListener('click', function(itm) {
               return function(e) {
                 e.preventDefault();
+                if (!itm.url) { openStoredShare(itm); return; }
                 urlInput.value = itm.url;
                 fetchPost(itm.url, commentsToggle.checked);
               };
@@ -3090,6 +3179,7 @@
         content.className = 'archive-item-content';
         content.addEventListener('click', function() {
           hideArchive();
+          if (!item.url) { openStoredShare(item); return; }
           urlInput.value = item.url;
           fetchPost(item.url, commentsToggle.checked);
         });
@@ -3100,7 +3190,7 @@
         meta.className = 'archive-item-meta';
         var domain = '';
         try { domain = new URL(item.url).hostname.replace(/^www\./, ''); } catch(e) {}
-        meta.textContent = domain + ' · ' + (item.source || '') + ' · ' + formatDate(item.created_at);
+        meta.textContent = (item.url ? domain : t('history.stored')) + ' · ' + (item.source || '') + ' · ' + formatDate(item.created_at);
         content.appendChild(title);
         content.appendChild(meta);
         var delBtn = document.createElement('button');

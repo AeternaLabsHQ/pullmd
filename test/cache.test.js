@@ -98,13 +98,13 @@ describe('cache', () => {
   });
 
   it('returns a share_id on put', () => {
-    const shareId = cache.put({ url: 'https://share.com', title: 'Share', markdown: '# Share', source: 'readability' });
+    const shareId = cache.put({ url: 'https://share.com', title: 'Share', markdown: '# Share', source: 'readability' }).shareId;
     assert.ok(shareId);
     assert.match(shareId, /^[0-9a-f]{32}$/);
   });
 
   it('preserves share_id on re-put', () => {
-    const id1 = cache.put({ url: 'https://keep.com', title: 'V1', markdown: '# V1', source: 'cloudflare' });
+    const id1 = cache.put({ url: 'https://keep.com', title: 'V1', markdown: '# V1', source: 'cloudflare' }).shareId;
     cache.put({ url: 'https://keep.com', title: 'V2', markdown: '# V2', source: 'readability' });
     const hit = cache.get('https://keep.com');
     assert.equal(hit.share_id, id1);
@@ -117,20 +117,20 @@ describe('cache', () => {
   });
 
   it('retrieves entry by share_id', () => {
-    const shareId = cache.put({ url: 'https://by-share.com', title: 'Shared', markdown: '# Shared', source: 'readability' });
+    const shareId = cache.put({ url: 'https://by-share.com', title: 'Shared', markdown: '# Shared', source: 'readability' }).shareId;
     const entry = cache.getByShareId(shareId);
     assert.equal(entry.title, 'Shared');
     assert.equal(entry.markdown, '# Shared');
   });
 
   it('returns null for expired share_id (> 90 days)', () => {
-    const shareId = cache.put({ url: 'https://expired-share.com', title: 'Old', markdown: '# Old', source: 'readability' });
+    const shareId = cache.put({ url: 'https://expired-share.com', title: 'Old', markdown: '# Old', source: 'readability' }).shareId;
     cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-91 days') WHERE url = ?").run('https://expired-share.com');
     assert.equal(cache.getByShareId(shareId), null);
   });
 
   it('round-trips structured metadata through put/get and getByShareId', () => {
-    const shareId = cache.put({ url: 'https://m.com', title: 'M', markdown: '# M', source: 'youtube', metadata: { ytDuration: '12:34', ytViews: '1000' } });
+    const shareId = cache.put({ url: 'https://m.com', title: 'M', markdown: '# M', source: 'youtube', metadata: { ytDuration: '12:34', ytViews: '1000' } }).shareId;
     assert.deepEqual(cache.get('https://m.com').metadata, { ytDuration: '12:34', ytViews: '1000' });
     assert.deepEqual(cache.getByShareId(shareId).metadata, { ytDuration: '12:34', ytViews: '1000' });
   });
@@ -358,8 +358,8 @@ describe('cache retention option', () => {
 
   it('applies the custom retention to share-link lookups', () => {
     const c = createCache(':memory:', { retentionDays: 30 });
-    const agedId = c.put(entry('https://aged.com'));
-    const freshId = c.put(entry('https://fresh.com'));
+    const agedId = c.put(entry('https://aged.com')).shareId;
+    const freshId = c.put(entry('https://fresh.com')).shareId;
     backdate(c, 'https://aged.com', 31);
     backdate(c, 'https://fresh.com', 29);
     assert.equal(c.getByShareId(agedId), null, '31 days is past a 30-day retention');
@@ -385,7 +385,7 @@ describe('cache retention option', () => {
 
   it('never ages anything out when retention is 0 (unlimited)', () => {
     const c = createCache(':memory:', { retentionDays: 0 });
-    const shareId = c.put(entry('https://ancient.com'));
+    const shareId = c.put(entry('https://ancient.com')).shareId;
     backdate(c, 'https://ancient.com', 400);
     c.put(entry('https://fresh.com'));
     assert.ok(c.getByShareId(shareId), 'share lookups must have no age condition');
@@ -416,7 +416,7 @@ describe('cache retention option', () => {
   it('still builds a usable date modifier at the maximum retention', () => {
     const c = createCache(':memory:', { retentionDays: MAX_CACHE_RETENTION_DAYS });
     assert.equal(c.storageStats().retentionDays, 36500);
-    const shareId = c.put(entry('https://maxed.com'));
+    const shareId = c.put(entry('https://maxed.com')).shareId;
     assert.ok(c.getByShareId(shareId), 'the SQLite date modifier must stay inside its valid range');
   });
 });

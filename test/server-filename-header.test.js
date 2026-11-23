@@ -151,7 +151,7 @@ describe('X-Suggested-Filename: GET /s/:id', () => {
 
   it('falls back to the share id when the row has no usable title', async () => {
     const cache = createCache(':memory:');
-    const shareId = cache.put({ url: 'https://example.com/', title: '', markdown: 'Body without an H1.', source: 'readability', client: 'api' });
+    const shareId = cache.put({ url: 'https://example.com/', title: '', markdown: 'Body without an H1.', source: 'readability', client: 'api' }).shareId;
     const app = createApp({ cache });
     const res = await request(app, '/s/' + shareId);
     assert.equal(res.headers['x-suggested-filename'], shareId + '.md');

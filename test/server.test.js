@@ -601,7 +601,7 @@ describe('GET /s/:id', () => {
       cache,
       extractWeb: async () => { extractCalls++; return { markdown: '# Refreshed', title: 'X', source: 'readability' }; },
     });
-    const id = cache.put({ url: 'https://example.com/a', title: 'A', markdown: '# Original', source: 'readability', client: 'browser' });
+    const id = cache.put({ url: 'https://example.com/a', title: 'A', markdown: '# Original', source: 'readability', client: 'browser' }).shareId;
     const res = await request(app, '/s/' + id);
     assert.equal(res.status, 200);
     assert.ok(res.body.includes('# Original'));
@@ -615,7 +615,7 @@ describe('GET /s/:id', () => {
       cache,
       extractWeb: async () => { extractCalls++; return { markdown: '# Refreshed', title: 'X', source: 'readability' }; },
     });
-    const id = cache.put({ url: 'https://example.com/b', title: 'B', markdown: '# Original', source: 'readability', client: 'browser' });
+    const id = cache.put({ url: 'https://example.com/b', title: 'B', markdown: '# Original', source: 'readability', client: 'browser' }).shareId;
     // backdate the cache row to >1h ago
     cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE share_id = ?").run(id);
     const res = await request(app, '/s/' + id);
@@ -630,7 +630,7 @@ describe('GET /s/:id', () => {
       cache,
       extractWeb: async () => { throw new Error('source dead'); },
     });
-    const id = cache.put({ url: 'https://example.com/c', title: 'C', markdown: '# Snapshot', source: 'readability', client: 'browser' });
+    const id = cache.put({ url: 'https://example.com/c', title: 'C', markdown: '# Snapshot', source: 'readability', client: 'browser' }).shareId;
     cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE share_id = ?").run(id);
     const res = await request(app, '/s/' + id);
     assert.equal(res.status, 200);
@@ -923,7 +923,7 @@ describe('POST /mcp', () => {
 
   it('get_share embeds url, source, share_id, share_url, refreshed, age_ms in frontmatter', async () => {
     const cache = createCache(':memory:');
-    const shareId = cache.put({ url: 'https://example.com/z', title: 'Z', markdown: '# Z\n\nBody', source: 'readability', client: 'api' });
+    const shareId = cache.put({ url: 'https://example.com/z', title: 'Z', markdown: '# Z\n\nBody', source: 'readability', client: 'api' }).shareId;
     const app = createApp({ cache });
     const res = await request(app, '/mcp', {
       method: 'POST',
@@ -1258,7 +1258,7 @@ describe('DISABLE_PUBLIC_HISTORY', () => {
 
   it('keeps /s/:id working when flag is on (direct share access)', async () => {
     const cache = createCache(':memory:');
-    const id = cache.put({ url: 'https://example.com/x', title: 'X', markdown: '# Hidden but reachable', source: 'readability', client: 'browser' });
+    const id = cache.put({ url: 'https://example.com/x', title: 'X', markdown: '# Hidden but reachable', source: 'readability', client: 'browser' }).shareId;
     const app = createApp({ cache, disablePublicHistory: true });
     const res = await request(app, '/s/' + id);
     assert.equal(res.status, 200);

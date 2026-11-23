@@ -222,7 +222,7 @@ describe('MCP read_url - images: cache validity', () => {
 
 describe('MCP get_share - refresh with embedded images', () => {
   function stale(cache, md = '# Old\n\nOld body.', metadata) {
-    const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: md, source: 'reddit', metadata });
+    const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: md, source: 'reddit', metadata }).shareId;
     cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE url = ?").run(REDDIT);
     return shareId;
   }

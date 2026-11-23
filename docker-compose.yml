@@ -40,6 +40,12 @@ services:
       - PULLMD_PDF_OCR_API_KEY=${PULLMD_PDF_OCR_API_KEY:-}
       - PULLMD_PDF_OCR_BASE_URL=${PULLMD_PDF_OCR_BASE_URL:-}
       - PULLMD_PDF_OCR_MODEL=${PULLMD_PDF_OCR_MODEL:-}
+      # Hosted PDF figures (pdf_images=hosted, /img/<id>.<ext>, MCP get_image),
+      # stored under /data/images. Default off.
+      - PULLMD_IMAGE_HOSTING=${PULLMD_IMAGE_HOSTING:-}
+      # Allow POST /api/file?store=true (keep an upload's result with a share
+      # link and a history entry). Default on; false = never keep uploads.
+      - PULLMD_UPLOAD_STORE=${PULLMD_UPLOAD_STORE:-}
       # Output shaping (v3): set PULLMD_SOURCE_HEADER=true to restore the legacy
       # "Source:" body header; PULLMD_FRONTMATTER_FIELDS limits frontmatter keys.
       - PULLMD_SOURCE_HEADER=${PULLMD_SOURCE_HEADER:-}

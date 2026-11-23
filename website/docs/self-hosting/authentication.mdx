@@ -82,12 +82,12 @@ claude.ai and Claude Desktop sign in with [OAuth](/agents/claude-ai-connector), 
 | --- | --- |
 | `/api`, `/api/stream`, `POST /api/html`, `POST /api/file` | `/`, `/help`, static files, `/pullmd.zip` |
 | `/mcp` | `/login`, `/signup` |
-| `/api/history`, `/api/archive` | Share links, `/s/:id` |
+| `/api/history`, `/api/archive` | Share links, `/s/:id`, hosted figures, `/img/:file` |
 | `DELETE /api/cache/:id`, `DELETE /api/cache` | `/api/status`, `/api/recipes/status` |
 | `/api/me`, `/settings`, `POST /settings/apps/:clientId/revoke`, `/share` | `/api/stats`, `/api/storage` (short answer, see below), `/api/config` |
 | `POST /api/keys`, `POST /api/keys/:id/revoke` | OAuth endpoints, `/web-reader.zip`, `/sw.js` |
 
-Share links are always open, so anyone with a link can read the shared content. `/api/stats` and `/api/storage` answer everyone with `200`. The counts, sizes and per-domain lists go to the admin, or to everyone when sign-in is off and public history is on; any other caller, a signed-in user who isn't the admin included, gets just `window` or `retentionDays`. `/api/me` answers `401` when you're not signed in, and doesn't exist (`404`) while sign-in is off.
+Share links and [hosted figures](/guides/documents#hosted-figures) are always open, so anyone with a link can read the shared content. `/api/stats` and `/api/storage` answer everyone with `200`. The counts, sizes and per-domain lists go to the admin, or to everyone when sign-in is off and public history is on; any other caller, a signed-in user who isn't the admin included, gets just `window` or `retentionDays`. `/api/me` answers `401` when you're not signed in, and doesn't exist (`404`) while sign-in is off.
 
 A request to `/api*` or `/mcp` without valid credentials gets `401` with `{"error": "Authentication required"}`. When `PUBLIC_URL` is set, the response carries a `WWW-Authenticate` header whose `resource_metadata` points to `/.well-known/oauth-protected-resource`, which exists only when OAuth is enabled. A browser request to a page such as `/settings` gets a `302` redirect to `/login`.
 
@@ -103,7 +103,7 @@ PULLMD_ADMIN_PASSWORD=<admin-password>
 
 - Each user's history, archive and MCP `list_recent` show only their own conversions.
 - The cache itself is shared: if two users convert the same URL, they get the same cached copy and share id. Only the user whose request created the copy sees it in their history, archive and `list_recent`.
-- A user's delete removes the entry from their history only. The admin's delete removes the shared copy for everyone.
+- A user's delete removes the entry from their history only. The admin's delete removes the shared copy for everyone. A user's own [stored upload](/guides/documents#keep-an-upload) is the exception: their delete removes it for everyone.
 
 ### Close signup
 

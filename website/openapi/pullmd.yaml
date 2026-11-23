@@ -17,7 +17,7 @@ tags:
   - name: Convert
     description: Turn a URL, an HTML document or an uploaded file into Markdown.
   - name: Share links
-    description: Read a cached conversion by its share id.
+    description: Read a cached conversion by its share id, and the PDF figures it hosts.
   - name: History and cache
     description: List and delete cached conversions.
   - name: Instance
@@ -88,6 +88,11 @@ components:
       in: query
       description: '`ocr` sends PDFs to the OCR provider configured with `PULLMD_PDF_OCR_API_KEY`, which keeps tables intact. Without a provider, PullMD uses the standard conversion. Setting it bypasses the cache.'
       schema: { type: string, enum: [ocr] }
+    pdf_images:
+      name: pdf_images
+      in: query
+      description: 'What PullMD puts in place of each figure when OCR runs. `strip` writes a text line with the figure''s id and size, `caption` a short description from the OCR provider, `hosted` an image link to the stored figure at `/img/<id>.<ext>`. `hosted` needs `PULLMD_IMAGE_HOSTING=true` and `PUBLIC_URL` (on `POST /api/file` also `store=true`) and works as `caption` without them. A figure that can''t be hosted gets the `caption` form, and one without a description the `strip` line. An unknown value works as `strip`. On its own it doesn''t bypass the cache. See [Figures in OCR results](/guides/documents#figures-in-ocr-results).'
+      schema: { type: string, enum: [strip, caption, hosted], default: strip }
     yt_timecodes:
       name: yt_timecodes
       in: query
@@ -235,13 +240,13 @@ components:
         status: { type: string, enum: [pending] }
     FileJob:
       type: object
-      description: 'State of an async file job. `done` carries the fields of the `format=json` conversion, with `shareId` always `null`.'
+      description: 'State of an async file job. `done` carries the fields of the `format=json` conversion.'
       properties:
         status: { type: string, enum: [pending, done, error] }
         markdown: { type: string, description: 'With `done`: the converted Markdown, including the frontmatter block when `frontmatter=true` was sent.' }
         metadata: { type: object, nullable: true, description: 'With `done`: the same object as `metadata` in [`Conversion`](/reference/api/convert/convert-a-file).' }
         source: { type: string, description: 'With `done`: which extractor produced the result. Same values as the `X-Source` header.' }
-        shareId: { type: string, nullable: true, description: 'With `done`: always `null`, because uploads are not cached.' }
+        shareId: { type: string, nullable: true, description: 'With `done`: the share id when the upload was sent with `store=true` and the result was kept, otherwise `null`.' }
         suggestedFilename: { type: string, description: 'With `done`: a download file name for the result.' }
         error: { type: string, description: 'With `error`: what went wrong, at most 500 characters.' }
         httpStatus: { type: integer, description: 'With `error`: the status the same conversion would have returned without `async`: `422`, `502` or `503` (every conversion worker was busy). `504` when the job was still pending after 15 minutes, `507` when the result was too large to hold.' }
@@ -305,7 +310,7 @@ components:
       type: object
       properties:
         id: { type: integer, description: 'Cache row id. Use it with `DELETE /api/cache/{id}`.' }
-        url: { type: string, description: The converted URL. }
+        url: { type: string, nullable: true, description: 'The converted URL. `null` for an upload kept with `store=true`.' }
         title: { type: string, nullable: true, description: Page title. }
         source: { type: string, description: 'Which extractor produced the result. Same values as the `X-Source` header.' }
         share_id: { type: string, nullable: true, description: 'Share id. Open the result at `/s/{share_id}`.' }
@@ -344,6 +349,7 @@ paths:
         - $ref: '#/components/parameters/render'
         - $ref: '#/components/parameters/extractor'
         - $ref: '#/components/parameters/pdf'
+        - $ref: '#/components/parameters/pdf_images'
         - $ref: '#/components/parameters/yt_timecodes'
         - $ref: '#/components/parameters/yt_chunk'
         - $ref: '#/components/parameters/client_mode'
@@ -550,7 +556,9 @@ paths:
       description: |
         Converts an uploaded file. Send the raw bytes as the request body with `Content-Type` set to the file's type. PullMD reads the raw body and doesn't decode multipart forms.
 
-        PDF, Word, PowerPoint, Excel, EPUB and ZIP files need the MarkItDown sidecar. PullMD reads e-mail, saved pages, text, subtitles, OpenDocument, RTF, calendars, contacts, data files, feeds, notebooks and source code itself; see [Documents](/guides/documents#upload-formats-pullmd-reads-itself). Images and audio go to a vision or speech-to-text provider when one is configured, and to the MarkItDown sidecar otherwise. Without `MARKITDOWN_URL`, that request fails with `502`. The uploaded file is never stored, and nothing is cached: no history entry and no share link.
+        PDF, Word, PowerPoint, Excel, EPUB and ZIP files need the MarkItDown sidecar. PullMD reads e-mail, saved pages, text, subtitles, OpenDocument, RTF, calendars, contacts, data files, feeds, notebooks and source code itself; see [Documents](/guides/documents#upload-formats-pullmd-reads-itself). Images and audio go to a vision or speech-to-text provider when one is configured, and to the MarkItDown sidecar otherwise. Without `MARKITDOWN_URL`, that request fails with `502`. The uploaded file is never stored. Without `store=true`, nothing is cached: no history entry and no share link.
+
+        With `store=true`, PullMD keeps the converted result like a URL conversion: it gets a share id and a history entry with the file name as title, and with `pdf_images=hosted` the figures are stored too. On an instance without sign-in and with public history, everyone who can reach the instance sees that entry. See [Keep an upload](/guides/documents#keep-an-upload).
 
         Add `async=1` to leave the conversion running on the server and fetch the result later. The server answers `202` with a job id, and you collect the result from [`GET /api/file/jobs/{id}`](/reference/api/convert/get-an-async-file-result). The result is held in memory for up to 60 minutes by default (`PULLMD_FILE_JOB_TTL_MINUTES`) or until you delete it, and a restart loses it. The server cannot always queue a job: when async jobs are off (`PULLMD_FILE_JOB_TTL_MINUTES=0`), 100 jobs are already held, your user or address already holds 3, or half of the result memory (`PULLMD_FILE_JOB_MAX_MB`, 32 MB of 64 MB by default) is in use, it converts the file in the same request and answers `200` as it does without `async`. Handle both `202` and `200`.
       security: [{}, { bearerAuth: [] }]
@@ -560,10 +568,15 @@ paths:
         - $ref: '#/components/parameters/format'
         - $ref: '#/components/parameters/frontmatter'
         - $ref: '#/components/parameters/pdf'
+        - $ref: '#/components/parameters/pdf_images'
         - name: lang
           in: query
           description: Language of the labels PullMD writes into e-mail, calendar, contact, notebook, data file and OpenDocument output. `en` gives English, and any other value gives German.
           schema: { type: string, enum: [de, en], default: de }
+        - name: store
+          in: query
+          description: 'Only `true` and `1` keep the result: it gets a share id (`X-Share-Id`, `shareId`) and a history entry, and is kept for `PULLMD_CACHE_RETENTION_DAYS`. The uploaded file itself is never stored. Ignored when the instance sets `PULLMD_UPLOAD_STORE=false`. If storing fails, the result comes without a share id.'
+          schema: { type: string, enum: ['true', '1'] }
         - name: async
           in: query
           description: 'Only `1` and `true` request a job: the file converts in the background and the server answers `202` with a job id, when it can queue the job. Any other value converts in the request. The result is JSON whatever `format` says; `format` is ignored for async jobs.'
@@ -582,6 +595,9 @@ paths:
           headers:
             X-Source: { $ref: '#/components/headers/X-Source' }
             X-Quality: { $ref: '#/components/headers/X-Quality' }
+            X-Share-Id:
+              description: 'Only with `store=true` when the result was kept: 32-character hex id of the stored result. Open it at `/s/<id>`.'
+              schema: { type: string }
             X-Suggested-Filename: { $ref: '#/components/headers/X-Suggested-Filename' }
           content:
             text/markdown:
@@ -769,6 +785,7 @@ paths:
         - $ref: '#/components/parameters/render'
         - $ref: '#/components/parameters/extractor'
         - $ref: '#/components/parameters/pdf'
+        - $ref: '#/components/parameters/pdf_images'
         - $ref: '#/components/parameters/yt_timecodes'
         - $ref: '#/components/parameters/yt_chunk'
         - $ref: '#/components/parameters/client_mode'
@@ -855,6 +872,8 @@ paths:
       description: |
         Returns a cached conversion by its share id. If the copy is more than an hour old, PullMD fetches the source again first. If the source is gone, you get the last good copy, so share links keep working after the original page disappears.
 
+        A PDF OCR conversion (`X-Source: pdf-ocr`) and an upload kept with `store=true` are snapshots: they are served as stored and never fetched again. See [Snapshots](/guides/share-links#snapshots).
+
         Share links never need sign-in. They expire with their cache row (`PULLMD_CACHE_RETENTION_DAYS`, 90 days by default), and stop working at once when the conversion is deleted from the cache for everyone. See `DELETE /api/cache/{id}` for who can do that.
       security: []
       parameters:
@@ -892,6 +911,55 @@ paths:
               example: { error: Share link not found or expired }
         '429':
           description: Too many unknown ids from your address (more than 120 a minute). Only ids that don't exist count toward the limit, so requests for existing share links are never counted.
+          headers:
+            Retry-After:
+              description: Seconds until the address can try again.
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: rate_limited }
+  /img/{file}:
+    get:
+      tags: [Share links]
+      operationId: getHostedFigure
+      summary: Get a hosted figure
+      description: |
+        Returns a PDF figure that a conversion with `pdf=ocr&pdf_images=hosted` stored. The conversion's Markdown links the figure at this address. Exists only when the instance sets `PULLMD_IMAGE_HOSTING=true`; otherwise the path answers `404` without a JSON body.
+
+        Like share links, figures never need sign-in: the id is 128 random bits. A figure lives as long as its conversion. It is deleted when the conversion is deleted or passes `PULLMD_CACHE_RETENTION_DAYS`, and when the same URL is converted again and the new result is cached. See [Hosted figures](/guides/documents#hosted-figures).
+      security: []
+      parameters:
+        - name: file
+          in: path
+          required: true
+          description: 'The image id, 32 lowercase hex characters, optionally followed by `.jpeg`, `.jpg`, `.png`, `.webp` or `.gif`.'
+          schema: { type: string, pattern: '^[0-9a-f]{32}(\.(jpe?g|png|webp|gif))?$' }
+          example: 9b2f0c1d4e5a6b7c8d9e0f1a2b3c4d5e.jpeg
+      responses:
+        '200':
+          description: The figure, with the type it was stored with.
+          headers:
+            Cache-Control:
+              description: Always `private, max-age=3600`.
+              schema: { type: string }
+          content:
+            image/jpeg:
+              schema: { type: string, format: binary }
+            image/png:
+              schema: { type: string, format: binary }
+            image/webp:
+              schema: { type: string, format: binary }
+            image/gif:
+              schema: { type: string, format: binary }
+        '404':
+          description: 'No figure has this id, its conversion was deleted or has expired, or its file is missing (`Image not found or expired`).'
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: Image not found or expired }
+        '429':
+          description: Too many unknown ids from your address (more than 120 a minute), counted together with unknown share-link ids.
           headers:
             Retry-After:
               description: Seconds until the address can try again.
@@ -994,6 +1062,7 @@ paths:
 
         - **Admin, or anyone when sign-in is off**: the shared cache row, for every user, along with its share link (`scope: global`).
         - **Regular user**: only the entry in your own history. The shared row and its share link keep working (`scope: user`).
+        - **Regular user, own stored upload** (an upload kept with `store=true`): the row, its share link and its hosted figures, for everyone. The answer still says `scope: user`.
 
         With `DISABLE_PUBLIC_HISTORY` on, a caller who isn't signed in gets `403`. With sign-in off, that means nobody can delete.
       security: [{}, { bearerAuth: [] }]
@@ -1054,7 +1123,7 @@ paths:
       tags: [History and cache]
       operationId: clearCache
       summary: Delete all conversions
-      description: Clears the whole cache (admin, or anyone when sign-in is off) or, for a regular user, their own history only. With `DISABLE_PUBLIC_HISTORY` on, a caller who isn't signed in gets `403`. With sign-in off, that means nobody can clear the cache.
+      description: Clears the whole cache (admin, or anyone when sign-in is off) or, for a regular user, their own history only. A regular user's own stored uploads (kept with `store=true`) are deleted for everyone, with their share links and hosted figures. With `DISABLE_PUBLIC_HISTORY` on, a caller who isn't signed in gets `403`. With sign-in off, that means nobody can clear the cache.
       security: [{}, { bearerAuth: [] }]
       responses:
         '200':
@@ -1149,8 +1218,10 @@ paths:
                   vision: { type: boolean, description: Image captioning is configured. }
                   stt: { type: boolean, description: Audio transcription is configured. }
                   pdfOcr: { type: boolean, description: The PDF OCR provider is configured. }
+                  imageHosting: { type: boolean, description: '`PULLMD_IMAGE_HOSTING` is on and `PUBLIC_URL` is set: `pdf_images=hosted` stores figures. `/img/{file}` serves stored figures whenever `PULLMD_IMAGE_HOSTING` is on.' }
+                  uploadStore: { type: boolean, description: '`PULLMD_UPLOAD_STORE` is on: `POST /api/file` accepts `store=true`.' }
                   markitdownYoutube: { type: boolean, description: YouTube transcripts are on. }
-              example: { disablePublicHistory: false, authMode: disabled, authMisconfigured: false, signupOpen: false, markitdown: true, vision: false, stt: false, pdfOcr: false, markitdownYoutube: false }
+              example: { disablePublicHistory: false, authMode: disabled, authMisconfigured: false, signupOpen: false, markitdown: true, vision: false, stt: false, pdfOcr: false, imageHosting: false, uploadStore: true, markitdownYoutube: false }
   /api/recipes/status:
     get:
       tags: [Instance]
