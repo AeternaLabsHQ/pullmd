@@ -137,6 +137,19 @@ describe('ocrPdf - figures', () => {
     assert.equal(fmt.json_schema.schema.properties.description.type, 'string');
   });
 
+  it('asks for descriptions in the request language, German by default', async () => {
+    // A figure is annotated on its own, so "the language of the document" is
+    // unknowable to the model; it must be told.
+    const desc = (sent) => sent.bbox_annotation_format.json_schema.schema.properties.description.description;
+    for (const lang of [undefined, 'de', 'xx']) {
+      const { sent } = await run({ images: 'caption', lang }, fixture);
+      assert.match(desc(sent), /Write it in German\./);
+      assert.doesNotMatch(desc(sent), /language of the document/);
+    }
+    const { sent } = await run({ images: 'hosted', lang: 'en' }, fixture);
+    assert.match(desc(sent), /Write it in English\./);
+  });
+
   it('hosted requests image bytes and the figure schema', async () => {
     const { sent } = await run({ images: 'hosted' }, fixture);
     assert.equal(sent.include_image_base64, true);

@@ -189,7 +189,7 @@ curl "http://localhost:3000/api?url=https://example.com/report.pdf&pdf=ocr&pdf_i
 
 - **Labels:** `Abbildung` by default. With `lang=en`, the REST endpoints write `Figure`. MCP `read_url` always writes `Abbildung`.
 - **Size:** the width and height of the figure's area as the OCR provider reports it.
-- **Descriptions:** the OCR provider writes them in the same request. PullMD asks for at most three sentences in the language of the document, puts each description on one line and cuts it at 600 characters. A description comes from the document's content, so treat it as untrusted text.
+- **Descriptions:** the OCR provider writes them in the same request. PullMD asks for at most three sentences in German, or in English with `lang=en` on the REST endpoints (MCP `read_url` always asks for German), puts each description on one line and cuts it at 600 characters. A description comes from the document's content, so treat it as untrusted text.
 - **Fallback:** `hosted` without image hosting or `PUBLIC_URL`, or on an upload without `store=true`, works as `caption`. A figure that can't be hosted gets the `caption` form, and a figure without a description gets the `strip` line. On the REST endpoints an unknown value works as `strip`; MCP `read_url` rejects it. Figures never make a conversion fail.
 - **Which figures:** PullMD asks the provider to skip images smaller than 50 px and to return at most 40 figures per document. Figures after the 40th are left out without a marker.
 - **Budget:** one OCR request counts once against `PULLMD_LLM_RATE_LIMIT`, whatever `pdf_images` says.
