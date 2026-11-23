@@ -54,10 +54,11 @@ for (const [name, run] of Object.entries(runners)) {
       assert.equal(calls[0].images, 'caption');
     });
 
-    it('English lang selects the English label', async () => {
-      const { ocrFn } = recorder();
+    it('English lang selects the English label and asks OCR for English descriptions', async () => {
+      const { calls, ocrFn } = recorder();
       const r = await run({ ocrFn, pdfImages: 'caption', lang: 'en' });
       assert.ok(r.markdown.includes('> **Figure** (img-0.jpeg, 10×20): A chart'));
+      assert.equal(calls[0].lang, 'en');
     });
 
     it('hosted mode links the hosted URL and carries a caption fallback document', async () => {
