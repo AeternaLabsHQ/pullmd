@@ -1,6 +1,6 @@
 ---
 title: Documents
-description: Convert PDF, Office, EPUB, e-mail, OpenDocument, data and other files to Markdown, by URL or by upload, with optional OCR for table-heavy PDFs.
+description: Convert PDF, Office, EPUB, e-mail, OpenDocument, data and other files to Markdown, by URL or by upload, with optional OCR for table-heavy PDFs and their figures.
 ---
 
 # Documents
@@ -42,11 +42,11 @@ Run through these steps before every release so nothing ships half-finished.
 - **`Content-Type`:** the file's type. PullMD uses it, together with the file name, to pick the reader.
 - **`lang`:** `lang=en` sets English labels in e-mail, calendar, contact, OpenDocument, notebook and feed output. The default is German.
 - **`X-Quality`:** a score from `0.0` to `1.0` for the converted Markdown. A document has no HTML to compare against, so it starts at `0.4`, and more than 500 characters adds `0.3`. A one-line PDF returns `0.4` and is a correct conversion. See [how the score is built](/how-it-works#quality-score).
-- **Privacy:** PullMD never stores the uploaded file. The conversion creates no history entry or share link, and the stats record it as `local-file`, not the file name. With `async=1`, PullMD holds the converted result in memory for a limited time; see [below](#leave-the-app-during-a-long-conversion).
+- **Privacy:** PullMD never stores the uploaded file. Unless you send `store=true`, the conversion creates no history entry or share link; see [Keep an upload](#keep-an-upload). The stats record an upload as `local-file`, not the file name. With `async=1`, PullMD holds the converted result in memory for a limited time; see [below](#leave-the-app-during-a-long-conversion).
 
 In the web app, drag a file onto the page or use the file picker.
 
-The web app doesn't load images when it shows an uploaded file's result, such as an e-mail or a saved page. A bar above the result says so and offers **Load images**, which loads them for that result. The Raw view shows such an image as its Markdown text, and the Rendered view as its alt text and address. Only `data:` and `blob:` images aren't held back. Images with an address on the instance itself wait for the click too. The web app requests the images in a result without a referrer.
+The web app doesn't load images when it shows an uploaded file's result, such as an e-mail or a saved page. A bar above the result says so and offers **Load images**, which loads them for that result. The Raw view shows such an image as its Markdown text, and the Rendered view as its alt text and address. `data:` and `blob:` images aren't held back, and neither are [hosted figures](#figures-in-ocr-results): images at `/img/<id>.<ext>` on the same address as the web app, without a query or fragment. Other images with an address on the instance itself wait for the click too. The web app requests the images in a result without a referrer.
 
 ## Leave the app during a long conversion
 
@@ -74,7 +74,7 @@ In the web app, a document upload uses this by default. After the upload finishe
     curl "http://localhost:3000/api/file/jobs/2f2f4a7b37f071b7e3137d42eb9dbec3"
     ```
 
-    The answer is `{ "status": "pending" }` while the file converts. When it is `done`, the body holds `markdown`, `metadata`, `source`, `shareId` (always `null`) and `suggestedFilename`. When it is `error`, the body holds `error` and `httpStatus`, the status the same conversion would have returned without `async`: `422`, `502` or `503` (every conversion worker was busy).
+    The answer is `{ "status": "pending" }` while the file converts. When it is `done`, the body holds `markdown`, `metadata`, `source`, `shareId` (`null` unless the result was kept with [`store=true`](#keep-an-upload)) and `suggestedFilename`. When it is `error`, the body holds `error` and `httpStatus`, the status the same conversion would have returned without `async`: `422`, `502` or `503` (every conversion worker was busy).
   </Step>
   <Step title="Delete the job">
     ```bash
@@ -87,14 +87,37 @@ In the web app, a document upload uses this by default. After the upload finishe
 
 - **Both answers:** the server can't always queue a job. When async jobs are off, 100 jobs are already held, your user or address already holds 3, or half of the result memory (32 MB by default) is in use, it converts the file in the same request and answers `200` with the normal result, as it does without `async`. A script has to handle `202` and `200`.
 - **Deleting a running job:** `DELETE` on a job that is still converting answers `204`, and the job is gone for `GET` and `DELETE` from then on. It still counts toward the 3 jobs of your user or address until its conversion ends, and its result is discarded.
-- **Result format:** an async result is always JSON. `format` is ignored for async jobs, and `frontmatter`, `pdf` and `lang` work as they do for a synchronous upload.
-- **Retention:** a finished result stays in memory until you delete it or 60 minutes pass (`PULLMD_FILE_JOB_TTL_MINUTES`), except that when your share of the result memory or the total result memory is used up, your older finished results are dropped first, oldest first, to make room for a new one. A result is never written to disk, and a restart loses it.
+- **Result format:** an async result is always JSON. `format` is ignored for async jobs, and `frontmatter`, `pdf`, `pdf_images`, `store` and `lang` work as they do for a synchronous upload.
+- **Retention:** a finished result stays in memory until you delete it or 60 minutes pass (`PULLMD_FILE_JOB_TTL_MINUTES`), except that when your share of the result memory or the total result memory is used up, your older finished results are dropped first, oldest first, to make room for a new one. The job's result is never written to disk, and a restart loses it. A result kept with [`store=true`](#keep-an-upload) is stored separately and stays when the finished job is deleted or expires. When a job ends without delivering its result, for example because the result doesn't fit (`507`) or you delete the job while it is still converting, the kept copy is deleted too.
 - **Size limit:** all held results together may use 64 MB of memory (`PULLMD_FILE_JOB_MAX_MB`), and the results of one user or address at most a quarter of that (16 MB by default). Results of other users or addresses are never dropped to make room. A result that doesn't fit becomes an `error` with `httpStatus` `507`: `Result too large to hold for pickup, upload again. / Ergebnis zu groß zum Bereithalten, bitte erneut hochladen.` Raise `PULLMD_FILE_JOB_MAX_MB`, or upload without `async`.
 - **Stuck jobs:** a job that is still pending after 15 minutes becomes an `error` with `httpStatus` `504`: `Conversion timed out. / Konvertierung abgebrochen (Zeitlimit).`
 - **Access:** with sign-in enabled, send the same API key on all three requests. Only the account that started a job can fetch or delete it, and any other account gets `404`. Without sign-in, the job id is the only credential, so treat it like a share link.
 - **Unknown ids:** an unknown, expired, deleted or foreign id gives `404` with `Job not found or expired. / Auftrag nicht gefunden oder abgelaufen.` More than 120 unknown ids a minute from one address give `429` with a `Retry-After` header.
 
 See [`GET /api/file/jobs/{id}`](/reference/api/convert/get-an-async-file-result) and [`DELETE /api/file/jobs/{id}`](/reference/api/convert/delete-an-async-file-result) in the API reference. Set the retention and the memory limit in [Configuration](/reference/configuration#async-file-conversions).
+
+## Keep an upload
+
+To keep the result of an upload, add `store=true` (or `store=1`):
+
+```bash
+curl -X POST "http://localhost:3000/api/file?store=true" \
+  -H "Content-Type: application/pdf" \
+  -H "X-Filename: report.pdf" \
+  --data-binary @report.pdf
+```
+
+PullMD still doesn't store the uploaded file. It stores the converted Markdown like a URL conversion, and with [`pdf_images=hosted`](#figures-in-ocr-results) also the figures:
+
+- **Share link:** the answer carries the share id in `X-Share-Id` (`shareId` with `format=json`, `share_id` with `frontmatter=true`, `shareId` in the result of an `async=1` job). `/s/<id>` serves the result as stored and never converts anything again. See [Share links](/guides/share-links).
+- **History:** the result gets a history entry with the file name as its title. On an instance without sign-in and with public history, everyone who can reach the instance sees that entry and can open it. With sign-in on, the entry is in your own history only, and the share link works for anyone who has it.
+- **Retention:** the result is deleted `PULLMD_CACHE_RETENTION_DAYS` days after it was stored (default `90`, `0` keeps it). Its share link and figures stop working at the same time.
+- **Deleting:** delete the entry from the history to delete the result, its share link and its figures. With sign-in on, your own stored upload is deleted for everyone even though you aren't the admin. With sign-in off and `DISABLE_PUBLIC_HISTORY=true`, deletes are refused, so the result stays until the retention ends. Deleting a finished `async=1` job doesn't delete the kept result.
+- **Turned off:** when the instance sets `PULLMD_UPLOAD_STORE=false`, PullMD ignores `store` and keeps nothing. Any other value than `true` or `1` for `store` also keeps nothing.
+
+If PullMD can't store the result, you get it without a share id.
+
+In the web app, turn on the **Store** (**Speichern**) toggle before you upload. The toggle shows only when the instance allows stored uploads. When the instance hosts figures, it reads **Store + images** (**Speichern + Bilder**), and a PDF upload with **PDF OCR** on also asks for hosted figures. After a stored upload, the result shows the share link. The history lists the entry with **File** (**Datei**) where a URL shows its domain, and opening it shows the stored result.
 
 ## Upload formats PullMD reads itself
 
@@ -129,7 +152,7 @@ MarkItDown reads the text layer of a PDF, which works for prose but loses the st
     PULLMD_PDF_OCR_API_KEY=your-key
     ```
 
-    The default provider is Mistral OCR (`mistral-ocr-latest`, about $0.002 per page). To use another endpoint that speaks the Mistral OCR API (`POST /ocr`), set `PULLMD_PDF_OCR_BASE_URL` and `PULLMD_PDF_OCR_MODEL`.
+    The default provider is Mistral OCR (`mistral-ocr-latest`). Plain OCR costs about $0.002 per page. To use another endpoint that speaks the Mistral OCR API (`POST /ocr`), set `PULLMD_PDF_OCR_BASE_URL` and `PULLMD_PDF_OCR_MODEL`. Besides `model` and `document`, PullMD sends `image_min_size` and `image_limit` on every request, and for [figures](#figures-in-ocr-results) `bbox_annotation_format` and `include_image_base64`. An endpoint that rejects these fields with an error status makes PullMD use the standard conversion.
   </Step>
   <Step title="Ask for OCR per request">
     ```bash
@@ -149,6 +172,42 @@ When OCR runs, `X-Source` is `pdf-ocr` and the frontmatter gains `pdf_pages`. If
 OCR requests count against the hourly provider budget, `PULLMD_LLM_RATE_LIMIT` (default 30 per user or address, shared with image captions and audio transcripts). Over budget, PullMD uses the standard conversion and doesn't cache that result.
 
 A local engine such as [Docling](https://github.com/DS4SD/docling) needs an adapter that translates the Mistral OCR request. The OCR tier handles PDFs only.
+
+### Figures in OCR results
+
+The OCR provider marks each figure it finds in the PDF. The `pdf_images` parameter decides what PullMD puts in its place. It applies whenever OCR runs, on `GET /api`, `/api/stream` and `POST /api/file`, and as `pdf_images` on the MCP tool [`read_url`](/reference/mcp-tools#read_url). `pdf_images` alone doesn't bypass the cache; `pdf=ocr` does.
+
+| `pdf_images` | In place of each figure | Needs |
+| --- | --- | --- |
+| `strip` (default) | A text line with the figure's id and size, such as `*[Abbildung: img-0.jpeg, 648×523 px]*` | Nothing |
+| `caption` | A short description, such as `> **Abbildung** (img-0.jpeg, 648×523): Ein Balkendiagramm` | Nothing |
+| `hosted` | The figure itself, such as `![Ein Balkendiagramm](https://pullmd.example.com/img/<id>.jpeg)` | `PULLMD_IMAGE_HOSTING=true` and `PUBLIC_URL`, and for an upload also [`store=true`](#keep-an-upload) |
+
+```bash
+curl "http://localhost:3000/api?url=https://example.com/report.pdf&pdf=ocr&pdf_images=caption"
+```
+
+- **Labels:** `Abbildung` by default. With `lang=en`, the REST endpoints write `Figure`. MCP `read_url` always writes `Abbildung`.
+- **Size:** the width and height of the figure's area as the OCR provider reports it.
+- **Descriptions:** the OCR provider writes them in the same request. PullMD asks for at most three sentences in the language of the document, puts each description on one line and cuts it at 600 characters. A description comes from the document's content, so treat it as untrusted text.
+- **Fallback:** `hosted` without image hosting or `PUBLIC_URL`, or on an upload without `store=true`, works as `caption`. A figure that can't be hosted gets the `caption` form, and a figure without a description gets the `strip` line. On the REST endpoints an unknown value works as `strip`; MCP `read_url` rejects it. Figures never make a conversion fail.
+- **Which figures:** PullMD asks the provider to skip images smaller than 50 px and to return at most 40 figures per document. Figures after the 40th are left out without a marker.
+- **Budget:** one OCR request counts once against `PULLMD_LLM_RATE_LIMIT`, whatever `pdf_images` says.
+
+Without `pdf_images`, the result has the `strip` lines. In every mode, PullMD replaces the provider's image placeholders, such as `![img-0.jpeg](img-0.jpeg)`, which would be broken links.
+
+#### Hosted figures
+
+With `PULLMD_IMAGE_HOSTING=true`, PullMD stores the figures of a `hosted` conversion and links them from the Markdown at `/img/<id>.<ext>`. The address starts with your `PUBLIC_URL`, never with the host a request names, because the link is stored with the conversion and shared. Without `PUBLIC_URL`, `hosted` works as `caption`, `/api/config` reports `imageHosting: false`, and PullMD logs a warning at startup. The shipped compose files set `PUBLIC_URL`. In the web app, turn on the **Store + images** (**Speichern + Bilder**) toggle together with **PDF OCR** to get hosted figures for PDF links and uploads.
+
+- **Resolution:** the figures come at the resolution the OCR provider returns. With the default provider, a figure as wide as the page was about 650 px wide in our tests.
+- **Limits:** JPEG, PNG, WebP and GIF only, at most 4 MB per figure and 20 MB per document. A figure over a limit gets the `caption` form.
+- **Storage:** the files are in an `images` folder next to the database (`CACHE_DB`). With the shipped compose files (`CACHE_DB=/data/cache.db`), that is `/data/images` in the container and `./data/images` next to the compose file.
+- **Access:** the id is 128 random bits, so an address can't be guessed, and it works without sign-in, like a [share link](/guides/share-links). An unknown or expired id returns `404` with `Image not found or expired`. More than 120 unknown ids a minute from one address return `429`, counted together with unknown share-link ids. Answers carry `Cache-Control: private, max-age=3600`.
+- **Lifetime:** the figures belong to the stored conversion. They are deleted with it: when its retention ends (`PULLMD_CACHE_RETENTION_DAYS`), when it is deleted, and when the same URL is converted again and the new result is cached, which replaces the previous figures.
+- **Agents:** the MCP tool [`get_image`](/reference/mcp-tools#get_image) returns a hosted figure as an image.
+
+A figure is kept only when the conversion is stored. When PullMD can't store the conversion, the answer carries the `caption` form instead.
 
 ## Resource limits
 

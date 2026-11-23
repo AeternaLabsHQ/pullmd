@@ -12,7 +12,7 @@ PullMD gives agents one tool: read this URL and return clean Markdown. There are
 | --- | --- | --- | --- |
 | Works with | Claude Code, Cursor, Claude Desktop, claude.ai and other MCP clients | Claude Code | Any agent that can make HTTP requests |
 | Install | One command or a JSON entry | Unzip into `~/.claude/skills` | Paste into the system prompt |
-| How the agent calls PullMD | Native tools: `read_url`, `get_share`, `list_recent` | `curl` to the REST API | `curl` or its own fetch tool |
+| How the agent calls PullMD | Native tools: `read_url`, `get_share`, `list_recent`, plus `get_image` when the instance hosts PDF figures (`PULLMD_IMAGE_HOSTING=true`) | `curl` to the REST API | `curl` or its own fetch tool |
 | Updates | Automatic: tools live on your instance | Download the zip again | Edit the prompt |
 
 **Start with the MCP server** if your agent supports MCP. The agent sees typed tools with descriptions, so it uses them without extra instructions.

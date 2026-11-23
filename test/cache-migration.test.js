@@ -139,7 +139,7 @@ describe('createCache on a v1 database (bare conversions table)', () => {
     const shareId = cache.put({
       url: OLD_URL, title: 'Neu', markdown: '# Neu', source: 'trafilatura', client: 'api',
       metadata: { language: 'de', quality: 0.9 },
-    });
+    }).shareId;
 
     assert.match(shareId, /^[0-9a-f]{32}$/);
     assert.equal(cache.getIdByUrl(OLD_URL), 1, 'the row is updated, not replaced');
@@ -151,14 +151,14 @@ describe('createCache on a v1 database (bare conversions table)', () => {
     assert.deepEqual(shared.metadata, { language: 'de', quality: 0.9 });
     assert.deepEqual(cache.get(OLD_URL).metadata, { language: 'de', quality: 0.9 });
     // A second put keeps the link stable.
-    assert.equal(cache.put({ url: OLD_URL, title: 'Neu', markdown: '# Neu 2', source: 'trafilatura' }), shareId);
+    assert.equal(cache.put({ url: OLD_URL, title: 'Neu', markdown: '# Neu 2', source: 'trafilatura' }).shareId, shareId);
   });
 
   it('stores new rows, per-user history and meta on the migrated database', () => {
     const cache = openCache();
     const userId = cache.db.prepare("INSERT INTO users (email, password_hash) VALUES ('a@b.c', 'x')").run().lastInsertRowid;
 
-    const shareId = cache.put({ url: 'https://example.com/neu', title: 'Neu', markdown: '# Neu', source: 'readability', user_id: userId });
+    const shareId = cache.put({ url: 'https://example.com/neu', title: 'Neu', markdown: '# Neu', source: 'readability', user_id: userId }).shareId;
 
     assert.equal(cache.getByShareId(shareId).title, 'Neu');
     assert.equal(cache.historyPage().total, 3);
@@ -175,7 +175,7 @@ describe('createCache on a v1 database (bare conversions table)', () => {
 
   it('rejects a duplicate share id after the upgrade', () => {
     const cache = openCache();
-    const shareId = cache.put({ url: 'https://example.com/a', title: 'A', markdown: '# A', source: 'readability' });
+    const shareId = cache.put({ url: 'https://example.com/a', title: 'A', markdown: '# A', source: 'readability' }).shareId;
     assert.throws(
       () => cache.db.prepare('INSERT INTO conversions (url, share_id) VALUES (?, ?)').run('https://example.com/b', shareId),
       /UNIQUE constraint failed/,
@@ -184,7 +184,7 @@ describe('createCache on a v1 database (bare conversions table)', () => {
 
   it('is a no-op when opened a second time', () => {
     const first = openCache();
-    const shareId = first.put({ url: OLD_URL, title: 'Neu', markdown: '# Neu', source: 'readability' });
+    const shareId = first.put({ url: OLD_URL, title: 'Neu', markdown: '# Neu', source: 'readability' }).shareId;
     const schema = schemaDump(first.db);
     const rows = first.db.prepare('SELECT * FROM conversions ORDER BY id').all();
     first.db.close();
@@ -219,7 +219,7 @@ describe('createCache on an early v2 database (share links, no user_id/metadata/
 
   it('keeps the existing share id when the row is fetched again', () => {
     const cache = openCache();
-    const shareId = cache.put({ url: OLD_URL, title: 'Neu', markdown: '# Neu', source: 'readability', user_id: 1, metadata: { a: 1 } });
+    const shareId = cache.put({ url: OLD_URL, title: 'Neu', markdown: '# Neu', source: 'readability', user_id: 1, metadata: { a: 1 } }).shareId;
 
     assert.equal(shareId, 'abc123');
     assert.deepEqual(cache.getByShareId('abc123').metadata, { a: 1 });

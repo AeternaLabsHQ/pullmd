@@ -187,10 +187,10 @@ A file uploaded with `async=1` answers `202` with a job id, and a failed convers
 | `400` | Missing or invalid parameter, empty upload, a request body that isn't valid JSON (`"code": "invalid_body"`), or a Reddit page that isn't a post or subreddit |
 | `401` | Sign-in is on and no valid credentials were sent |
 | `403` | URL blocked by [SSRF protection](/self-hosting/ssrf-protection), a URL that can't be parsed or isn't `http` or `https` on `GET /api`, or history and deletes refused by `DISABLE_PUBLIC_HISTORY` |
-| `404` | Share link, cache entry, Reddit post or async file job not found |
+| `404` | Share link, hosted figure, cache entry, Reddit post or async file job not found |
 | `413` | Upload too large, or a request body over the size limit (`"code": "payload_too_large"`) |
 | `422` | Uploaded HTML has almost no content, or an uploaded file doesn't match its format. With `"code": "document_too_complex"`: the page or file is nested too deeply or too large to parse, on `GET /api`, `POST /api/html` and `POST /api/file` (see [Troubleshooting](/troubleshooting)). With `"code": "conversion_timeout"`: the conversion ran longer than `PULLMD_CONVERT_TIMEOUT_MS` in its worker. A conversion that runs out of worker memory answers `document_too_complex`. An async file job carries only `error` and `httpStatus`, not the `code`. |
-| `429` | Rate limit reached. Share-link and async file job lookups send a `Retry-After` header. |
+| `429` | Rate limit reached. Share-link, hosted figure and async file job lookups send a `Retry-After` header. |
 | `500` | Unexpected Reddit error, extraction failed on `POST /api/html`, or any other unexpected failure (`"code": "internal_error"`) |
 | `502` | The source or a sidecar failed. On `GET /api`, a site behind a bot-protection challenge adds `"code": "bot_challenge"` and the challenge's `vendor` to the body. |
 | `503` | With `"code": "converter_busy"`: every conversion worker is busy and the queue is full or the wait was too long. Comes with `Retry-After: 5`, also on the status response of an async file job whose `httpStatus` is `503`. See [Troubleshooting](/troubleshooting). |

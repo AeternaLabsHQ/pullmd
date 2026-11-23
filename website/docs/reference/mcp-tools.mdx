@@ -1,11 +1,11 @@
 ---
 title: MCP tools
-description: Parameters and output of the `read_url`, `get_share` and `list_recent` MCP tools.
+description: Parameters and output of the `read_url`, `get_share`, `list_recent` and `get_image` MCP tools.
 ---
 
 # MCP tools
 
-The Model Context Protocol (MCP) server at `/mcp` provides `read_url`, `get_share` and `list_recent`. To connect a client, see [MCP server](/agents/mcp-server).
+The Model Context Protocol (MCP) server at `/mcp` provides `read_url`, `get_share` and `list_recent`, and `get_image` when the instance hosts figures (`PULLMD_IMAGE_HOSTING=true`). To connect a client, see [MCP server](/agents/mcp-server).
 
 ## read_url
 
@@ -53,6 +53,9 @@ Converts a URL to Markdown with the same extraction and cache as `GET /api`. On 
 <ParamField name="pdf_ocr" type="boolean" default="false">
   Use the OCR provider for PDFs. The REST equivalent is `pdf=ocr`. Requires `PULLMD_PDF_OCR_API_KEY`; without it, PDFs use the default text extraction and no error is returned.
 </ParamField>
+<ParamField name="pdf_images" type="string" default="strip">
+  What to put in place of each figure when OCR runs: `strip` (a text line with the figure's id and size), `caption` (a short description) or `hosted` (the figure as an image link, which [`get_image`](#get_image) can fetch). `hosted` needs `PULLMD_IMAGE_HOSTING=true` and `PUBLIC_URL`, and works as `caption` without them. Other values are rejected. The figure labels are always German (`Abbildung`). See [Figures in OCR results](/guides/documents#figures-in-ocr-results).
+</ParamField>
 
 `read_url` has no `format` or `render` parameter. To force a browser render, set `extractor` to `playwright`. A call that sets `nocache`, `extractor`, `yt_timecodes`, `yt_chunk` or `pdf_ocr` skips the cache.
 
@@ -84,7 +87,7 @@ cached: true
 
 ## get_share
 
-Returns a cached conversion by share id. If it's more than an hour old, PullMD fetches the source again first; if the source is gone, you get the last good copy. Use it as a stable, live link to content that changes, such as a subreddit feed.
+Returns a cached conversion by share id. If it's more than an hour old, PullMD fetches the source again first; if the source is gone, you get the last good copy. Use it as a stable, live link to content that changes, such as a subreddit feed. A PDF OCR conversion and a [stored upload](/guides/documents#keep-an-upload) come back as stored and are never fetched again.
 
 <ParamField name="id" type="string" required>
   The 32-character hex share id from a `read_url` result.
@@ -114,6 +117,16 @@ Lists recent conversions, newest first. With sign-in enabled, you see only your 
   }
 ]
 ```
+
+## get_image
+
+Returns a figure that `read_url` or a REST conversion hosted with `pdf_images` set to `hosted`. The tool exists only when the instance sets `PULLMD_IMAGE_HOSTING=true`. See [Hosted figures](/guides/documents#hosted-figures).
+
+<ParamField name="id" type="string" required>
+  The 32-character hex image id, or the figure's full address from the Markdown, such as `https://pullmd.example.com/img/<id>.jpeg` (the extension is optional). PullMD takes the id from the address and fetches nothing.
+</ParamField>
+
+**Output:** an MCP image content block with the figure and its type (`image/jpeg`, `image/png`, `image/webp` or `image/gif`). An unknown, expired or malformed id returns an error result: `Image not found or expired.`
 
 ## Authentication
 

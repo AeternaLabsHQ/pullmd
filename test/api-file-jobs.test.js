@@ -1,9 +1,13 @@
-import { describe, it } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { createApp } from '../server.js';
 import { createCache } from '../lib/cache.js';
 import { createAuth } from '../lib/auth.js';
 import { createFileJobStore } from '../lib/file-jobs.js';
+import { createImageStore } from '../lib/image-store.js';
 import { createRateLimiter } from '../lib/oauth/rate-limit.js';
 
 const FAKE = {
@@ -490,6 +494,157 @@ describe('file job ownership (multi-user)', () => {
       assert.equal(post.status, 401);
       // The job survived the unauthenticated DELETE.
       assert.equal((await settled(base, jobId, a)).json.status, 'done');
+    });
+  });
+});
+
+describe('POST /api/file?async=1&store=true', () => {
+  const SHARE = /^[0-9a-f]{32}$/;
+  const roots = [];
+  afterEach(() => { for (const r of roots.splice(0)) fs.rmSync(r, { recursive: true, force: true }); });
+
+  it('the job result carries the share id, and deleting the job leaves the share reachable', async () => {
+    const cache = createCache(':memory:');
+    const app = createApp({ cache, fileJobs: newStore(), extractFile: async () => FAKE });
+    await withServer(app, async (base) => {
+      const { json: { jobId } } = await submit(base, '/api/file?async=1&store=true&filename=report.pdf&frontmatter=true');
+      const done = await settled(base, jobId);
+      assert.equal(done.json.status, 'done');
+      assert.match(done.json.shareId, SHARE);
+      assert.ok(done.json.markdown.includes(done.json.shareId), 'share id in the frontmatter');
+
+      const del = await call(base, `/api/file/jobs/${jobId}`, { method: 'DELETE' });
+      assert.equal(del.status, 204);
+      assert.equal((await call(base, `/api/file/jobs/${jobId}`)).status, 404);
+
+      const shared = await call(base, `/s/${done.json.shareId}`);
+      assert.equal(shared.status, 200);
+      assert.equal(shared.body, FAKE.markdown);
+      const history = (await call(base, '/api/history')).json;
+      assert.deepEqual(history.map((r) => [r.title, r.url]), [['report.pdf', null]]);
+    });
+  });
+
+  it('without store the job result keeps shareId null and nothing is written', async () => {
+    const cache = createCache(':memory:');
+    const app = createApp({ cache, fileJobs: newStore(), extractFile: async () => FAKE });
+    await withServer(app, async (base) => {
+      const { json: { jobId } } = await submit(base, '/api/file?async=1');
+      assert.equal((await settled(base, jobId)).json.shareId, null);
+      assert.deepEqual((await call(base, '/api/history')).json, []);
+    });
+  });
+
+  it('hosts figures for the async job on PUBLIC_URL', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pullmd-asyncimg-'));
+    roots.push(root);
+    const cache = createCache(':memory:');
+    const d = deferred();
+    const app = createApp({
+      cache, imageStore: createImageStore(root), imagePublicUrl: 'https://md.example.org', fileJobs: newStore(),
+      extractFile: async (buf, opts) => {
+        await d.promise; // the 202 has long been sent when the figures are hosted
+        const dataUri = `data:image/jpeg;base64,${Buffer.from([1, 2, 3, 4]).toString('base64')}`;
+        const urls = await opts.hostImages([{ id: 'img-0.jpeg', dataUri }]);
+        return { ...FAKE, source: 'pdf-ocr', markdown: `# Report\n\n![Figure 1](${urls.get('img-0.jpeg')})` };
+      },
+    });
+    await withServer(app, async (base) => {
+      const sub = await submit(base, '/api/file?async=1&store=true&pdf=ocr&pdf_images=hosted');
+      assert.equal(sub.status, 202);
+      d.resolve();
+      const done = await settled(base, sub.json.jobId);
+      const m = /(https?:\/\/[^/]+)\/img\/([0-9a-f]{32})\.jpeg/.exec(done.json.markdown);
+      assert.ok(m, done.json.markdown);
+      assert.equal(m[1], 'https://md.example.org');
+      assert.equal((await call(base, `/img/${m[2]}.jpeg`)).status, 200);
+      assert.ok(cache.getAsset(m[2]));
+    });
+  });
+
+  it('a job that cannot be finished leaves no stored row or figure behind', async (t) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pullmd-asyncfail-'));
+    roots.push(root);
+    t.mock.method(console, 'error', () => {}); // the job logs the failure
+    const cache = createCache(':memory:');
+    // finish() throws on a result JSON.stringify cannot handle.
+    const fileJobs = { ...newStore(), finish() { throw new Error('result cannot be serialised'); } };
+    const app = createApp({
+      cache, imageStore: createImageStore(root), imagePublicUrl: 'https://md.example.org', fileJobs,
+      extractFile: async (buf, opts) => {
+        const dataUri = `data:image/jpeg;base64,${Buffer.from([1, 2, 3, 4]).toString('base64')}`;
+        const urls = await opts.hostImages([{ id: 'img-0.jpeg', dataUri }]);
+        return { ...FAKE, source: 'pdf-ocr', markdown: `# Report\n\n![Figure 1](${urls.get('img-0.jpeg')})` };
+      },
+    });
+    await withServer(app, async (base) => {
+      const sub = await submit(base, '/api/file?async=1&store=true&pdf=ocr&pdf_images=hosted');
+      assert.equal(sub.status, 202);
+      const done = await settled(base, sub.json.jobId);
+      assert.equal(done.json.status, 'error');
+      assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM conversions').get().c, 0);
+      assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM assets').get().c, 0);
+    });
+  });
+
+  it('drops the stored row and figure when finish() does not accept the result', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pullmd-asyncrefused-'));
+    roots.push(root);
+    const cache = createCache(':memory:');
+    // finish() returns false for a result over the quota or a cancelled job.
+    const refused = deferred();
+    const fileJobs = { ...newStore(), finish() { refused.resolve(); return false; } };
+    const app = createApp({
+      cache, imageStore: createImageStore(root), imagePublicUrl: 'https://md.example.org', fileJobs,
+      extractFile: async (buf, opts) => {
+        const dataUri = `data:image/jpeg;base64,${Buffer.from([1, 2, 3, 4]).toString('base64')}`;
+        const urls = await opts.hostImages([{ id: 'img-0.jpeg', dataUri }]);
+        return { ...FAKE, source: 'pdf-ocr', markdown: `# Report\n\n![Figure 1](${urls.get('img-0.jpeg')})` };
+      },
+    });
+    await withServer(app, async (base) => {
+      const sub = await submit(base, '/api/file?async=1&store=true&pdf=ocr&pdf_images=hosted');
+      assert.equal(sub.status, 202);
+      await refused.promise;
+      await new Promise((r) => setTimeout(r, 20)); // let the job's cleanup run
+      assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM conversions').get().c, 0);
+      assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM assets').get().c, 0);
+    });
+  });
+
+  it('keeps the stored row when finish() accepts the result', async () => {
+    const cache = createCache(':memory:');
+    const app = createApp({ cache, fileJobs: newStore(), extractFile: async () => FAKE });
+    await withServer(app, async (base) => {
+      const { json: { jobId } } = await submit(base, '/api/file?async=1&store=true&filename=kept.pdf');
+      const done = await settled(base, jobId);
+      assert.match(done.json.shareId, SHARE);
+      assert.equal(cache.db.prepare('SELECT COUNT(*) c FROM conversions').get().c, 1);
+    });
+  });
+
+  it('the stored row belongs to the user who submitted the job', async () => {
+    const cache = createCache(':memory:');
+    const auth = createAuth({
+      db: cache.db, mode: 'multi-user',
+      env: { PULLMD_ADMIN_EMAIL: 'a@b.c', PULLMD_ADMIN_PASSWORD: 'pw1234567' },
+      argon2Opts: { timeCost: 1, memoryCost: 1024, parallelism: 1 },
+    });
+    await auth.runMigration();
+    const userA = cache.db.prepare('SELECT id FROM users').get().id;
+    const userB = (await auth.createUser({ email: 'b@b.c', password: 'pw1234567' })).id;
+    const a = { Authorization: `Bearer ${auth.createApiKey(userA, 'a').fullKey}` };
+    const b = { Authorization: `Bearer ${auth.createApiKey(userB, 'b').fullKey}` };
+    const d = deferred();
+    const app = createApp({ cache, auth, fileJobs: newStore(), extractFile: async () => { await d.promise; return FAKE; } });
+    await withServer(app, async (base) => {
+      const sub = await submit(base, '/api/file?async=1&store=true&filename=mine.pdf', a);
+      assert.equal(sub.status, 202);
+      d.resolve();
+      const done = await settled(base, sub.json.jobId, a);
+      assert.match(done.json.shareId, SHARE);
+      assert.deepEqual((await call(base, '/api/history', { headers: a })).json.map((r) => r.title), ['mine.pdf']);
+      assert.deepEqual((await call(base, '/api/history', { headers: b })).json, []);
     });
   });
 });

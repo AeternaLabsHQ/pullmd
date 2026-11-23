@@ -149,7 +149,7 @@ describe('GET /api - Reddit extractor errors', () => {
   it('a failed refetch keeps serving nothing new but leaves an earlier cache row alone', async (t) => {
     t.mock.method(console, 'error', () => {});
     const cache = createCache(':memory:');
-    const shareId = cache.put({ url: REDDIT_URL, title: 'Alt', markdown: '# Alt\n\nText', source: 'reddit' });
+    const shareId = cache.put({ url: REDDIT_URL, title: 'Alt', markdown: '# Alt\n\nText', source: 'reddit' }).shareId;
     const app = createApp({ cache, extractPost: async () => { throw new Error('Reddit API returned 403'); } });
 
     const res = await request(app, api(REDDIT_URL, '&nocache=true'));

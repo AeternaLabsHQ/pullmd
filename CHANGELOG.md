@@ -11,6 +11,25 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Added
+
+- **`pdf_images` decides what happens to the figures of an OCR-converted PDF.** On `GET /api`, `/api/stream`, `POST /api/file` and MCP `read_url` (`pdf_images`), whenever OCR runs: `strip` (the default) puts a text line with the figure's id and size in its place, such as `*[Abbildung: img-0.jpeg, 648×523 px]*`; `caption` a short description the OCR provider writes in the same request, such as `> **Abbildung** (img-0.jpeg, 648×523): …`; `hosted` the figure itself as an image link. With `lang=en` the label is `Figure` (on the REST endpoints; MCP writes `Abbildung`). `hosted` falls back to `caption` when the instance doesn't host figures or a figure can't be stored, and a figure without a description gets the `strip` line; figures never make a conversion fail. PullMD asks for at most 40 figures per document and skips images smaller than 50 px; figures after the 40th are left out without a marker. `pdf_images` on its own doesn't bypass the cache.
+- **Hosted PDF figures (`PULLMD_IMAGE_HOSTING`, off by default).** With it on, `pdf_images=hosted` stores the figures in an `images` folder next to the database (`/data/images` with the shipped compose files, which set `CACHE_DB=/data/cache.db`) and links them at `/img/<id>.<ext>` under `PUBLIC_URL`, never under the host a request names. Without `PUBLIC_URL`, `hosted` works as `caption`, `/api/config` reports `imageHosting: false` and PullMD logs a warning at startup; the shipped compose files set `PUBLIC_URL`. The id is 128 random bits and the address works without sign-in, like a share link; unknown ids answer `404` (`Image not found or expired`) and count toward the same per-address limit as unknown share links. Figures come at the resolution the OCR provider returns, at most 4 MB each and 20 MB per document; a figure over a limit falls back to its description. They live as long as their conversion: deleting it, the end of `PULLMD_CACHE_RETENTION_DAYS` or a new conversion of the same URL, when the new result is cached, removes them, also after `PULLMD_IMAGE_HOSTING` has been turned off again. The shipped compose files pass the variable through.
+- **MCP tool `get_image`.** Returns a hosted figure as an image, by id or by its `/img/` address. It exists only when `PULLMD_IMAGE_HOSTING` is on.
+- **Keep an upload with `store=true` (`PULLMD_UPLOAD_STORE`, on by default).** `POST /api/file?store=true`, also with `async=1`, keeps the converted result like a URL conversion: it gets a share id (`X-Share-Id`, `shareId`) and a history entry titled with the file name, and is kept for `PULLMD_CACHE_RETENTION_DAYS`. With `pdf_images=hosted` the figures are kept too, and `hosted` on an upload works only together with `store=true`. The uploaded file itself is still never stored. On an instance without sign-in and with public history, everyone who can reach the instance sees these entries; `PULLMD_UPLOAD_STORE=false` makes PullMD ignore `store`. With sign-in on, deleting your own stored upload removes it for everyone, with its share link and figures, although the answer says `scope: user`; a user's `DELETE /api/cache` does the same for all of their stored uploads. The shipped compose files pass the variable through.
+- **A Store toggle in the web app.** **Store** (**Speichern**), or **Store + images** (**Speichern + Bilder**) when the instance hosts figures, keeps uploads with `store=true`; with **PDF OCR** on and figure hosting available, PDF uploads and URL conversions also ask for hosted figures. A stored upload shows its share link, and its history entry reads **File** (**Datei**) and opens the stored result. The toggle shows only when the instance allows stored uploads. Hosted figures of this instance load in an upload's result without **Load images**; other images stay held back.
+- **`/api/config` reports `imageHosting` and `uploadStore`.**
+
+### Changed
+
+- **OCR results no longer contain broken image links.** The OCR provider's placeholders such as `![img-0.jpeg](img-0.jpeg)` pointed at nothing; every OCR result now has the `strip` line (or the form `pdf_images` asks for) in their place.
+- **Every OCR request now carries `image_min_size` and `image_limit`, for descriptions also `bbox_annotation_format`, and for hosted figures `include_image_base64`.** A custom endpoint set with `PULLMD_PDF_OCR_BASE_URL` that rejects these fields with an error status makes PullMD use the standard conversion for every PDF.
+- **`format=text` keeps the alt text of inline `data:` images.** Before, the whole base64 payload of such an image ended up in the plain text.
+
+### Fixed
+
+- **Share links of OCR conversions keep the OCR result.** Opened after an hour, a share link of a PDF converted with `pdf=ocr` fetched the PDF again without OCR and silently replaced the result with the standard conversion. OCR conversions and stored uploads are now served as stored and never fetched again (`/s/<id>` and MCP `get_share`).
+
 ## [3.21.0] - 2026-11-21
 
 ### Security

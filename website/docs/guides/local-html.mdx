@@ -42,7 +42,7 @@ In the web app, drag the `.html` file onto the page.
 - **No JavaScript:** PullMD never runs scripts from an uploaded file, so the headless browser is off. `extractor` accepts `readability` or `trafilatura`.
 - **App shells:** a file with under 200 characters of text after extraction returns `422`. That usually means the page builds its content with JavaScript. If the page is public, convert its URL, because PullMD renders JavaScript pages in a headless browser.
 - **Size limits:** HTML nested more than 256 levels deep, or with more than 100,000 elements, 200,000 text nodes, 100,000 children of one element, 200,000 attributes or 1,000 attributes on one element, returns `422` with `"code": "document_too_complex"`. The same limits apply to URL conversions. See [Troubleshooting](/troubleshooting) for how they are measured.
-- **Images:** in the web app, images other than `data:` and `blob:` images aren't loaded in the result until you click **Load images**. See [Documents](/guides/documents#upload-a-file).
+- **Images:** in the web app, images other than `data:` and `blob:` images and the instance's own hosted figures (`/img/<id>.<ext>`) aren't loaded in the result until you click **Load images**. See [Documents](/guides/documents#upload-a-file).
 - **Time limit:** a conversion that runs longer than `PULLMD_CONVERT_TIMEOUT_MS` (60 seconds by default) returns `422` with `"code": "conversion_timeout"`. When every conversion worker is busy, you get `503` with `"code": "converter_busy"` and a `Retry-After` header; try again shortly.
 
 Send the file as `Content-Type: text/html` or `application/xhtml+xml`. Any other type returns `400`.

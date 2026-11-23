@@ -14,6 +14,13 @@ docker compose up -d
 
 This updates all four containers to the version your compose file names (`:latest` by default). The database upgrades itself on start. Read the [changelog](/changelog) first, and the notes below if you're crossing one of these versions.
 
+## To the next release (unreleased): PDF figures, stored uploads and OCR share links
+
+- **Compose file:** the compose files pass two new variables through, `PULLMD_IMAGE_HOSTING` (off by default) and `PULLMD_UPLOAD_STORE` (on by default). A compose file you downloaded or edited earlier doesn't. To turn [hosted figures](/guides/documents#hosted-figures) on, or [stored uploads](/guides/documents#keep-an-upload) off, add the line to the `pullmd` service's `environment:`, for example `- PULLMD_IMAGE_HOSTING=${PULLMD_IMAGE_HOSTING:-}`, and run `docker compose up -d`.
+- **`PUBLIC_URL`:** hosted figure links start with `PUBLIC_URL`. Without it, `pdf_images=hosted` works as `caption` and PullMD logs a warning at startup. The compose files set it; check it if you run PullMD without them.
+- **Custom OCR endpoint:** with `PULLMD_PDF_OCR_BASE_URL` set, your endpoint now receives `image_min_size` and `image_limit` on every request, and `bbox_annotation_format` with `pdf_images=caption` or `hosted`, plus `include_image_base64` with `hosted`. An endpoint that rejects these fields with an error status makes PullMD use the standard conversion for the PDF. See [Tables in PDFs](/guides/documents#tables-in-pdfs-use-ocr).
+- **Share links:** share links of OCR conversions are served as stored and no longer fetch the source again after an hour. Stored uploads, new in this release, are served the same way. See [Share links](/guides/share-links).
+
 ## To 3.20 or later: browser sidecar network and document limits
 
 The compose files put the Playwright sidecar on its own network, `pullmd-render`, that only `pullmd` joins, so scripts on rendered pages can't reach the other sidecars. `docker compose pull` doesn't change your compose file. To get the same layout, add `pullmd-render` to the `pullmd` service's `networks:`, replace `pullmd-internal` with `pullmd-render` on the `playwright` service, declare the network, and run `docker compose up -d`:

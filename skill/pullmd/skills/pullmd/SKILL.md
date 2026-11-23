@@ -52,6 +52,7 @@ The response is `text/markdown` — ready to use as-is.
 | `render`        | auto    | `force` → always render via Playwright. `skip` → never render. Bypasses cache. |
 | `extractor`     | auto    | Force `readability` / `trafilatura` / `playwright`, skipping the quality pick. Bypasses cache. |
 | `pdf`           | —       | `ocr` → high-quality OCR conversion for PDFs (table-grade output; needs a server-side OCR key). Bypasses cache. |
+| `pdf_images`    | `strip` | With `pdf=ocr`: what replaces each figure. `strip` = a text line with id and size, `caption` = a short description from the OCR provider, `hosted` = the figure as an image link at `__PULLMD_URL__/img/<id>.<ext>` (needs image hosting on the instance, otherwise like `caption`). |
 | `yt_timecodes`  | `links` | YouTube transcripts: `links` (clickable timestamps), `plain` (`[MM:SS]`), `none`. |
 | `yt_chunk`      | `30`    | YouTube transcript block size in seconds; `0` = per original snippet.       |
 | `query`         | —       | Set this when you need specific information from a page rather than the whole document: pass the question you are trying to answer, in natural language, and get back only the matching sections - typically 70-95% fewer tokens on long pages. No LLM involved. Empty/absent = full page, unchanged. |
@@ -63,7 +64,7 @@ The response is `text/markdown` — ready to use as-is.
 
 - `X-Source` — `reddit` · `hackernews` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `article-series` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `media-link` · `pdf-ocr`
 - `X-Quality` — `0.0–1.0` extraction confidence (low values mean the static extraction was thin or noisy)
-- `X-Share-Id` — 32-hex permalink, openable as `__PULLMD_URL__/s/<id>` (absent for `/api/html` — local conversions are never cached or shared)
+- `X-Share-Id` - 32-hex permalink, openable as `__PULLMD_URL__/s/<id>` (absent for `/api/html`, and for `/api/file` without `store=true`: local conversions are not cached or shared otherwise)
 - `X-Suggested-Filename` — a ready-made filename for this conversion (e.g. `YT-some-talk-dQw4w9WgXcQ.md`); use it when you save the output to a file instead of inventing a name.
 - `X-Transcript-Status` — YouTube only: `ok` / `none` / `blocked` / `error`. `blocked` and `error` are transient (rate limit) and not cached — retry later; `none` means the video has no transcript at all.
 - `X-Extracted` / `X-Extract-Confidence` / `X-Extract-Sections` / `X-Extract-Original-Tokens` / `X-Extract-Returned-Tokens` — only when `query` is active; the last two show how much context the extraction saved.
@@ -101,6 +102,14 @@ curl -s -X POST --data-binary @page.html -H 'Content-Type: text/html' -H 'X-File
 
 # Upload a local document (PDF/DOCX/…, max 25 MB)
 curl -s -X POST --data-binary @report.pdf -H 'Content-Type: application/pdf' -H 'X-Filename: report.pdf' "__PULLMD_URL__/api/file"
+
+# Same, with OCR and a short description in place of each figure
+curl -s -X POST --data-binary @report.pdf -H 'Content-Type: application/pdf' -H 'X-Filename: report.pdf' "__PULLMD_URL__/api/file?pdf=ocr&pdf_images=caption"
+
+# Keep the result with a share link (the file itself is never stored). Only when the user asks for it:
+# the result gets a history entry titled with the file name, which on an instance without sign-in and
+# with public history everyone who can reach the instance sees.
+curl -s -X POST --data-binary @report.pdf -H 'Content-Type: application/pdf' -H 'X-Filename: report.pdf' "__PULLMD_URL__/api/file?store=true"
 
 # Read a saved e-mail (.eml or Outlook .msg): header block + message text, attachments only listed (no sidecar needed)
 curl -s -X POST --data-binary @mail.eml -H 'Content-Type: message/rfc822' -H 'X-Filename: mail.eml' "__PULLMD_URL__/api/file?lang=en"
@@ -149,4 +158,4 @@ Need to read a URL?
 - Reddit URLs are automatically detected (incl. `redd.it` short links and `/r/<sub>/s/<id>` share links) and use a specialized extraction pipeline that handles posts, comments, galleries, and videos.
 - Add `frontmatter=true` when you want metadata: extraction source and quality always; for Reddit posts also subreddit, author, upvotes, and publish date; for media/YouTube/OCR results duration, image size, and LLM token usage (cost tracking).
 - The `/api/history` endpoint shows recent conversions — useful for checking what's been fetched: `curl -s "__PULLMD_URL__/api/history?limit=5"`.
-- Persistent share links: every successful conversion gets a 32-hex `share_id`. `GET __PULLMD_URL__/s/<id>` returns the cached markdown and re-fetches from source if older than one hour — useful as a stable URL that always returns fresh content.
+- Persistent share links: every successful conversion gets a 32-hex `share_id`. `GET __PULLMD_URL__/s/<id>` returns the cached markdown and re-fetches from source if older than one hour - useful as a stable URL that always returns fresh content. PDF OCR conversions (`X-Source: pdf-ocr`) and uploads kept with `store=true` are snapshots: always served as stored, never re-fetched.

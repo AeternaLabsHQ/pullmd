@@ -58,7 +58,7 @@ sections relevant to a question.
 
 - **Web pages** through a fallback chain: Cloudflare's native Markdown, then Readability + Trafilatura (best result wins), then headless Chromium for JavaScript-heavy sites
 - **Reddit and Hacker News** threads with their comment trees (depth and count configurable; Reddit needs [API credentials](#reddit-access))
-- **Documents**: PDF, Word, PowerPoint, Excel, EPUB, by URL or upload, plus an optional OCR tier for table-grade PDFs. A long upload can run in the background (`POST /api/file?async=1`), so the web app can be left and the result picked up later. The uploaded file is never stored; the result is held in memory for up to 60 minutes, until you delete it
+- **Documents**: PDF, Word, PowerPoint, Excel, EPUB, by URL or upload, plus an optional OCR tier for table-grade PDFs that can describe their figures or host them as images (`pdf_images`). A long upload can run in the background (`POST /api/file?async=1`), so the web app can be left and the result picked up later. The uploaded file is never stored; the result is held in memory for up to 60 minutes, until you delete it. With `store=true` the result (never the file) is kept like a URL conversion, with a share link and a history entry that, on an instance without sign-in and with public history, everyone who can reach the instance sees
 - **YouTube** title, description and transcript with clickable timecodes, no API key needed
 - **Images and audio** via any OpenAI-compatible or local model (captions, transcripts)
 
@@ -67,7 +67,7 @@ sections relevant to a question.
 - **MCP server** for Claude Code and other MCP clients, with OAuth 2.1 for claude.ai and Claude Desktop
 - **Query-scoped extraction**: `?query=` returns only the sections relevant to a question, typically 70-95% fewer tokens on long pages
 - **Lean output**: clean body, metadata in frontmatter, unpadded tables, configurable field allowlist
-- **Live share links**: `/s/:id` re-fetches when the cached copy is older than an hour and serves the last good snapshot if the source dies
+- **Live share links**: `/s/:id` re-fetches when the cached copy is older than an hour and serves the last good snapshot if the source dies. PDF OCR conversions and stored uploads are served as stored
 
 **Comfortable to self-host**
 
@@ -108,7 +108,7 @@ More in the docs:
 Once your instance runs, `/help` on it shows every install path with your URL
 filled in. Replace `${PULLMD_URL}` below with your instance's address.
 
-**MCP server** (Claude Code, Cursor, other MCP clients; tools `read_url`, `get_share`, `list_recent`):
+**MCP server** (Claude Code, Cursor, other MCP clients; tools `read_url`, `get_share`, `list_recent`, plus `get_image` when image hosting is on):
 
 ```bash
 claude mcp add --transport http pullmd ${PULLMD_URL}/mcp
@@ -168,8 +168,9 @@ in [`website/`](./website); pages are Markdown, and pull requests are welcome.
 - `lib/playwright-client.js` - HTTP client for the Playwright sidecar with `AbortSignal` propagation for SSE-disconnect cancellation.
 - `lib/scoring.js` - Quality scoring used to pick between extractors and as a render-trigger heuristic.
 - `lib/convert-pool.js` - worker-thread pool that converts documents with a time and memory limit; `lib/parse-guard.js` - markup budgets checked before a document is parsed.
-- `lib/cache.js` - SQLite cache (`better-sqlite3`) with configurable retention (default 90 days) and 32-hex (128-bit) share ids.
-- `lib/mcp.js` - Stateless MCP server registering the three tools.
+- `lib/cache.js` - SQLite cache (`better-sqlite3`) with configurable retention (default 90 days) and 32-hex (128-bit) share ids; also holds stored uploads (rows without a URL) and the asset rows of hosted figures.
+- `lib/ocr-images.js`, `lib/ocr-image-hosting.js`, `lib/image-store.js` - OCR figure placeholders rewritten per `pdf_images`, and the file store behind `/img/:file` (`images/` next to the database).
+- `lib/mcp.js` - Stateless MCP server registering `read_url`, `get_share`, `list_recent` and, with image hosting on, `get_image`.
 - `lib/distrib.js` - Public-URL substitution in `/help` and `/pullmd.zip`.
 - `trafilatura-sidecar/` - Python sidecar (FastAPI) wrapping Trafilatura.
 - `playwright-sidecar/` - Python sidecar (FastAPI + Playwright + Chromium) for JS-rendered pages.

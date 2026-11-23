@@ -25,10 +25,13 @@ import { createStatusChecker } from './lib/status.js';
 import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
 import { createFileJobStore } from './lib/file-jobs.js';
+import { createImageStore } from './lib/image-store.js';
+import { beginHosting, parsePdfImages, planPdfImages, extractWithHosting, storeWebResult } from './lib/ocr-image-hosting.js';
 import { isYoutubeEnabled } from './lib/youtube.js';
 import { BUSY_RETRY_AFTER_SECONDS, isConverterBusy } from './lib/convert-pool.js';
 import path from 'node:path';
 import fs from 'node:fs';
+import { pipeline } from 'node:stream';
 import { stripCommentsSection } from './lib/markdown-sections.js';
 
 // Extractors can throw non-Errors (a string, undefined); `err.message` would
@@ -128,11 +131,26 @@ function detectClient(ua, clientMode) {
   return 'api';
 }
 
+const FLAG_OFF = new Set(['false', '0', 'no', 'off']);
+const FLAG_ON = new Set(['true', '1', 'yes', 'on']);
+
+// Boolean env var. Unset, empty or unrecognised values keep `fallback`.
+function readFlagEnv(name, fallback) {
+  const s = String(process.env[name] ?? '').toLowerCase().trim();
+  if (FLAG_ON.has(s)) return true;
+  if (FLAG_OFF.has(s)) return false;
+  return fallback;
+}
+
+// Base URL for hosted OCR figure links: PUBLIC_URL only, trimmed and without
+// a trailing slash; '' when unset. Never the request's host: the links are
+// stored in shared rows that are never refreshed.
+function readImagePublicUrl(value = process.env.PUBLIC_URL) {
+  return String(value ?? '').trim().replace(/\/+$/, '');
+}
+
 function readDisablePublicHistoryEnv() {
-  const v = process.env.DISABLE_PUBLIC_HISTORY;
-  if (v == null) return false;
-  const s = String(v).toLowerCase().trim();
-  return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+  return readFlagEnv('DISABLE_PUBLIC_HISTORY', false);
 }
 
 const TRUST_PROXY_OFF = new Set(['', 'false', 'off', 'no', '0']);
@@ -221,6 +239,15 @@ export function createApp(overrides = {}) {
   // DNS lookup for the SSRF guard; unset = the real resolver (tests inject one).
   const lookup = overrides.lookup;
   const cache = overrides.cache || null;
+  // Hosted OCR figures (PULLMD_IMAGE_HOSTING): a file store, null = hosting off.
+  // Serving stored figures (/img, get_image) needs the cache, which holds the
+  // asset rows. Hosting new ones also needs PUBLIC_URL for their links.
+  const imageStore = overrides.imageStore || null;
+  const imagePublicUrl = readImagePublicUrl(overrides.imagePublicUrl ?? process.env.PUBLIC_URL);
+  const imageServingOn = !!(cache && imageStore);
+  const imageHostingOn = imageServingOn && !!imagePublicUrl;
+  // Stored uploads (PULLMD_UPLOAD_STORE, default on); read by POST /api/file.
+  const uploadStore = overrides.uploadStore ?? readFlagEnv('PULLMD_UPLOAD_STORE', true);
   const auth = overrides.auth || null;
   const oauth = overrides.oauth || null;
   const statusChecker = overrides.statusChecker || createStatusChecker();
@@ -244,6 +271,11 @@ export function createApp(overrides = {}) {
   // (lib/file-jobs.js). Misses on the pickup routes are throttled like /s/:id.
   const fileJobs = overrides.fileJobs ?? createFileJobStore();
   const jobMissLimiter = overrides.jobMissLimiter ?? createRateLimiter({ windowMs: 60_000, max: 120 });
+
+  // pdf_images for a URL conversion (see planPdfImages).
+  function pdfImagesFor(raw) {
+    return planPdfImages(raw, { enabled: imageHostingOn, store: imageStore, publicUrl: imagePublicUrl });
+  }
 
   // Embedded image transcripts (Reddit only for now). The `images` param is
   // validated for Reddit URLs only; other URLs ignore it, even when invalid.
@@ -282,7 +314,8 @@ export function createApp(overrides = {}) {
   // Delete scope depends on the caller. The cache is URL-deduped and shared,
   // so dropping a `conversions` row affects every user's history - that stays
   // admin-only. A regular user's delete only unlinks the entry from their own
-  // history (`user_fetches`); the shared row and its share link survive.
+  // history (`user_fetches`); the shared row and its share link survive. The
+  // exception is a stored upload (no URL, one owner), which its owner deletes.
   const isGlobalScope = (req) => !auth || auth.mode === 'disabled' || !!req.user?.is_admin;
   // Counts and sizes over the whole instance, and the per-domain lists, go
   // only to callers who may see the global history: the admin, or anyone
@@ -351,6 +384,8 @@ export function createApp(overrides = {}) {
     llmBudget,
     disablePublicHistory,
     lookup,
+    imageStore: imageServingOn ? imageStore : null,
+    imagePublicUrl,
   });
   // CORS first so OPTIONS preflight short-circuits before `gate` would 401.
   app.use('/mcp', oauthCors);
@@ -433,8 +468,52 @@ export function createApp(overrides = {}) {
     return res.send(markdown);
   });
 
+  // Hosted OCR figures. Public like /s/:id: the 128-bit id is the capability,
+  // and misses count on the same limiter as share-link misses.
+  if (imageStore) {
+    const IMG_FILE = /^([0-9a-f]{32})(?:\.(?:jpe?g|png|webp|gif))?$/;
+    app.get('/img/:file', (req, res) => {
+      const miss = () => {
+        const key = shareMissLimiter.keyFor(req);
+        if (!shareMissLimiter.check(key)) {
+          res.set('Retry-After', String(shareMissLimiter.retryAfterSeconds(key)));
+          return res.status(429).json({ error: 'rate_limited' });
+        }
+        return res.status(404).json({ error: 'Image not found or expired' });
+      };
+      const m = IMG_FILE.exec(req.params.file);
+      const asset = m && cache ? cache.getAsset(m[1]) : null;
+      if (!asset) return miss();
+      let file;
+      let size;
+      try {
+        file = imageStore.filePath(asset.id, asset.mime);
+        const st = fs.statSync(file);
+        if (!st.isFile()) return miss();
+        size = st.size;
+      } catch {
+        return miss(); // row without a file
+      }
+      const stream = fs.createReadStream(file);
+      stream.on('error', () => {
+        if (!res.headersSent) miss();
+        else res.destroy();
+      });
+      stream.on('open', () => {
+        res.set({
+          'Content-Type': asset.mime,
+          'Content-Length': String(size),
+          'Cache-Control': 'private, max-age=3600',
+        });
+        // pipeline destroys the file stream when the client goes away; a bare
+        // pipe() would leave its descriptor open for every aborted download.
+        pipeline(stream, res, () => {});
+      });
+    });
+  }
+
   app.get('/api', gate, async (req, res) => {
-    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor, yt_timecodes, yt_chunk, pdf, query, max_tokens, images } = req.query;
+    const { url, comments, comment_depth, comment_limit, format, nocache, frontmatter, lang, render, extractor, yt_timecodes, yt_chunk, pdf, pdf_images, query, max_tokens, images } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const reqLang = lang === 'en' ? 'en' : 'de';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura' || extractor === 'playwright')
@@ -582,7 +661,7 @@ export function createApp(overrides = {}) {
         let shareId = null;
         const titleMatch = baseMd.match(/^#\s+(.+)$/m);
         if (cache && !noStore) {
-          shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null, metadata: redditMeta });
+          shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null, metadata: redditMeta }).shareId;
         }
 
         let bodyMd = baseMd;
@@ -675,7 +754,7 @@ export function createApp(overrides = {}) {
         const titleMatch = baseMd.match(/^#\s+(.+)$/m);
         let shareId = null;
         if (cache) {
-          shareId = cache.put({ url, title: titleMatch?.[1] || 'Hacker News', markdown: baseMd, source: 'hackernews', client, user_id: req.user?.id ?? null, metadata: hnMeta });
+          shareId = cache.put({ url, title: titleMatch?.[1] || 'Hacker News', markdown: baseMd, source: 'hackernews', client, user_id: req.user?.id ?? null, metadata: hnMeta }).shareId;
         }
 
         let bodyMd = baseMd;
@@ -735,23 +814,24 @@ export function createApp(overrides = {}) {
     }
 
     try {
-      const result = await extractWebFn(url, {
+      const { pdfImages, hosting } = pdfImagesFor(pdf_images);
+      const result = await extractWithHosting(hosting, () => extractWebFn(url, {
         comments: false,
         render: explicitRenderParam ? render : undefined,
         extractor: validExtractor,
         ytTimecodes: validYtTimecodes,
         ytChunk: validYtChunk,
         pdfOcr: pdf === 'ocr',
+        pdfImages,
+        ...(hosting && { hostImages: hosting.hostImages }),
+        lang: reqLang,
         llmAllowed: llmBudget.forRequest(req),
         ...(lookup && { lookup }),
-      });
+      }));
 
-      let shareId = null;
-      if (cache && !result.noStore) {
-        shareId = cache.put({ url, title: result.title, markdown: result.markdown, source: result.source, client, user_id: req.user?.id ?? null, metadata: result.metadata });
-      }
+      const { shareId, markdown: resultMd } = storeWebResult({ cache, result, hosting, url, client, userId: req.user?.id ?? null });
 
-      let bodyMd = result.markdown;
+      let bodyMd = resultMd;
       let ex = null;
       if (queryActive) {
         ex = await runQueryExtract(res, bodyMd, trimmedQuery, maxTokens);
@@ -786,7 +866,7 @@ export function createApp(overrides = {}) {
       if (cache) cache.logExtraction({
         url, source: result.source,
         quality: result.metadata?.quality,
-        markdownLen: result.markdown.length,
+        markdownLen: resultMd.length,
         extractorReason: result.metadata?.extractorReason || null,
         durationMs: Date.now() - t0,
         client, cached: false,
@@ -913,27 +993,65 @@ export function createApp(overrides = {}) {
   });
 
   // Convert an uploaded document (PDF/Office/EPUB/ZIP/CSV/JSON/XML) via the
-  // markitdown sidecar. Same privacy model as /api/html: no cache.put (no
-  // history, no share link), telemetry logs a constant placeholder.
+  // markitdown sidecar. Same privacy model as /api/html by default: no
+  // cache.put (no history, no share link), telemetry logs a constant
+  // placeholder. The caller opts in to keeping the result with `store=true`.
   const MAX_FILE_BYTES = '25mb';
+
+  // Keeps an uploaded conversion as a row without a URL and returns
+  // { id, shareId, markdown } (id: the new row, null when nothing was kept), the markdown being what the answer must carry.
+  // Storing is best effort: when put throws, hosted figures are removed again
+  // and the answer falls back to the caption form (it never links an /img/
+  // file without an asset row), without a share id.
+  function storeFileResult(result, hosting, job) {
+    const hosted = !!hosting && hosting.assets.length > 0;
+    try {
+      const { id, shareId } = cache.put({
+        url: null,
+        title: job.filename || result.title,
+        markdown: result.markdown,
+        source: result.source,
+        client: job.client,
+        user_id: job.userId,
+        metadata: result.metadata,
+        assets: hosted ? hosting.assets : [],
+      });
+      return { id, shareId, markdown: result.markdown };
+    } catch (err) {
+      console.warn('storing the uploaded conversion failed, serving it without a share link:', errMessage(err));
+      hosting?.rollback();
+      return { id: null, shareId: null, markdown: result.ocrFallbackMarkdown ?? result.markdown };
+    }
+  }
 
   // Shared by the synchronous answer and the async job: extract, shape the
   // markdown the JSON format returns, log telemetry. Throws on failure.
   // Uses only the plain values in `job`, never req or res.
   async function convertFile(job) {
     const t0 = Date.now();
-    const result = await extractFileFn(job.body, {
+    // Hosting is only ever planned for a stored upload (see the route), so a
+    // 'hosted' job always has somewhere to keep its figures.
+    const hosting = job.pdfImages === 'hosted'
+      ? beginHosting({ store: imageStore, publicUrl: imagePublicUrl })
+      : null;
+    const result = await extractWithHosting(hosting, () => extractFileFn(job.body, {
       filename: job.filename,
       contentType: job.contentType,
       pdfOcr: job.pdfOcr,
+      pdfImages: job.pdfImages,
+      ...(hosting && { hostImages: hosting.hostImages }),
       llmAllowed: job.llmAllowed,
       lang: job.lang,
-    });
+    }));
+
+    const { id: storedId, shareId, markdown } = job.store
+      ? storeFileResult(result, hosting, job)
+      : { id: null, shareId: null, markdown: result.markdown };
 
     const fm = job.wantFrontmatter
-      ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId: null })
+      ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId })
       : '';
-    const finalMd = fm + result.markdown;
+    const finalMd = fm + markdown;
 
     const outMd = job.wantFrontmatter
       ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
@@ -945,41 +1063,54 @@ export function createApp(overrides = {}) {
       source: result.source,
       title: result.metadata?.title || result.title,
       url: job.filename,
-      shareId: null,
+      shareId,
     });
     if (cache) cache.logExtraction({
       url: 'local-file',
       source: result.source,
       quality: result.metadata?.quality,
-      markdownLen: result.markdown.length,
+      markdownLen: markdown.length,
       extractorReason: null,
       durationMs: Date.now() - t0,
       client: job.client, cached: false,
     });
-    return { result, outMd, suggestedFilename };
+    return { result, outMd, suggestedFilename, shareId, storedId };
   }
 
   // The store does not bound error strings; an upstream message could be huge.
   const MAX_JOB_ERROR_CHARS = 500;
   const capJobError = (s) => String(s).slice(0, MAX_JOB_ERROR_CHARS);
 
+  // Removes the row an async job stored; best effort.
+  function dropStoredRow(storedId) {
+    try { cache.delete(storedId); } catch (delErr) { console.warn('removing the row of a failed job failed:', errMessage(delErr)); }
+  }
+
   // Background half of `POST /api/file?async=1`. Settles the job on every
   // path (finish or fail), so it never holds a slot until the pending
   // timeout, and never rejects: the returned promise is not awaited.
   function runFileJob(id, job) {
     (async () => {
+      let storedId = null;
       try {
-        const { result, outMd, suggestedFilename } = await convertFile(job);
-        // finish() throws on a result JSON.stringify cannot handle; the catch
-        // below fails the job then.
-        fileJobs.finish(id, {
+        const converted = await convertFile(job);
+        const { result, outMd, suggestedFilename, shareId } = converted;
+        storedId = converted.storedId;
+        // finish() throws on a result JSON.stringify cannot handle (the catch
+        // below fails the job then) and returns false when the result is not
+        // accepted (over the quota, or the job was cancelled meanwhile). Either
+        // way the row stored for the job goes, so no share link or figure
+        // outlives a job that never delivered its result.
+        const accepted = fileJobs.finish(id, {
           markdown: outMd,
           metadata: result.metadata || null,
           source: result.source,
-          shareId: null,
+          shareId,
           suggestedFilename,
         });
+        if (!accepted && storedId != null) dropStoredRow(storedId);
       } catch (err) {
+        if (storedId != null) dropStoredRow(storedId);
         if (err?.status === 422 || isConverterBusy(err)) {
           fileJobs.fail(id, { error: capJobError(err.message), httpStatus: err.status });
           return;
@@ -1000,7 +1131,7 @@ export function createApp(overrides = {}) {
   const jobClientKey = (req) => (req.user?.id != null ? `user:${req.user.id}` : `ip:${jobMissLimiter.keyFor(req)}`);
 
   app.post('/api/file', gate, express.raw({ type: () => true, limit: MAX_FILE_BYTES }), async (req, res) => {
-    const { format, frontmatter, pdf, lang } = req.query;
+    const { format, frontmatter, pdf, lang, store, pdf_images } = req.query;
     let filename = req.query.filename;
     const filenameHeader = req.headers['x-filename'];
     if (filenameHeader) {
@@ -1015,12 +1146,19 @@ export function createApp(overrides = {}) {
 
     // Everything taken from `req` is read here, before a 202 could be sent:
     // the background conversion must not touch req or res afterwards.
+    // Keeping the result is opt-in per request and needs an instance that
+    // allows it; otherwise `store` is ignored and nothing is written.
+    const storeJob = (store === 'true' || store === '1') && uploadStore && !!cache;
     const job = {
       body: req.body,
       filename,
       contentType,
       wantFrontmatter,
       pdfOcr: pdf === 'ocr',
+      store: storeJob,
+      // Hosted figures need a stored row to hang their asset rows on.
+      pdfImages: parsePdfImages(pdf_images, imageHostingOn && storeJob),
+      userId: req.user?.id ?? null,
       lang: lang === 'en' ? 'en' : 'de',
       client: detectClient(req.headers['user-agent'], req.headers['x-client-mode'] || req.query.client_mode),
       llmAllowed: llmBudget.forRequest(req),
@@ -1036,15 +1174,16 @@ export function createApp(overrides = {}) {
     }
 
     try {
-      const { result, outMd, suggestedFilename } = await convertFile(job);
+      const { result, outMd, suggestedFilename, shareId } = await convertFile(job);
 
       res.set('X-Source', result.source);
       if (suggestedFilename) res.set('X-Suggested-Filename', suggestedFilename);
+      if (shareId) res.set('X-Share-Id', shareId);
       if (result.metadata?.quality !== undefined) {
         res.set('X-Quality', String(result.metadata.quality));
       }
       if (format === 'json') {
-        return res.json({ markdown: outMd, metadata: result.metadata || null, source: result.source, shareId: null });
+        return res.json({ markdown: outMd, metadata: result.metadata || null, source: result.source, shareId });
       }
       if (format === 'text') {
         res.set('Content-Type', 'text/plain; charset=utf-8');
@@ -1097,7 +1236,7 @@ export function createApp(overrides = {}) {
   });
 
   app.get('/api/stream', gate, async (req, res) => {
-    const { url, comments, comment_depth, comment_limit, frontmatter, lang, nocache, render, extractor, yt_timecodes, yt_chunk, pdf, images } = req.query;
+    const { url, comments, comment_depth, comment_limit, frontmatter, lang, nocache, render, extractor, yt_timecodes, yt_chunk, pdf, pdf_images, images } = req.query;
     const wantFrontmatter = frontmatter === 'true' || frontmatter === '1';
     const reqLang = lang === 'en' ? 'en' : 'de';
     const validExtractor = (extractor === 'readability' || extractor === 'trafilatura' || extractor === 'playwright')
@@ -1211,7 +1350,7 @@ export function createApp(overrides = {}) {
         const titleMatch = baseMd.match(/^#\s+(.+)$/m);
         let shareId = null;
         if (cache && !noStore) {
-          shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null, metadata: redditMeta });
+          shareId = cache.put({ url, title: titleMatch?.[1] || 'Reddit Post', markdown: baseMd, source: 'reddit', client, user_id: req.user?.id ?? null, metadata: redditMeta }).shareId;
         }
         const quality = qualityScore(baseMd);
         const fm = wantFrontmatter
@@ -1245,7 +1384,7 @@ export function createApp(overrides = {}) {
           const titleMatch = baseMd.match(/^#\s+(.+)$/m);
           let shareId = null;
           if (cache) {
-            shareId = cache.put({ url, title: titleMatch?.[1] || 'Hacker News', markdown: baseMd, source: 'hackernews', client, user_id: req.user?.id ?? null, metadata: hnMeta });
+            shareId = cache.put({ url, title: titleMatch?.[1] || 'Hacker News', markdown: baseMd, source: 'hackernews', client, user_id: req.user?.id ?? null, metadata: hnMeta }).shareId;
           }
           const quality = qualityScore(baseMd);
           const fm = wantFrontmatter
@@ -1267,28 +1406,29 @@ export function createApp(overrides = {}) {
       }
 
       // Web path with optional Playwright fallback inside extractWeb
-      const result = await extractWebFn(url, {
+      const { pdfImages, hosting } = pdfImagesFor(pdf_images);
+      const result = await extractWithHosting(hosting, () => extractWebFn(url, {
         comments: false,
         render: explicitRenderParam ? render : undefined,
         extractor: validExtractor,
         ytTimecodes: validYtTimecodes,
         ytChunk: validYtChunk,
         pdfOcr: pdf === 'ocr',
+        pdfImages,
+        ...(hosting && { hostImages: hosting.hostImages }),
+        lang: reqLang,
         llmAllowed: llmBudget.forRequest(req),
         ...(lookup && { lookup }),
         emit,
         signal: ac.signal,
-      });
+      }));
 
-      let shareId = null;
-      if (cache && !result.noStore) {
-        shareId = cache.put({ url, title: result.title, markdown: result.markdown, source: result.source, client, user_id: req.user?.id ?? null, metadata: result.metadata });
-      }
+      const { shareId, markdown: resultMd } = storeWebResult({ cache, result, hosting, url, client, userId: req.user?.id ?? null });
 
       const fm = wantFrontmatter
         ? buildFrontmatter(result.metadata || {}, { source: result.source, shareId })
         : '';
-      const finalMd = fm + result.markdown;
+      const finalMd = fm + resultMd;
 
       const outMd = wantFrontmatter
         ? mergeMediaFrontmatter(finalMd, result.metadata, result.source)
@@ -1307,7 +1447,7 @@ export function createApp(overrides = {}) {
       if (cache) cache.logExtraction({
         url, source: result.source,
         quality: result.metadata?.quality,
-        markdownLen: result.markdown.length,
+        markdownLen: resultMd.length,
         extractorReason: result.metadata?.extractorReason || null,
         durationMs: Date.now() - t0,
         client, cached: false,
@@ -1383,6 +1523,8 @@ export function createApp(overrides = {}) {
       vision: !!(process.env.PULLMD_VISION_API_KEY || process.env.PULLMD_LLM_API_KEY),
       stt: !!(process.env.PULLMD_STT_API_KEY || process.env.PULLMD_LLM_API_KEY),
       pdfOcr: !!process.env.PULLMD_PDF_OCR_API_KEY,
+      imageHosting: imageHostingOn,
+      uploadStore,
       markitdownYoutube: isYoutubeEnabled(),
     });
   });
@@ -1428,7 +1570,9 @@ export function createApp(overrides = {}) {
     const id = parseInt(req.params.id, 10);
     if (!id) return res.status(400).json({ error: 'Invalid ID' });
     const isGlobal = isGlobalScope(req);
-    const result = isGlobal
+    // A stored upload has exactly one owner, so deleting it is not a shared
+    // row being unlinked: the row and its hosted figures really go.
+    const result = isGlobal || cache.isOwnedUpload(req.user.id, id)
       ? cache.delete(id)
       : cache.forgetForUser(req.user.id, id);
     if (!result.changes) {
@@ -1445,7 +1589,11 @@ export function createApp(overrides = {}) {
       const result = cache.deleteAll();
       return res.json({ ok: true, scope: 'global', removed: result.changes });
     }
+    // The user's own stored uploads are deleted for real (see above); the
+    // fetch rows pointing at them are counted by forgetAllForUser first.
+    const ownedUploads = cache.ownedUploadIds(req.user.id);
     const result = cache.forgetAllForUser(req.user.id);
+    for (const id of ownedUploads) cache.delete(id);
     res.json({ ok: true, scope: 'user', removed: result.changes });
   });
 
@@ -1461,7 +1609,24 @@ if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
   const port = process.env.PORT || 3000;
   // Read once so a malformed value warns a single time and cache + app agree.
   const retentionDays = readCacheRetentionDays();
-  const cache = createCache(process.env.CACHE_DB || './data/cache.db', { retentionDays });
+  const cacheDb = process.env.CACHE_DB || './data/cache.db';
+  // Hosted OCR figures live next to the database. The cache tells the store
+  // which files to delete when rows expire or are replaced. Cleanup runs even
+  // with hosting off, so figures from a time it was on still go with their
+  // rows; PULLMD_IMAGE_HOSTING only gates serving and hosting (createApp).
+  const imageHosting = readFlagEnv('PULLMD_IMAGE_HOSTING', false);
+  const imageStore = createImageStore(path.join(path.dirname(cacheDb), 'images'));
+  const cache = createCache(cacheDb, {
+    retentionDays,
+    onAssetsRemoved: (assets) => imageStore.remove(assets),
+  });
+  // Files without a row (a crash between write and put) and leftover temp
+  // files. A missing images directory is left alone, not created.
+  const swept = imageStore.sweep(new Set(cache.listAssetIds()));
+  if (swept > 0) console.log(`Image store: removed ${swept} orphaned file(s)`);
+  if (imageHosting && !readImagePublicUrl()) {
+    console.warn('[config] PULLMD_IMAGE_HOSTING is on but PUBLIC_URL is not set: pdf_images=hosted falls back to caption until PUBLIC_URL is set.');
+  }
   const mode = process.env.PULLMD_AUTH_MODE || 'disabled';
   const auth = createAuth({ db: cache.db, mode, env: process.env, publicUrl: process.env.PUBLIC_URL });
   try {
@@ -1518,7 +1683,7 @@ if (isDirectRun || process.argv[1]?.endsWith('server.js')) {
     console.log('OAuth disabled (set OAUTH_JWT_SECRET to enable claude.ai web connector flow)');
   }
 
-  const app = createApp({ cache, auth, oauth, retentionDays });
+  const app = createApp({ cache, auth, oauth, retentionDays, imageStore: imageHosting ? imageStore : null });
   app.listen(port, () => {
     console.log(`PullMD running on http://localhost:${port} (auth: ${mode})`);
   });

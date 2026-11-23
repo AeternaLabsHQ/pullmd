@@ -132,7 +132,7 @@ describe('cache: per-user history unlink', () => {
   });
 
   it('forgetForUser removes only the caller fetch row, not the conversion', () => {
-    const shareId = cache.put({ url: 'https://a.test/1', title: 't', markdown: '# t', source: 's', user_id: uid });
+    const shareId = cache.put({ url: 'https://a.test/1', title: 't', markdown: '# t', source: 's', user_id: uid }).shareId;
     const id = cache.getIdByUrl('https://a.test/1');
 
     const r = cache.forgetForUser(uid, id);

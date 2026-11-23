@@ -96,7 +96,7 @@ describe('integration: auth gating in createApp', () => {
       const shareId = cache.put({
         url: 'https://pub.com', title: 'Pub', markdown: '# pub',
         source: 'readability', client: 'api', user_id: adminId,
-      });
+      }).shareId;
       const r = await fetch(base + '/s/' + shareId);
       assert.equal(r.status, 200);
     });

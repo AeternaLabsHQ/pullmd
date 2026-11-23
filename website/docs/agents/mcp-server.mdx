@@ -5,7 +5,7 @@ description: Add PullMD's MCP server to Claude Code, Cursor and other MCP client
 
 # MCP server
 
-Every PullMD instance serves a remote MCP server at `/mcp` (Streamable HTTP transport, stateless). It has three tools: `read_url`, `get_share` and `list_recent`. The client needs no install, and tool updates reach every client when you update PullMD.
+Every PullMD instance serves a remote MCP server at `/mcp` (Streamable HTTP transport, stateless). Its tools are `read_url`, `get_share` and `list_recent`, plus `get_image` when the instance hosts PDF figures (`PULLMD_IMAGE_HOSTING=true`). The client needs no install, and tool updates reach every client when you update PullMD.
 
 ## Add it to your client
 
@@ -52,8 +52,9 @@ Replace `http://localhost:3000` with your instance's address.
 | Tool | What it does |
 | --- | --- |
 | `read_url` | Converts a URL to Markdown. Takes the options in the [MCP tools reference](/reference/mcp-tools), including `query` for [query-scoped extraction](/guides/query-scoped-extraction). |
-| `get_share` | Returns a cached conversion by its share id, refreshing it if it's more than an hour old. |
+| `get_share` | Returns a cached conversion by its share id, refreshing it if it's more than an hour old. PDF OCR conversions and stored uploads come back as stored. |
 | `list_recent` | Lists recent conversions with their share ids. With sign-in enabled, only your own. |
+| `get_image` | Returns a hosted PDF figure as an image. Only on instances with `PULLMD_IMAGE_HOSTING=true`. |
 
 Full parameters and output for each are in the [MCP tools reference](/reference/mcp-tools).
 

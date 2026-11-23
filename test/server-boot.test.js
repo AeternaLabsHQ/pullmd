@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import { formatBootstrapError } from '../lib/auth.js';
 import { computeRecipesHash } from '../lib/recipes.js';
+import { createCache } from '../lib/cache.js';
 
 // Boots `node server.js` for real. Nothing else executes the startup block at
 // the bottom of server.js (cache, auth migration, recipes, OAuth, listen).
@@ -170,7 +171,11 @@ describe('node server.js', { concurrency: true }, () => {
       assert.equal(storage.retentionDays, 7);
       assert.ok(storage.dbSizeBytes > 0, 'storage stats must come from the database file');
       assert.ok(fs.existsSync(path.join(dir, `${name}.db`)));
-      assert.equal((await (await fetch(`${base}/api/config`)).json()).authMode, 'disabled');
+      const config = await (await fetch(`${base}/api/config`)).json();
+      assert.equal(config.authMode, 'disabled');
+      assert.equal(config.imageHosting, false, 'figure hosting is opt-in');
+      assert.equal(config.uploadStore, true);
+      assert.equal((await fetch(`${base}/img/${'a'.repeat(32)}.jpeg`)).status, 404);
 
       // No OAuth without OAUTH_JWT_SECRET.
       assert.equal((await fetch(`${base}/.well-known/oauth-authorization-server`)).status, 404);
@@ -251,6 +256,90 @@ describe('node server.js', { concurrency: true }, () => {
     } finally {
       db.close();
     }
+  });
+
+  it('with PULLMD_IMAGE_HOSTING, creates the image store next to the database and sweeps orphans', async () => {
+    // Own directory: every boot sweeps the images directory next to its database.
+    const sub = path.join(dir, 'hosting');
+    const images = path.join(sub, 'images');
+    const orphanId = 'ab'.repeat(16);
+    fs.mkdirSync(path.join(images, 'ab'), { recursive: true });
+    fs.writeFileSync(path.join(images, 'ab', `${orphanId}.jpeg`), 'orphan');
+    fs.writeFileSync(path.join(images, 'ab', `${orphanId}.jpeg.0011.tmp`), 'tmp');
+
+    const { child, port, base } = await boot('hosting', (p) => ({
+      PULLMD_IMAGE_HOSTING: 'true', PUBLIC_URL: `http://127.0.0.1:${p}`, CACHE_DB: path.join(sub, 'cache.db'),
+    }));
+    try {
+      assert.match(child.out, /Image store: removed 2 orphaned file\(s\)/);
+      assert.doesNotMatch(child.err, /PUBLIC_URL/);
+      assert.deepEqual(fs.readdirSync(images), [], 'the orphans and their empty shard are gone');
+      assert.equal((await (await fetch(`${base}/api/config`)).json()).imageHosting, true);
+      const miss = await fetch(`${base}/img/${orphanId}.jpeg`);
+      assert.equal(miss.status, 404);
+      assert.match((await miss.json()).error, /Image not found/, 'the /img route is registered');
+    } finally {
+      await stop(child);
+    }
+    await assertGone(child, port);
+  });
+
+  it('with PULLMD_IMAGE_HOSTING but no PUBLIC_URL, warns once and hosts no new figures', async () => {
+    const sub = path.join(dir, 'hosting-no-url');
+    fs.mkdirSync(sub);
+    const { child, port, base } = await boot('hosting-no-url', () => ({
+      PULLMD_IMAGE_HOSTING: 'true',
+      CACHE_DB: path.join(sub, 'cache.db'),
+    }));
+    try {
+      const warnings = child.err.match(/PULLMD_IMAGE_HOSTING is on but PUBLIC_URL is not set/g) || [];
+      assert.equal(warnings.length, 1, child.err);
+      assert.equal((await (await fetch(`${base}/api/config`)).json()).imageHosting, false);
+      const miss = await fetch(`${base}/img/${'ab'.repeat(16)}.jpeg`);
+      assert.match((await miss.json()).error, /Image not found/, 'the /img route still serves stored figures');
+    } finally {
+      await stop(child);
+    }
+    await assertGone(child, port);
+  });
+
+  it('with PULLMD_IMAGE_HOSTING off, deleting a conversion still removes its figure files', async () => {
+    const sub = path.join(dir, 'hosting-off');
+    fs.mkdirSync(sub);
+    const id = 'cd'.repeat(16);
+    const file = path.join(sub, 'images', 'cd', `${id}.jpeg`);
+    const seed = createCache(path.join(sub, 'cache.db'));
+    const { id: rowId } = seed.put({
+      url: 'https://docs.example.com/a.pdf', title: 'a.pdf', markdown: '# a', source: 'pdf-ocr',
+      assets: [{ id, mime: 'image/jpeg', size: 2 }],
+    });
+    seed.db.close();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'xx');
+
+    const { child, port, base } = await boot('hosting-off', () => ({ CACHE_DB: path.join(sub, 'cache.db') }));
+    try {
+      assert.ok(fs.existsSync(file), 'the startup sweep keeps a file that has its row');
+      assert.equal((await fetch(`${base}/img/${id}.jpeg`)).status, 404, 'no /img route with hosting off');
+      const del = await fetch(`${base}/api/cache/${rowId}`, { method: 'DELETE' });
+      assert.equal(del.status, 200);
+      assert.equal(fs.existsSync(file), false, 'the figure file goes with its row');
+    } finally {
+      await stop(child);
+    }
+    await assertGone(child, port);
+  });
+
+  it('with PULLMD_IMAGE_HOSTING off and no images directory, startup creates none', async () => {
+    const sub = path.join(dir, 'no-images');
+    fs.mkdirSync(sub);
+    const { child, port } = await boot('no-images', () => ({ CACHE_DB: path.join(sub, 'cache.db') }));
+    try {
+      assert.equal(fs.existsSync(path.join(sub, 'images')), false);
+    } finally {
+      await stop(child);
+    }
+    await assertGone(child, port);
   });
 
   it('exits 1 with the bootstrap help when auth is on but no admin credentials are set', async () => {

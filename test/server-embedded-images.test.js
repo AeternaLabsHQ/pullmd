@@ -225,7 +225,7 @@ describe('/s/:id refresh with embedded images', () => {
     await withEnv({}, async () => {
       const stub = recordingStub({ noStore: true, budgetDeferred: true, markdown: '# New\n\nNew body.' });
       const { app, cache } = makeApp(stub);
-      const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: '# Old\n\nOld body.', source: 'reddit' });
+      const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: '# Old\n\nOld body.', source: 'reddit' }).shareId;
       cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE url = ?").run(REDDIT);
 
       const res = await request(app, `/s/${shareId}`);
@@ -246,7 +246,7 @@ describe('/s/:id refresh with embedded images', () => {
     await withEnv({}, async () => {
       const stub = recordingStub({ noStore: true });
       const { app, cache } = makeApp(stub);
-      const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: '# Old', source: 'reddit' });
+      const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: '# Old', source: 'reddit' }).shareId;
       cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE url = ?").run(REDDIT);
       const res = await request(app, `/s/${shareId}`);
       assert.equal(res.body, '# Old');
@@ -260,7 +260,7 @@ describe('/s/:id refresh with embedded images', () => {
     await withEnv({ PULLMD_EMBEDDED_IMAGES: 'always' }, async () => {
       const stub = recordingStub();
       const { app, cache } = makeApp(stub);
-      const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: '# Old', source: 'reddit' });
+      const shareId = cache.put({ url: REDDIT, title: 'Old', markdown: '# Old', source: 'reddit' }).shareId;
       cache.db.prepare("UPDATE conversions SET created_at = datetime('now', '-2 hours') WHERE url = ?").run(REDDIT);
       await request(app, `/s/${shareId}`);
       assert.equal(stub.calls[0].images, 'on');
