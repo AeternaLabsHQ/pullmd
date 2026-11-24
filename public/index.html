@@ -293,17 +293,6 @@
       gap: 0.625rem 1rem;
     }
 
-    /* Comments, depth and "All" belong together: one group, set off from
-       the other switches by a thin vertical rule. */
-    .control-group {
-      display: inline-flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 0.625rem 1rem;
-      padding-right: 1rem;
-      border-right: 1px solid var(--border-strong);
-    }
-
     /* Toggle switch */
     .toggle-label {
       display: inline-flex;
@@ -356,6 +345,60 @@
     }
     #depth-input:focus { border-color: var(--accent); }
     #depth-input:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Advanced settings: a native <details> under the toggle bar, groups by
+       kind of content, every setting with a one-line hint underneath. */
+    #advanced-panel {
+      border-top: 1px solid var(--border);
+      padding-top: 0.625rem;
+    }
+    #advanced-panel > summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      font-size: 0.8125rem;
+      color: var(--fg-muted);
+      border-radius: 6px;
+    }
+    #advanced-panel > summary::-webkit-details-marker { display: none; }
+    #advanced-panel > summary::before {
+      content: '';
+      width: 0.4375rem; height: 0.4375rem;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(-45deg);
+      transition: transform 0.15s;
+    }
+    #advanced-panel[open] > summary::before { transform: rotate(45deg); }
+    #advanced-panel > summary:hover { color: var(--fg); }
+    #advanced-panel > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    #advanced-count:empty { display: none; }
+    #advanced-count { font-size: 0.75rem; color: var(--accent); }
+    .adv-body { display: flex; flex-direction: column; gap: 1rem; padding-top: 0.875rem; }
+    .adv-group[hidden], .adv-row[hidden] { display: none; }
+    .adv-group-title {
+      margin: 0 0 0.5rem;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--fg-dim);
+    }
+    .adv-rows {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem 1.5rem;
+    }
+    .adv-row { display: flex; flex-direction: column; gap: 0.25rem; transition: opacity 0.15s; }
+    .adv-row > .toggle-label { min-height: 1.75rem; }
+    .adv-hint { font-size: 0.75rem; line-height: 1.4; color: var(--fg-dim); }
+    .adv-row.adv-disabled { opacity: 0.4; }
+    .adv-row.adv-disabled .toggle-label { cursor: not-allowed; }
+    #advanced-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; }
+    #advanced-actions:empty { display: none; }
 
     /* Go button */
     #go-btn {
@@ -1108,8 +1151,7 @@
     @media (max-width: 480px) {
       .container { padding: 1.5rem 1rem 4rem; }
       .controls { gap: 0.5rem 0.875rem; }
-      /* On a phone the group gets its own row; the rule would dangle at the line end. */
-      .control-group { gap: 0.5rem 0.875rem; padding-right: 0; border-right: 0; flex-basis: 100%; }
+      .adv-rows { grid-template-columns: minmax(0, 1fr); }
       #go-btn { width: 100%; margin-left: 0; justify-content: center; }
       /* Three action buttons plus the badges and the Raw|Rendered toggle do not
          fit on a phone - collapse the buttons to their icons. The accessible
@@ -1289,22 +1331,11 @@
         </div>
 
         <div class="controls">
-          <div class="control-group" id="comments-group">
           <label class="toggle-label">
             <input type="checkbox" id="comments-toggle" checked>
             <span class="toggle-track"></span>
             <span data-i18n="toggle.comments">Kommentare</span>
           </label>
-          <label class="toggle-label" id="depth-label">
-            <span data-i18n="toggle.depth">Tiefe</span>
-            <input type="number" id="depth-input" value="3" min="1" max="10">
-          </label>
-          <label class="toggle-label" id="all-comments-label" data-i18n-attr="title" data-i18n-attr-key="toggle.allComments.title">
-            <input type="checkbox" id="all-comments-toggle">
-            <span class="toggle-track"></span>
-            <span data-i18n="toggle.allComments">Alle</span>
-          </label>
-          </div>
           <label class="toggle-label">
             <input type="checkbox" id="frontmatter-toggle">
             <span class="toggle-track"></span>
@@ -1315,16 +1346,62 @@
             <span class="toggle-track"></span>
             <span data-i18n="toggle.ocr">PDF-OCR</span>
           </label>
-          <label class="toggle-label" id="store-images-label" style="display:none;" data-i18n-attr="title" data-i18n-attr-key="toggle.storeImages.title">
-            <input type="checkbox" id="store-images-toggle">
-            <span class="toggle-track"></span>
-            <span data-i18n="toggle.storeImages">Speichern + Bilder</span>
-          </label>
           <button id="go-btn">
             <span data-i18n="btn.pull">Pull</span>
             <span class="arrow" aria-hidden="true">→</span>
           </button>
         </div>
+
+        <details id="advanced-panel">
+          <summary>
+            <span data-i18n="adv.title">Erweitert</span>
+            <span id="advanced-count"></span>
+          </summary>
+          <div class="adv-body">
+            <section class="adv-group" id="adv-group-comments">
+              <h3 class="adv-group-title" data-i18n="adv.group.comments">Reddit und Hacker News</h3>
+              <div class="adv-rows">
+                <div class="adv-row">
+                  <label class="toggle-label" id="depth-label">
+                    <span data-i18n="toggle.depth">Tiefe</span>
+                    <input type="number" id="depth-input" value="3" min="1" max="10">
+                  </label>
+                  <span class="adv-hint" data-i18n="adv.depth.hint">Wie viele Antwortebenen mitkommen.</span>
+                </div>
+                <div class="adv-row">
+                  <label class="toggle-label" id="all-comments-label">
+                    <input type="checkbox" id="all-comments-toggle">
+                    <span class="toggle-track"></span>
+                    <span data-i18n="toggle.allComments">Alle</span>
+                  </label>
+                  <span class="adv-hint" data-i18n="toggle.allComments.title">Alle Kommentare ohne Tiefengrenze.</span>
+                </div>
+              </div>
+            </section>
+            <section class="adv-group" id="adv-group-youtube" hidden>
+              <h3 class="adv-group-title" data-i18n="adv.group.youtube">YouTube</h3>
+              <div class="adv-rows"></div>
+            </section>
+            <section class="adv-group" id="adv-group-docs" hidden>
+              <h3 class="adv-group-title" data-i18n="adv.group.docs">PDF und Dokumente</h3>
+              <div class="adv-rows">
+                <div class="adv-row" id="adv-row-store" hidden>
+                  <label class="toggle-label" id="store-images-label">
+                    <input type="checkbox" id="store-images-toggle">
+                    <span class="toggle-track"></span>
+                    <span data-i18n="toggle.store">Uploads speichern</span>
+                  </label>
+                  <span class="adv-hint" data-i18n="toggle.store.title">Ergebnis bekommt einen Share-Link und erscheint im Verlauf.</span>
+                </div>
+              </div>
+            </section>
+            <section class="adv-group" id="adv-group-web" hidden>
+              <h3 class="adv-group-title" data-i18n="adv.group.web">Webseiten</h3>
+              <div class="adv-rows"></div>
+            </section>
+            <div id="advanced-actions"></div>
+          </div>
+        </details>
 
       </div>
     </div>
@@ -1505,9 +1582,13 @@
           'toggle.comments':   'Kommentare',
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF-OCR',
-          'toggle.storeImages': 'Speichern + Bilder',
-          'toggle.storeImages.title': 'Ergebnis bekommt einen Share-Link und erscheint im Verlauf. Abbildungen aus OCR-PDFs werden mitgespeichert.',
-          'toggle.store':       'Speichern',
+          'adv.title':          'Erweitert',
+          'adv.group.comments': 'Reddit und Hacker News',
+          'adv.group.youtube':  'YouTube',
+          'adv.group.docs':     'PDF und Dokumente',
+          'adv.group.web':      'Webseiten',
+          'adv.depth.hint':     'Wie viele Antwortebenen mitkommen.',
+          'toggle.store':       'Uploads speichern',
           'toggle.store.title': 'Ergebnis bekommt einen Share-Link und erscheint im Verlauf.',
           'history.stored':     'Datei',
           'toggle.depth':      'Tiefe',
@@ -1580,9 +1661,13 @@
           'toggle.comments':   'Comments',
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF OCR',
-          'toggle.storeImages': 'Store + images',
-          'toggle.storeImages.title': 'The result gets a share link and shows up in the history. Figures from OCR PDFs are stored with it.',
-          'toggle.store':       'Store',
+          'adv.title':          'Advanced',
+          'adv.group.comments': 'Reddit and Hacker News',
+          'adv.group.youtube':  'YouTube',
+          'adv.group.docs':     'PDFs and documents',
+          'adv.group.web':      'Web pages',
+          'adv.depth.hint':     'How many reply levels are included.',
+          'toggle.store':       'Store uploads',
           'toggle.store.title': 'The result gets a share link and shows up in the history.',
           'history.stored':     'File',
           'toggle.depth':      'Depth',
@@ -1777,6 +1862,7 @@
       const ocrToggle = document.getElementById('ocr-toggle');
       const storeToggle = document.getElementById('store-images-toggle');
       const depthInput = document.getElementById('depth-input');
+      const advancedPanel = document.getElementById('advanced-panel');
       const depthLabel = document.getElementById('depth-label');
       const allCommentsToggle = document.getElementById('all-comments-toggle');
       const allCommentsLabel = document.getElementById('all-comments-label');
@@ -2232,11 +2318,33 @@
         updateDepthVisibility();
       });
 
+      // A group without a visible setting does not show up (a group is hidden
+      // by default and appears once a row in it is shown).
+      function syncAdvancedGroups() {
+        document.querySelectorAll('#advanced-panel .adv-group').forEach(function (g) {
+          g.hidden = !g.querySelector('.adv-row:not([hidden])');
+        });
+      }
+      syncAdvancedGroups();
+
+      // Open or closed is remembered; the default is closed.
+      (function restoreAdvancedPanel() {
+        try {
+          if (localStorage.getItem('pullmd-advanced-open') === 'true') advancedPanel.open = true;
+        } catch (e) {}
+      })();
+      advancedPanel.addEventListener('toggle', function () {
+        try { localStorage.setItem('pullmd-advanced-open', String(advancedPanel.open)); } catch (e) {}
+      });
+
+      // Comments off greys the comment settings out (they stay in the panel
+      // and keep their value); "All" additionally takes the depth field.
       function updateDepthVisibility() {
-        const display = commentsToggle.checked ? '' : 'none';
-        depthLabel.style.display = display;
-        allCommentsLabel.style.display = display;
-        depthInput.disabled = allCommentsToggle.checked;
+        const off = !commentsToggle.checked;
+        depthLabel.closest('.adv-row').classList.toggle('adv-disabled', off);
+        allCommentsLabel.closest('.adv-row').classList.toggle('adv-disabled', off);
+        depthInput.disabled = off || allCommentsToggle.checked;
+        allCommentsToggle.disabled = off;
       }
       commentsToggle.addEventListener('change', updateDepthVisibility);
       updateDepthVisibility();
@@ -2408,18 +2516,8 @@
           }
           uploadStoreEnabled = !!c.uploadStore;
           imageHostingEnabled = !!c.imageHosting;
-          if (uploadStoreEnabled) {
-            var storeLabel = document.getElementById('store-images-label');
-            if (storeLabel) {
-              // Without hosting there are no figures to store: plain "Store".
-              if (!imageHostingEnabled) {
-                storeLabel.setAttribute('data-i18n-attr-key', 'toggle.store.title');
-                storeLabel.querySelector('[data-i18n]').setAttribute('data-i18n', 'toggle.store');
-              }
-              storeLabel.style.display = '';
-              window.PullMD.setLang(window.PullMD.getLang());
-            }
-          }
+          document.getElementById('adv-row-store').hidden = !uploadStoreEnabled;
+          syncAdvancedGroups();
           if (markitdownEnabled) {
             var hint = document.querySelector('#drop-overlay .drop-box');
             if (hint) hint.setAttribute('data-i18n', 'drop.hintDoc');

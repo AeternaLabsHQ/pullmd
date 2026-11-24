@@ -15,6 +15,8 @@ describe('comment options', () => {
     t.after(() => app.close());
     const { context, page } = await openPage(browser, app.baseUrl);
     t.after(() => context.close());
+    // Depth and "All" live in the collapsed advanced panel.
+    await page.locator('#advanced-panel > summary').click();
     return { app, page };
   }
 
@@ -44,11 +46,14 @@ describe('comment options', () => {
     assert.equal(app.calls.reddit[0][1].commentDepth, 3);
   });
 
-  it('switching comments off hides depth and sends comments=false', async (t) => {
+  it('switching comments off greys depth out and sends comments=false', async (t) => {
     const { app, page } = await setup(t);
     await commentsToggle(page).click();
-    assert.equal(await depth(page).isVisible(), false);
-    assert.equal(await allToggle(page).isVisible(), false);
+    assert.equal(await depth(page).isVisible(), true);
+    assert.equal(await depth(page).isDisabled(), true);
+    assert.equal(await page.locator('#all-comments-toggle').isDisabled(), true);
+    assert.equal(await page.locator('.adv-row.adv-disabled #depth-input').count(), 1);
+    assert.equal(await page.locator('.adv-row.adv-disabled #all-comments-toggle').count(), 1);
 
     const params = await convertAndCapture(page, REDDIT_URL);
     assert.equal(params.get('comments'), 'false');
@@ -92,6 +97,7 @@ describe('comment options', () => {
     assert.equal(await page.locator('#comments-toggle').isChecked(), false);
     assert.equal(await page.locator('#all-comments-toggle').isChecked(), true);
     assert.equal(await page.locator('#depth-input').inputValue(), '7');
-    assert.equal(await depth(page).isVisible(), false);
+    assert.equal(await depth(page).isDisabled(), true);
+    assert.equal(await page.locator('.adv-row.adv-disabled #depth-input').count(), 1);
   });
 });

@@ -1,4 +1,4 @@
-// "Store + images" toggle, hosted OCR figures and stored uploads in the PWA.
+// "Store uploads" toggle, hosted OCR figures and stored uploads in the PWA.
 // The API answers are mocked with page.route: these tests are about what the
 // page sends, shows and refuses to load, not about the server.
 import { describe, it, before, after } from 'node:test';
@@ -14,7 +14,7 @@ const KEY = 'pullmd-store-images';
 const json = (route, body, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
-describe('store + images', () => {
+describe('store uploads', () => {
   let browser;
   let app;
   before(async () => {
@@ -38,6 +38,8 @@ describe('store + images', () => {
     await context.route('**/api/history*', (route) => json(route, history));
     if (mock) await mock(context);
     await page.goto(app.baseUrl + '/');
+    // The toggle lives in the collapsed advanced panel.
+    await page.locator('#advanced-panel > summary').click();
     return { page, seen };
   }
 
@@ -65,32 +67,27 @@ describe('store + images', () => {
       assert.equal(await page.locator('#store-images-label').isVisible(), false);
     });
 
-    it('reads "Speichern + Bilder" with the full hint when hosting is on', async (t) => {
+    it('reads "Uploads speichern" with the hint underneath', async (t) => {
       const { page } = await setup(t);
       const label = page.locator('#store-images-label');
       await label.waitFor();
-      assert.equal(await label.innerText(), 'Speichern + Bilder');
-      assert.equal(await label.getAttribute('title'),
-        'Ergebnis bekommt einen Share-Link und erscheint im Verlauf. Abbildungen aus OCR-PDFs werden mitgespeichert.');
+      assert.equal(await label.innerText(), 'Uploads speichern');
+      assert.equal(await label.getAttribute('title'), null);
+      const hint = page.locator('#adv-row-store .adv-hint');
+      assert.equal(await hint.innerText(), 'Ergebnis bekommt einen Share-Link und erscheint im Verlauf.');
 
       await page.locator('#lang-toggle').click();
-      assert.equal(await label.innerText(), 'Store + images');
-      assert.equal(await label.getAttribute('title'),
-        'The result gets a share link and shows up in the history. Figures from OCR PDFs are stored with it.');
+      assert.equal(await label.innerText(), 'Store uploads');
+      assert.equal(await hint.innerText(), 'The result gets a share link and shows up in the history.');
     });
 
-    it('reads "Speichern" without the figures sentence when hosting is off', async (t) => {
+    it('reads the same when hosting is off', async (t) => {
       const { page } = await setup(t, { config: { imageHosting: false } });
       const label = page.locator('#store-images-label');
       await label.waitFor();
-      assert.equal(await label.innerText(), 'Speichern');
-      assert.equal(await label.getAttribute('title'),
+      assert.equal(await label.innerText(), 'Uploads speichern');
+      assert.equal(await page.locator('#adv-row-store .adv-hint').innerText(),
         'Ergebnis bekommt einen Share-Link und erscheint im Verlauf.');
-
-      await page.locator('#lang-toggle').click();
-      assert.equal(await label.innerText(), 'Store');
-      assert.equal(await label.getAttribute('title'),
-        'The result gets a share link and shows up in the history.');
     });
 
     it('remembers its state', async (t) => {
