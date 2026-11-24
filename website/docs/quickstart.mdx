@@ -67,6 +67,27 @@ Run PullMD on your machine with Docker and convert a page. You need Docker with 
 
 Open [http://localhost:3000](http://localhost:3000) to paste a URL or drop a file. The file picker takes HTML files, e-mail, text and the other [formats PullMD reads](/guides/documents), and PDF and Office files when the MarkItDown sidecar is running. The result shows the Markdown, the extractor that produced it, and buttons to copy, download or share it. On a phone, install it as an app and share links to it straight from your browser.
 
+### Advanced settings
+
+The bar under the URL field has **Comments**, **Frontmatter**, **PDF OCR** (when the instance has OCR) and **Pull**. Open **Advanced** below it for the rest. Each setting matches an API parameter, and a value equal to the default isn't sent. A group or option shows only when the instance offers it, as `GET /api/config` reports.
+
+| Group | Setting | Parameter | Notes |
+| --- | --- | --- | --- |
+| Reddit and Hacker News | **Depth**, **All** | `comment_depth` | `1` to `10`, default `3`. **All** sends `comment_depth=all`. Both are greyed out while **Comments** is off, and **Depth** while **All** is on. |
+| | **Max. count** | `comment_limit` | Maximum number of top-level comments. Empty means no cap. |
+| | **Describe images in posts** | `images` | Reddit only. Server default, on or off. Shown when the instance can describe embedded images. |
+| YouTube | **Timecodes**, **Block length (s)** | `yt_timecodes`, `yt_chunk` | Shown when the YouTube tier is on. See [YouTube transcripts](/guides/youtube). |
+| PDFs and documents | **Figures** | `pdf_images` | **Omit** (`strip`, default), **Describe** (`caption`) or **Include** (`hosted`). Works only with **PDF OCR** on. **Include** shows only when the instance [hosts figures](/guides/documents#hosted-figures). For an upload it also needs **Store uploads**; without it, the web app sends `caption`. |
+| | **Store uploads** | `store` | File uploads only. Shown when the instance allows [stored uploads](/guides/documents#keep-an-upload). |
+| Web pages | **Extractor** | `extractor` | Automatic, Readability, Trafilatura or Browser. Trafilatura and Browser show only when the instance runs that sidecar. An uploaded HTML file ignores Browser. |
+| | **Browser rendering** | `render` | Automatic, **Force** (`force`) or **Skip** (`skip`). Shown when the instance runs the browser sidecar. |
+
+The web app keeps these settings in your browser, not on your account. A non-default extractor, rendering or YouTube value skips the cache, and so do a depth other than `3`, **All** and **Max. count**. The fetch then takes longer and replaces the cached copy of the URL, which is what its [share link](/guides/share-links) shows.
+
+Closed, **Advanced** shows **n changed** when `n` settings that the instance offers and that currently apply differ from their defaults. **Reset** restores the defaults of this panel and leaves the toggles in the bar alone. **Fetch fresh** fetches the URL in the field once, skipping the cache, and saves nothing.
+
+Opening an entry from the history sends comments, depth, **All**, **PDF OCR** and figures, but not extractor, rendering, YouTube options, **Max. count** or image description, so it doesn't replace the cached copy. A link opened through the share target is a normal pull and sends every setting.
+
 ## Next steps
 
 <CardGroup cols={2}>

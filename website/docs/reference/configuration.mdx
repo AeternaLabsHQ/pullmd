@@ -43,7 +43,7 @@ PullMD is configured with environment variables. With Docker Compose, put them i
 | Variable | Default | Description |
 | --- | --- | --- |
 | `PULLMD_CACHE_RETENTION_DAYS` | `90` | Days a conversion is kept after it was last written. A cache hit doesn't extend it; a new fetch of the URL does. Stored uploads expire the same way; hosted figures are deleted with their conversion. `0` keeps everything. Range `0` to `36500`. An invalid value logs a warning and uses `90`. |
-| `PULLMD_UPLOAD_STORE` | `true` | Allows `store=true` on `POST /api/file`, which keeps an upload's result with a share link and a history entry. `false`, `0`, `no` or `off` (any case) turns it off: PullMD then ignores `store` and the web app hides its **Store** toggle. `true`, `1`, `yes` or `on` keeps it on, and any other value uses the default. See [Keep an upload](/guides/documents#keep-an-upload). |
+| `PULLMD_UPLOAD_STORE` | `true` | Allows `store=true` on `POST /api/file`, which keeps an upload's result with a share link and a history entry. `false`, `0`, `no` or `off` (any case) turns it off: PullMD then ignores `store` and the web app hides its **Store uploads** toggle. `true`, `1`, `yes` or `on` keeps it on, and any other value uses the default. See [Keep an upload](/guides/documents#keep-an-upload). |
 | `DISABLE_PUBLIC_HISTORY` | `false` | `true`, `1`, `yes` or `on` (any case) hides everyone's history when sign-in is off: `/api/history`, `/api/archive`, `DELETE /api/cache` and `DELETE /api/cache/:id` return `403` to anonymous callers. Share links keep working. `/api/stats` and `/api/storage` then answer with `window` or `retentionDays` only. |
 
 ## Fetching

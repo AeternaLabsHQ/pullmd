@@ -117,7 +117,7 @@ PullMD still doesn't store the uploaded file. It stores the converted Markdown l
 
 If PullMD can't store the result, you get it without a share id.
 
-In the web app, turn on the **Store** (**Speichern**) toggle before you upload. The toggle shows only when the instance allows stored uploads. When the instance hosts figures, it reads **Store + images** (**Speichern + Bilder**), and a PDF upload with **PDF OCR** on also asks for hosted figures. After a stored upload, the result shows the share link. The history lists the entry with **File** (**Datei**) where a URL shows its domain, and opening it shows the stored result.
+In the web app, open **Advanced** and turn on **Store uploads** (**Uploads speichern**) before you upload. The toggle shows only when the instance allows stored uploads. It doesn't change how figures are handled: that is the **Figures** setting next to it. After a stored upload, the result shows the share link. The history lists the entry with **File** (**Datei**) where a URL shows its domain, and opening it shows the stored result.
 
 ## Upload formats PullMD reads itself
 
@@ -198,7 +198,7 @@ Without `pdf_images`, the result has the `strip` lines. In every mode, PullMD re
 
 #### Hosted figures
 
-With `PULLMD_IMAGE_HOSTING=true`, PullMD stores the figures of a `hosted` conversion and links them from the Markdown at `/img/<id>.<ext>`. The address starts with your `PUBLIC_URL`, never with the host a request names, because the link is stored with the conversion and shared. Without `PUBLIC_URL`, `hosted` works as `caption`, `/api/config` reports `imageHosting: false`, and PullMD logs a warning at startup. The shipped compose files set `PUBLIC_URL`. In the web app, turn on the **Store + images** (**Speichern + Bilder**) toggle together with **PDF OCR** to get hosted figures for PDF links and uploads.
+With `PULLMD_IMAGE_HOSTING=true`, PullMD stores the figures of a `hosted` conversion and links them from the Markdown at `/img/<id>.<ext>`. The address starts with your `PUBLIC_URL`, never with the host a request names, because the link is stored with the conversion and shared. Without `PUBLIC_URL`, `hosted` works as `caption`, `/api/config` reports `imageHosting: false`, and PullMD logs a warning at startup. The shipped compose files set `PUBLIC_URL`. In the web app, turn on **PDF OCR** and set **Figures** (**Abbildungen**) under **Advanced** to **Include** (**mitliefern**). **Include** shows only when the instance hosts figures. For an upload it also needs **Store uploads** (**Uploads speichern**); without it, the web app asks for `caption` instead. See [Advanced settings](/quickstart#advanced-settings).
 
 - **Resolution:** the figures come at the resolution the OCR provider returns. With the default provider, a figure as wide as the page was about 650 px wide in our tests.
 - **Limits:** JPEG, PNG, WebP and GIF only, at most 4 MB per figure and 20 MB per document. A figure over a limit gets the `caption` form.
