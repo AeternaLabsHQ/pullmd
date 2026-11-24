@@ -1447,7 +1447,7 @@
                   </label>
                 </div>
               </div>
-              <p class="adv-hint adv-group-hint" data-i18n="adv.yt.hint">Abweichende Werte umgehen den Cache.</p>
+              <p class="adv-hint adv-group-hint" data-i18n="adv.yt.hint">Abweichende Werte umgehen den Cache und dauern länger.</p>
             </section>
             <section class="adv-group" id="adv-group-docs" hidden>
               <h3 class="adv-group-title" data-i18n="adv.group.docs">PDF und Dokumente</h3>
@@ -1695,7 +1695,7 @@
           'adv.images.hint':    'Nur Reddit. Ein KI-Modell beschreibt eingebettete Bilder. "aus" wirkt nur auf frische Abrufe.',
           'adv.yt.timecodes':   'Zeitmarken',
           'adv.yt.chunk':       'Blocklänge (s)',
-          'adv.yt.hint':        'Abweichende Werte umgehen den Cache.',
+          'adv.yt.hint':        'Abweichende Werte umgehen den Cache und dauern länger.',
           'adv.figures':        'Abbildungen',
           'adv.figures.hint':   'Wirkt nur mit PDF-OCR. Beschreiben und Mitliefern lassen ein KI-Modell jede Abbildung beschreiben. Bei Uploads braucht Mitliefern "Uploads speichern", sonst wird beschrieben.',
           'adv.extractor':      'Extraktor',
@@ -1799,7 +1799,7 @@
           'adv.images.hint':    'Reddit only. An AI model describes embedded images. "off" only affects fresh fetches.',
           'adv.yt.timecodes':   'Timecodes',
           'adv.yt.chunk':       'Block length (s)',
-          'adv.yt.hint':        'Non-default values skip the cache.',
+          'adv.yt.hint':        'Non-default values skip the cache and take longer.',
           'adv.figures':        'Figures',
           'adv.figures.hint':   'Only works with PDF OCR. Describe and Include have an AI model describe every figure. For uploads, Include needs "Store uploads", otherwise figures are described.',
           'adv.extractor':      'Extractor',
@@ -2539,15 +2539,22 @@
         }).length;
       }
 
-      (function restoreAdvancedSettings() {
-        // Once: the old "Store + images" toggle also meant hosted figures.
-        // The new store toggle pins the figures choice when it is first
-        // switched (below), so this only ever catches the old toggle.
+      // Once: the old "Store + images" toggle also meant hosted figures, but
+      // only on a server that hosts them; elsewhere it sent no figures at all,
+      // so nothing is migrated there and the choice stays at "omit". Runs
+      // when /api/config has confirmed hosting. The new store toggle pins the
+      // figures choice when it is first switched (below), so this only ever
+      // catches the old toggle.
+      function migrateStoreToggle() {
         try {
           if (localStorage.getItem('pullmd-store-images') === 'true' && localStorage.getItem('pullmd-pdf-figures') === null) {
             localStorage.setItem('pullmd-pdf-figures', 'hosted');
+            document.getElementById('pdf-figures-select').value = 'hosted';
           }
         } catch (e) {}
+      }
+
+      (function restoreAdvancedSettings() {
         ADV_SETTINGS.forEach(function (s) {
           try {
             var raw = localStorage.getItem(s.key);
@@ -2794,6 +2801,7 @@
           }
           Object.keys(caps).forEach(function (k) { caps[k] = !!c[k]; });
           caps.loaded = true;
+          if (caps.imageHosting) migrateStoreToggle();
           applyAdvancedCapabilities();
           if (markitdownEnabled) {
             var hint = document.querySelector('#drop-overlay .drop-box');

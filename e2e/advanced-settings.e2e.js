@@ -510,6 +510,35 @@ describe('advanced settings panel', () => {
       assert.notEqual(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), 'hosted');
     });
 
+    it('without image hosting nothing is migrated and no figures are asked for', async (t) => {
+      const uploads = [];
+      const { page } = await setup(t, {
+        config: { imageHosting: false },
+        storage: { 'pullmd-store-images': 'true', 'pullmd-pdf-ocr': 'true' },
+        mock: mockFileJob(uploads),
+      });
+      await configApplied(page, '#pdf-figures-select');
+      assert.equal(await page.locator('#pdf-figures-select').inputValue(), 'strip');
+      const params = await pull(page);
+      assert.equal(params.get('pdf'), 'ocr');
+      assert.equal(params.has('pdf_images'), false);
+      await pick(page, 'paper.pdf', 'application/pdf');
+      await waitForResult(page);
+      assert.equal(uploads[0].searchParams.get('store'), 'true');
+      assert.equal(uploads[0].searchParams.has('pdf_images'), false);
+      assert.equal(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), null);
+    });
+
+    it('a failing config migrates nothing', async (t) => {
+      const { page } = await setup(t, {
+        mock: (context) => context.route('**/api/config', (route) => json(route, { error: 'boom' }, 500)),
+        storage: { 'pullmd-store-images': 'true' },
+      });
+      await openPanel(page);
+      await pull(page);
+      assert.equal(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), null);
+    });
+
     it('an existing figures choice is kept', async (t) => {
       const { page } = await setup(t, { storage: { 'pullmd-store-images': 'true', 'pullmd-pdf-figures': 'strip' } });
       await configApplied(page, '#pdf-figures-select');
@@ -526,10 +555,14 @@ describe('advanced settings panel', () => {
         'Höchstzahl der Kommentare auf oberster Ebene. Leer heißt ohne Grenze.');
       assert.equal(await page.locator('#extractor-select option[value=""]').textContent(), 'automatisch');
       assert.equal(await page.locator('#images-select option[value=""]').textContent(), 'Server-Standard');
+      assert.equal(await page.locator('#adv-group-youtube .adv-group-hint').innerText(),
+        'Abweichende Werte umgehen den Cache und dauern länger.');
       await page.locator('#lang-toggle').click();
       assert.equal(await page.locator('#adv-row-limit .adv-hint').innerText(),
         'Maximum number of top-level comments. Empty means no cap.');
       assert.equal(await page.locator('#extractor-select option[value=""]').textContent(), 'Automatic');
+      assert.equal(await page.locator('#adv-group-youtube .adv-group-hint').innerText(),
+        'Non-default values skip the cache and take longer.');
       assert.equal(await page.locator('#pdf-figures-select option[value="hosted"]').textContent(), 'Include');
     });
   });
