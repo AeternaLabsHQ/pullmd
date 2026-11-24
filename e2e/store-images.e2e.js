@@ -62,8 +62,8 @@ describe('store uploads', () => {
   describe('the toggle', () => {
     it('is hidden when the server does not store uploads', async (t) => {
       const { page } = await setup(t, { config: { uploadStore: false } });
-      await page.locator('#ocr-toggle').waitFor({ state: 'attached' });
-      await page.waitForTimeout(300);
+      // The same config answer shows the figures row: it has been applied.
+      await page.locator('#pdf-figures-select').waitFor({ state: 'visible' });
       assert.equal(await page.locator('#store-images-label').isVisible(), false);
     });
 
@@ -102,11 +102,12 @@ describe('store uploads', () => {
   });
 
   describe('what is sent', () => {
-    it('a PDF upload with OCR and the toggle on asks for store=true and hosted figures', async (t) => {
+    it('a PDF upload with OCR, "include" figures and the toggle on asks for store=true and hosted figures', async (t) => {
       const uploads = [];
       const { page } = await setup(t, { mock: mockFileJob(uploads, { markdown: '# Paper\n\nBody\n', source: 'markitdown', shareId: SHARE_ID }) });
       await page.locator('#store-images-label').waitFor();
       await page.locator('#ocr-label').click();
+      await page.locator('#pdf-figures-select').selectOption('hosted');
       await page.locator('#store-images-label').click();
 
       await pick(page, 'paper.pdf', 'application/pdf');
@@ -161,7 +162,7 @@ describe('store uploads', () => {
       assert.equal(uploads[0].searchParams.get('pdf_images'), null);
     });
 
-    it('with the toggle off (or hosting off) neither parameter is sent', async (t) => {
+    it('with the toggle off and default figures neither parameter is sent; without hosting "include" goes out as caption', async (t) => {
       const uploads = [];
       const { page } = await setup(t, { mock: mockFileJob(uploads, { markdown: '# Paper\n', source: 'markitdown' }) });
       await page.locator('#ocr-label').click();
@@ -175,12 +176,16 @@ describe('store uploads', () => {
         config: { imageHosting: false },
         mock: mockFileJob(uploads2, { markdown: '# Paper\n', source: 'markitdown', shareId: SHARE_ID }),
       });
+      // A stored "include" from a hosting server goes out as "describe" here.
+      await second.page.evaluate(() => localStorage.setItem('pullmd-pdf-figures', 'hosted'));
+      await second.page.reload();
+      await second.page.locator('#pdf-figures-select').waitFor({ state: 'visible' });
       await second.page.locator('#ocr-label').click();
       await second.page.locator('#store-images-label').click();
       await pick(second.page, 'paper.pdf', 'application/pdf');
       await waitForResult(second.page);
       assert.equal(uploads2[0].searchParams.get('store'), 'true');
-      assert.equal(uploads2[0].searchParams.get('pdf_images'), null);
+      assert.equal(uploads2[0].searchParams.get('pdf_images'), 'caption');
     });
 
     it('a stored toggle state is ignored when the server does not store uploads', async (t) => {
@@ -196,7 +201,7 @@ describe('store uploads', () => {
       assert.equal(uploads[0].searchParams.get('store'), null);
     });
 
-    it('a URL conversion with OCR and the toggle on asks for hosted figures', async (t) => {
+    it('a URL conversion with OCR and "include" figures asks for hosted figures, without the store toggle', async (t) => {
       const { page, seen } = await setup(t, {
         mock: async (context) => {
           await context.route('**/api/stream*', (route) => route.abort());
@@ -206,7 +211,7 @@ describe('store uploads', () => {
         },
       });
       await page.locator('#ocr-label').click();
-      await page.locator('#store-images-label').click();
+      await page.locator('#pdf-figures-select').selectOption('hosted');
       await page.locator('#url-input').fill('https://example.test/paper.pdf');
       await page.locator('#url-input').press('Enter');
       await waitForResult(page);
@@ -218,7 +223,7 @@ describe('store uploads', () => {
       }
     });
 
-    it('a URL conversion without the toggle does not ask for hosted figures', async (t) => {
+    it('a URL conversion with default figures does not ask for hosted figures', async (t) => {
       const { page, seen } = await setup(t, {
         mock: async (context) => {
           await context.route('**/api/stream*', (route) => route.abort());

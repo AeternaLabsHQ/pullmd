@@ -4,7 +4,7 @@
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startApp } from './helpers/app.js';
-import { launchBrowser, openPage } from './helpers/browser.js';
+import { launchBrowser, openPage, waitForResult } from './helpers/browser.js';
 
 const OPEN_KEY = 'pullmd-advanced-open';
 
@@ -20,7 +20,7 @@ describe('advanced settings panel', () => {
   });
   after(async () => { await app?.close(); await browser?.close(); });
 
-  async function setup(t, { config = {}, mock, history = [] } = {}) {
+  async function setup(t, { config = {}, mock, history = [], storage } = {}) {
     const { context, page } = await openPage(browser, app.baseUrl, { goto: false });
     t.after(() => context.close());
     const seen = [];
@@ -30,9 +30,58 @@ describe('advanced settings panel', () => {
       trafilatura: true, playwright: true, embeddedImages: true, markitdownYoutube: true, vision: true, ...config,
     }));
     await context.route('**/api/history*', (route) => json(route, history));
+    // A conversion: the stream is refused, the plain fallback answers.
+    await context.route('**/api/stream*', (route) => route.abort());
+    await context.route(/\/api\?/, (route) => route.fulfill({
+      status: 200, contentType: 'text/markdown', headers: { 'X-Source': 'readability' }, body: '# Doc\n\nBody\n',
+    }));
     if (mock) await mock(context);
     await page.goto(app.baseUrl + '/');
-    return { page, seen };
+    if (storage) {
+      await page.evaluate((entries) => {
+        for (const [k, v] of Object.entries(entries)) localStorage.setItem(k, v);
+      }, storage);
+      await page.reload();
+    }
+    return { page, seen, context };
+  }
+
+  /** Waits until the /api/config answer has been applied: a capability-bound row shows up. */
+  const configApplied = (page, selector = '#extractor-select') =>
+    page.locator('#advanced-panel').evaluate((el) => { el.open = true; })
+      .then(() => page.locator(selector).waitFor({ state: 'visible' }));
+
+  /** Pulls `url` and returns the query of the /api/stream request it sent. */
+  async function pull(page, url = 'https://example.test/page') {
+    const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/stream');
+    await page.locator('#url-input').fill(url);
+    await page.locator('#url-input').press('Enter');
+    const params = new URL((await request).url()).searchParams;
+    await waitForResult(page);
+    return params;
+  }
+
+  const pick = (page, name, mimeType, text = 'hello') =>
+    page.locator('#html-file-input').setInputFiles({ name, mimeType, buffer: Buffer.from(text) });
+
+  /** Mocks the async file flow; every POST /api/file URL lands in `uploads`. */
+  function mockFileJob(uploads) {
+    return async (context) => {
+      await context.route('**/api/file?*', (route) => {
+        uploads.push(new URL(route.request().url()));
+        return json(route, { jobId: '1'.repeat(32) }, 202);
+      });
+      await context.route('**/api/file/jobs/*', (route) => (route.request().method() === 'DELETE'
+        ? route.fulfill({ status: 204 })
+        : json(route, { status: 'done', markdown: '# Paper\n', source: 'markitdown' })));
+    };
+  }
+
+  /** Sets a select or number field the way a user does (change fires). */
+  async function setField(page, id, value) {
+    const el = page.locator(`#${id}`);
+    if (await el.evaluate((e) => e.tagName) === 'SELECT') await el.selectOption(value);
+    else { await el.fill(value); await el.press('Tab'); }
   }
 
   const panel = (page) => page.locator('#advanced-panel');
@@ -83,16 +132,15 @@ describe('advanced settings panel', () => {
       assert.equal(await panel(page).evaluate((el) => el.open), false);
     });
 
-    it('has four groups, two of them empty and hidden for now', async (t) => {
+    it('has four groups, all shown when the server offers everything', async (t) => {
       const { page } = await setup(t);
-      await openPanel(page);
-      assert.equal(await page.locator('#adv-group-comments').isVisible(), true);
-      assert.equal(await page.locator('#adv-group-docs').isVisible(), true);
-      assert.equal(await page.locator('#adv-group-youtube').isVisible(), false);
-      assert.equal(await page.locator('#adv-group-web').isVisible(), false);
+      await configApplied(page);
+      for (const id of ['comments', 'youtube', 'docs', 'web']) {
+        assert.equal(await page.locator(`#adv-group-${id}`).isVisible(), true, id);
+      }
       assert.equal(await page.locator('#advanced-count').count(), 1);
       assert.equal(await page.locator('#advanced-actions').count(), 1);
-      for (const id of ['comments', 'docs']) {
+      for (const id of ['comments', 'youtube', 'docs', 'web']) {
         assert.ok(await page.locator(`#adv-group-${id} .adv-group-title`).textContent());
       }
     });
@@ -126,11 +174,12 @@ describe('advanced settings panel', () => {
       for (const id of ['depth-label', 'all-comments-label', 'store-images-label']) {
         assert.equal(await page.locator(`#${id}`).getAttribute('title'), null, id);
       }
+      await configApplied(page);
       const hints = page.locator('#adv-group-comments .adv-hint');
-      assert.equal(await hints.count(), 2);
+      assert.equal(await hints.count(), 4);
       assert.equal(await hints.nth(0).innerText(), 'Wie viele Antwortebenen mitkommen.');
       assert.match(await hints.nth(1).innerText(), /^Alle Kommentare ohne Tiefengrenze\./);
-      assert.equal(await page.locator('#adv-group-docs .adv-hint').innerText(),
+      assert.equal(await page.locator('#adv-row-store .adv-hint').innerText(),
         'Ergebnis bekommt einen Share-Link und erscheint im Verlauf.');
     });
 
@@ -139,7 +188,10 @@ describe('advanced settings panel', () => {
       await openPanel(page);
       assert.equal(await page.locator('#adv-group-comments .adv-row.adv-disabled').count(), 0);
       await page.locator('label', { hasText: 'Kommentare' }).click();
-      assert.equal(await page.locator('#adv-group-comments .adv-row.adv-disabled').count(), 2);
+      // Depth, "All" and the limit; the images row stays usable.
+      assert.equal(await page.locator('#adv-group-comments .adv-row.adv-disabled').count(), 3);
+      assert.equal(await page.locator('#comment-limit-input').isDisabled(), true);
+      assert.equal(await page.locator('#images-select').isDisabled(), false);
       assert.equal(await page.locator('#depth-input').isDisabled(), true);
       assert.equal(await page.locator('#all-comments-toggle').isDisabled(), true);
       assert.equal(await page.locator('#depth-input').isVisible(), true);
@@ -179,13 +231,269 @@ describe('advanced settings panel', () => {
     });
 
     it('is hidden, and so is its group, when the server does not store uploads', async (t) => {
-      const { page } = await setup(t, { config: { uploadStore: false } });
-      await openPanel(page);
-      await page.locator('#ocr-toggle').waitFor({ state: 'attached' });
-      await page.waitForTimeout(300);
+      const { page } = await setup(t, { config: { uploadStore: false, pdfOcr: false } });
+      await configApplied(page);
       assert.equal(await page.locator('#store-images-label').isVisible(), false);
       assert.equal(await page.locator('#adv-group-docs').isVisible(), false);
       assert.equal(await page.locator('#adv-group-comments').isVisible(), true);
+    });
+  });
+
+  describe('parameters', () => {
+    const PANEL_PARAMS = ['comment_depth', 'comment_limit', 'images', 'yt_timecodes', 'yt_chunk',
+      'pdf_images', 'extractor', 'render', 'store', 'nocache'];
+
+    it('defaults send none of the panel parameters', async (t) => {
+      const { page } = await setup(t, { storage: { 'pullmd-pdf-ocr': 'true' } });
+      await configApplied(page);
+      const params = await pull(page);
+      for (const p of PANEL_PARAMS) assert.equal(params.has(p), false, p);
+      assert.equal(params.get('pdf'), 'ocr');
+    });
+
+    // One case per setting: [field, storage key, value, parameter].
+    const cases = [
+      ['comment-limit-input', 'pullmd-comment-limit', '25', 'comment_limit'],
+      ['images-select', 'pullmd-images', 'on', 'images'],
+      ['images-select', 'pullmd-images', 'off', 'images'],
+      ['yt-timecodes-select', 'pullmd-yt-timecodes', 'plain', 'yt_timecodes'],
+      ['yt-timecodes-select', 'pullmd-yt-timecodes', 'none', 'yt_timecodes'],
+      ['yt-chunk-input', 'pullmd-yt-chunk', '0', 'yt_chunk'],
+      ['yt-chunk-input', 'pullmd-yt-chunk', '60', 'yt_chunk'],
+      ['extractor-select', 'pullmd-extractor', 'readability', 'extractor'],
+      ['extractor-select', 'pullmd-extractor', 'trafilatura', 'extractor'],
+      ['extractor-select', 'pullmd-extractor', 'playwright', 'extractor'],
+      ['render-select', 'pullmd-render', 'force', 'render'],
+      ['render-select', 'pullmd-render', 'skip', 'render'],
+    ];
+    for (const [id, key, value, param] of cases) {
+      it(`${id} = ${value} sends ${param}=${value} and survives a reload`, async (t) => {
+        const { page } = await setup(t);
+        await configApplied(page, `#${id}`);
+        assert.equal((await pull(page)).has(param), false, 'default is not sent');
+
+        await setField(page, id, value);
+        assert.equal((await pull(page)).get(param), value);
+        assert.equal(await page.evaluate((k) => localStorage.getItem(k), key), value);
+
+        await page.reload();
+        await configApplied(page, `#${id}`);
+        assert.equal(await page.locator(`#${id}`).inputValue(), value);
+        assert.equal((await pull(page)).get(param), value);
+      });
+    }
+
+    it('comments off sends neither depth nor limit, but still images', async (t) => {
+      const { page } = await setup(t);
+      await configApplied(page, '#images-select');
+      await setField(page, 'depth-input', '5');
+      await setField(page, 'comment-limit-input', '10');
+      await setField(page, 'images-select', 'on');
+      let params = await pull(page);
+      assert.equal(params.get('comment_depth'), '5');
+      assert.equal(params.get('comment_limit'), '10');
+
+      await page.locator('label', { hasText: 'Kommentare' }).click();
+      params = await pull(page);
+      assert.equal(params.get('comments'), 'false');
+      assert.equal(params.has('comment_depth'), false);
+      assert.equal(params.has('comment_limit'), false);
+      assert.equal(params.get('images'), 'on');
+    });
+  });
+
+  describe('PDF figures', () => {
+    it('are not sent while OCR is off, even when set', async (t) => {
+      const { page } = await setup(t, { storage: { 'pullmd-pdf-figures': 'caption' } });
+      await configApplied(page, '#pdf-figures-select');
+      assert.equal(await page.locator('#pdf-figures-select').inputValue(), 'caption');
+      assert.equal(await page.locator('#adv-row-figures.adv-disabled').count(), 1);
+      assert.equal(await page.locator('#pdf-figures-select').isDisabled(), true);
+      const params = await pull(page);
+      assert.equal(params.has('pdf_images'), false);
+      assert.equal(params.has('pdf'), false);
+    });
+
+    it('OCR on and "describe" sends pdf_images=caption', async (t) => {
+      const { page } = await setup(t);
+      await configApplied(page, '#pdf-figures-select');
+      await page.locator('#ocr-label').click();
+      assert.equal(await page.locator('#adv-row-figures.adv-disabled').count(), 0);
+      await setField(page, 'pdf-figures-select', 'caption');
+      const params = await pull(page);
+      assert.equal(params.get('pdf'), 'ocr');
+      assert.equal(params.get('pdf_images'), 'caption');
+    });
+
+    it('"include" without storing: a URL sends hosted, a PDF upload caption', async (t) => {
+      const uploads = [];
+      const { page } = await setup(t, { mock: mockFileJob(uploads) });
+      await configApplied(page, '#pdf-figures-select');
+      await page.locator('#ocr-label').click();
+      await setField(page, 'pdf-figures-select', 'hosted');
+      assert.equal((await pull(page)).get('pdf_images'), 'hosted');
+
+      await pick(page, 'paper.pdf', 'application/pdf');
+      await waitForResult(page);
+      assert.equal(uploads.length, 1);
+      assert.equal(uploads[0].searchParams.get('pdf'), 'ocr');
+      assert.equal(uploads[0].searchParams.get('pdf_images'), 'caption');
+      assert.equal(uploads[0].searchParams.has('store'), false);
+    });
+
+    it('"include" with storing on: a PDF upload sends hosted and store=true', async (t) => {
+      const uploads = [];
+      const { page } = await setup(t, { mock: mockFileJob(uploads) });
+      await configApplied(page, '#pdf-figures-select');
+      await page.locator('#ocr-label').click();
+      await setField(page, 'pdf-figures-select', 'hosted');
+      await page.locator('#store-images-label').click();
+      await pick(page, 'paper.pdf', 'application/pdf');
+      await waitForResult(page);
+      assert.equal(uploads[0].searchParams.get('pdf_images'), 'hosted');
+      assert.equal(uploads[0].searchParams.get('store'), 'true');
+    });
+
+    it('without image hosting "include" is not offered and a stored one goes out as caption', async (t) => {
+      const { page } = await setup(t, {
+        config: { imageHosting: false },
+        storage: { 'pullmd-pdf-ocr': 'true', 'pullmd-pdf-figures': 'hosted' },
+      });
+      await configApplied(page, '#pdf-figures-select');
+      const hosted = page.locator('#pdf-figures-select option[value="hosted"]');
+      assert.equal(await hosted.evaluate((o) => o.hidden && o.disabled), true);
+      assert.equal((await pull(page)).get('pdf_images'), 'caption');
+      assert.equal(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), 'hosted');
+    });
+  });
+
+  describe('HTML upload', () => {
+    async function uploadHtml(t, extractor) {
+      const sent = [];
+      const { page } = await setup(t, {
+        mock: (context) => context.route('**/api/html*', (route) => {
+          sent.push(new URL(route.request().url()));
+          return json(route, { markdown: '# Page\n', source: 'readability' });
+        }),
+      });
+      await configApplied(page);
+      await setField(page, 'extractor-select', extractor);
+      await pick(page, 'page.html', 'text/html', '<html><body><p>Hi</p></body></html>');
+      await waitForResult(page);
+      assert.equal(sent.length, 1);
+      return sent[0].searchParams;
+    }
+
+    it('sends extractor=trafilatura', async (t) => {
+      assert.equal((await uploadHtml(t, 'trafilatura')).get('extractor'), 'trafilatura');
+    });
+
+    it('does not send extractor=playwright', async (t) => {
+      assert.equal((await uploadHtml(t, 'playwright')).has('extractor'), false);
+    });
+  });
+
+  describe('stored values the page cannot use', () => {
+    it('invalid stored values show the default and are not sent', async (t) => {
+      const { page } = await setup(t, {
+        storage: {
+          'pullmd-extractor': 'foo', 'pullmd-yt-chunk': '-5', 'pullmd-comment-limit': 'abc', 'pullmd-render': '1',
+        },
+      });
+      await configApplied(page, '#render-select');
+      assert.equal(await page.locator('#extractor-select').inputValue(), '');
+      assert.equal(await page.locator('#yt-chunk-input').inputValue(), '');
+      assert.equal(await page.locator('#comment-limit-input').inputValue(), '');
+      assert.equal(await page.locator('#render-select').inputValue(), '');
+      const params = await pull(page);
+      for (const p of ['extractor', 'yt_chunk', 'comment_limit', 'render']) assert.equal(params.has(p), false, p);
+    });
+
+    it('a failing /api/config hides the capability groups and sends only what needs none', async (t) => {
+      const { page } = await setup(t, {
+        mock: (context) => context.route('**/api/config', (route) => json(route, { error: 'boom' }, 500)),
+        storage: { 'pullmd-extractor': 'trafilatura', 'pullmd-comment-depth': '5' },
+      });
+      await openPanel(page);
+      const params = await pull(page);
+      assert.equal(params.has('extractor'), false);
+      assert.equal(params.get('comment_depth'), '5');
+      for (const id of ['youtube', 'web', 'docs']) {
+        assert.equal(await page.locator(`#adv-group-${id}`).isVisible(), false, id);
+      }
+      assert.equal(await page.locator('#adv-group-comments').isVisible(), true);
+    });
+
+    it('without playwright: no browser option, no render row, stored values not sent', async (t) => {
+      const { page } = await setup(t, {
+        config: { playwright: false },
+        storage: { 'pullmd-extractor': 'playwright', 'pullmd-render': 'force' },
+      });
+      await configApplied(page);
+      const option = page.locator('#extractor-select option[value="playwright"]');
+      assert.equal(await option.evaluate((o) => o.hidden && o.disabled), true);
+      assert.equal(await page.locator('#render-select').isVisible(), false);
+      assert.equal(await page.locator('#adv-row-render').isVisible(), false);
+      const params = await pull(page);
+      assert.equal(params.has('extractor'), false);
+      assert.equal(params.has('render'), false);
+      assert.equal(await page.evaluate(() => localStorage.getItem('pullmd-extractor')), 'playwright');
+    });
+  });
+
+  describe('reopening from the history', () => {
+    it('sends depth but none of the cache-skipping settings', async (t) => {
+      const item = { id: 3, url: 'https://example.test/old', title: 'Old page', source: 'readability',
+        share_id: 'a'.repeat(32), client: 'pwa', created_at: '2026-11-23 10:00:00' };
+      const { page } = await setup(t, {
+        history: [item],
+        storage: {
+          'pullmd-extractor': 'trafilatura', 'pullmd-render': 'force', 'pullmd-yt-timecodes': 'plain',
+          'pullmd-yt-chunk': '60', 'pullmd-comment-limit': '10', 'pullmd-images': 'on', 'pullmd-comment-depth': '5',
+        },
+      });
+      await configApplied(page, '#render-select');
+      const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/stream');
+      await page.locator('#history-list .h-row', { hasText: 'Old page' }).click();
+      const params = new URL((await request).url()).searchParams;
+      await waitForResult(page);
+      assert.equal(params.get('url'), item.url);
+      assert.equal(params.get('comment_depth'), '5');
+      for (const p of ['extractor', 'render', 'yt_timecodes', 'yt_chunk', 'comment_limit', 'images']) {
+        assert.equal(params.has(p), false, p);
+      }
+    });
+  });
+
+  describe('migration of the old store toggle', () => {
+    it('a stored "store + images" becomes "include" figures', async (t) => {
+      const { page } = await setup(t, { storage: { 'pullmd-store-images': 'true' } });
+      await configApplied(page, '#pdf-figures-select');
+      assert.equal(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), 'hosted');
+      assert.equal(await page.locator('#pdf-figures-select').inputValue(), 'hosted');
+    });
+
+    it('an existing figures choice is kept', async (t) => {
+      const { page } = await setup(t, { storage: { 'pullmd-store-images': 'true', 'pullmd-pdf-figures': 'strip' } });
+      await configApplied(page, '#pdf-figures-select');
+      assert.equal(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), 'strip');
+      assert.equal(await page.locator('#pdf-figures-select').inputValue(), 'strip');
+    });
+  });
+
+  describe('texts', () => {
+    it('labels, hints and options in both languages', async (t) => {
+      const { page } = await setup(t);
+      await configApplied(page);
+      assert.equal(await page.locator('#adv-row-limit .adv-hint').innerText(),
+        'Höchstzahl der Kommentare auf oberster Ebene. Leer heißt ohne Grenze.');
+      assert.equal(await page.locator('#extractor-select option[value=""]').textContent(), 'automatisch');
+      assert.equal(await page.locator('#images-select option[value=""]').textContent(), 'Server-Standard');
+      await page.locator('#lang-toggle').click();
+      assert.equal(await page.locator('#adv-row-limit .adv-hint').innerText(),
+        'Maximum number of top-level comments. Empty means no cap.');
+      assert.equal(await page.locator('#extractor-select option[value=""]').textContent(), 'Automatic');
+      assert.equal(await page.locator('#pdf-figures-select option[value="hosted"]').textContent(), 'Include');
     });
   });
 });
