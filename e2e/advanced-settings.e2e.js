@@ -441,6 +441,32 @@ describe('advanced settings panel', () => {
     });
   });
 
+  describe('a shared link (#url=)', () => {
+    it('is a real pull and takes the capability-bound settings along', async (t) => {
+      let release;
+      const held = new Promise((r) => { release = r; });
+      const { page } = await setup(t, {
+        storage: { 'pullmd-extractor': 'trafilatura', 'pullmd-render': 'force' },
+        // A slow config answer: the shared link is handled before it arrives.
+        mock: (context) => context.route('**/api/config', async (route) => {
+          await held;
+          return json(route, {
+            authMode: 'disabled', markitdown: true, pdfOcr: true, imageHosting: true, uploadStore: true,
+            trafilatura: true, playwright: true, embeddedImages: true, markitdownYoutube: true, vision: true,
+          });
+        }),
+      });
+      const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/stream');
+      await page.goto(app.baseUrl + '/#url=' + encodeURIComponent('https://example.test/shared'));
+      await page.waitForTimeout(200);
+      release();
+      const params = new URL((await request).url()).searchParams;
+      assert.equal(params.get('url'), 'https://example.test/shared');
+      assert.equal(params.get('extractor'), 'trafilatura');
+      assert.equal(params.get('render'), 'force');
+    });
+  });
+
   describe('reopening from the history', () => {
     it('sends depth but none of the cache-skipping settings', async (t) => {
       const item = { id: 3, url: 'https://example.test/old', title: 'Old page', source: 'readability',
@@ -471,6 +497,17 @@ describe('advanced settings panel', () => {
       await configApplied(page, '#pdf-figures-select');
       assert.equal(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), 'hosted');
       assert.equal(await page.locator('#pdf-figures-select').inputValue(), 'hosted');
+    });
+
+    it('switching storing on in the new panel does not turn figures to "include"', async (t) => {
+      const { page } = await setup(t);
+      await configApplied(page, '#pdf-figures-select');
+      await page.locator('#store-images-label').click();
+      await page.reload();
+      await configApplied(page, '#pdf-figures-select');
+      assert.equal(await page.locator('#store-images-toggle').isChecked(), true);
+      assert.equal(await page.locator('#pdf-figures-select').inputValue(), 'strip');
+      assert.notEqual(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), 'hosted');
     });
 
     it('an existing figures choice is kept', async (t) => {

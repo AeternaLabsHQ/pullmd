@@ -2541,6 +2541,8 @@
 
       (function restoreAdvancedSettings() {
         // Once: the old "Store + images" toggle also meant hosted figures.
+        // The new store toggle pins the figures choice when it is first
+        // switched (below), so this only ever catches the old toggle.
         try {
           if (localStorage.getItem('pullmd-store-images') === 'true' && localStorage.getItem('pullmd-pdf-figures') === null) {
             localStorage.setItem('pullmd-pdf-figures', 'hosted');
@@ -2560,6 +2562,13 @@
           try { localStorage.setItem(s.key, v); } catch (e) {}
           syncAdvancedRows();
         });
+      });
+      storeToggle.addEventListener('change', function () {
+        try {
+          if (localStorage.getItem('pullmd-pdf-figures') === null) {
+            localStorage.setItem('pullmd-pdf-figures', document.getElementById('pdf-figures-select').value);
+          }
+        } catch (e) {}
       });
 
       // A group without a visible setting does not show up (a group is hidden
@@ -2621,6 +2630,9 @@
       // opts.nocache: this one request skips the cache.
       async function fetchPost(url, withComments, opts) {
         opts = opts || {};
+        // A shared link is handled at load: wait for the server's capabilities
+        // (or their failure) so capability-bound settings are not dropped.
+        await configReady;
         const params = new URLSearchParams({ url });
         if (!withComments) params.set('comments', 'false');
         applyAdvancedParams(params, opts.reopen ? 'reopen' : 'url', { withComments: withComments });
@@ -2768,7 +2780,8 @@
       var MEDIA_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|tiff?|mp3|wav|m4a|ogg|flac|aac)$/i;
       var markitdownEnabled = false;
       var markitdownMediaEnabled = false;
-      fetch('/api/config').then(function (r) {
+      // Settles once the config answer is applied, or has failed.
+      var configReady = fetch('/api/config').then(function (r) {
         if (!r.ok) throw new Error('config ' + r.status);
         return r.json();
       })
