@@ -401,7 +401,8 @@
     #advanced-panel > summary:hover { color: var(--fg); }
     #advanced-panel > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     #advanced-count:empty { display: none; }
-    #advanced-count { font-size: 0.75rem; color: var(--accent); }
+    #advanced-count { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; color: var(--accent); }
+    #advanced-count::before { content: ''; width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--accent); }
     .adv-body { display: flex; flex-direction: column; gap: 1rem; padding-top: 0.875rem; }
     .adv-group[hidden], .adv-row[hidden] { display: none; }
     .adv-group-title {
@@ -427,8 +428,34 @@
     .adv-row > * { transition: opacity 0.15s; }
     .adv-row.adv-disabled > :not(.adv-hint) { opacity: 0.4; }
     .adv-row.adv-disabled .toggle-label { cursor: not-allowed; }
-    #advanced-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: flex-end; }
-    #advanced-actions:empty { display: none; }
+    #advanced-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem 1rem;
+      padding-top: 0.875rem;
+      border-top: 1px solid var(--border);
+    }
+    .adv-action { display: flex; flex-direction: column; align-items: flex-start; gap: 0.375rem; max-width: 100%; }
+    .adv-action:last-child { align-items: flex-end; text-align: right; margin-left: auto; }
+    @media (max-width: 600px) {
+      .adv-action:last-child { align-items: flex-start; text-align: left; margin-left: 0; }
+    }
+    .adv-action-btn {
+      font: inherit;
+      font-size: 0.8125rem;
+      padding: 0.4375rem 0.875rem;
+      color: var(--fg);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+    }
+    .adv-action-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .adv-action-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .adv-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
     /* Go button */
     #go-btn {
@@ -1500,7 +1527,15 @@
               </div>
               <p class="adv-hint adv-group-hint" data-i18n="adv.web.hint">Abweichende Werte umgehen den Cache und dauern länger.</p>
             </section>
-            <div id="advanced-actions"></div>
+            <div id="advanced-actions">
+              <div class="adv-action">
+                <button type="button" class="adv-action-btn" id="advanced-reset-btn" data-i18n="adv.reset">Zurücksetzen</button>
+              </div>
+              <div class="adv-action">
+                <button type="button" class="adv-action-btn" id="fresh-pull-btn" aria-describedby="fresh-pull-hint" disabled data-i18n="adv.fresh">Frisch abrufen</button>
+                <span class="adv-hint" id="fresh-pull-hint" data-i18n="adv.fresh.hint">Ruft die Seite einmal am Cache vorbei neu ab.</span>
+              </div>
+            </div>
           </div>
         </details>
 
@@ -1684,6 +1719,10 @@
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF-OCR',
           'adv.title':          'Erweitert',
+          'adv.changed':        '{n} geändert',
+          'adv.reset':          'Zurücksetzen',
+          'adv.fresh':          'Frisch abrufen',
+          'adv.fresh.hint':     'Ruft die Seite einmal am Cache vorbei neu ab.',
           'adv.group.comments': 'Reddit und Hacker News',
           'adv.group.youtube':  'YouTube',
           'adv.group.docs':     'PDF und Dokumente',
@@ -1788,6 +1827,10 @@
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF OCR',
           'adv.title':          'Advanced',
+          'adv.changed':        '{n} changed',
+          'adv.reset':          'Reset',
+          'adv.fresh':          'Fetch fresh',
+          'adv.fresh.hint':     'Fetches the page once, skipping the cache.',
           'adv.group.comments': 'Reddit and Hacker News',
           'adv.group.youtube':  'YouTube',
           'adv.group.docs':     'PDFs and documents',
@@ -2225,10 +2268,12 @@
         resultContainer.classList.remove('visible');
         permalinkBar.style.display = 'none';
         goBtn.disabled = true;
+        syncFreshBtn();
       }
       function hideLoading() {
         loadingEl.classList.remove('visible');
         goBtn.disabled = false;
+        syncFreshBtn();
       }
       // Mirrors isGlobalScope on the server: no auth configured or auth
       // disabled means every caller deletes globally, otherwise only an admin
@@ -2539,6 +2584,26 @@
         }).length;
       }
 
+      // The summary line shows how many settings differ from the default.
+      // Runs after every change, toggle, config answer and language switch.
+      var advancedCountEl = document.getElementById('advanced-count');
+      function updateAdvancedCount() {
+        var n = advancedChangedCount();
+        advancedCountEl.textContent = n ? t('adv.changed', { n: n }) : '';
+      }
+      window.addEventListener('langchange', updateAdvancedCount);
+
+      // Back to the defaults: panel settings only, so not the bar toggles
+      // and not open/closed. The stored keys go too.
+      function resetAdvanced() {
+        ADV_SETTINGS.forEach(function (s) {
+          setFieldValue(s.el, s.def);
+          try { localStorage.removeItem(s.key); } catch (e) {}
+        });
+        syncAdvancedRows();
+      }
+      document.getElementById('advanced-reset-btn').addEventListener('click', resetAdvanced);
+
       // Once: the old "Store + images" toggle also meant hosted figures, but
       // only on a server that hosts them; elsewhere it sent no figures at all,
       // so nothing is migrated there and the choice stays at "omit". Runs
@@ -2606,6 +2671,7 @@
           s.el.closest('.adv-row').classList.toggle('adv-disabled', !on);
           s.el.disabled = !on;
         });
+        updateAdvancedCount();
       }
       commentsToggle.addEventListener('change', syncAdvancedRows);
       ocrToggle.addEventListener('change', syncAdvancedRows);
@@ -2625,6 +2691,7 @@
           if (s.el.tagName === 'SELECT') s.el.value = advancedValue(s);
         });
         syncAdvancedGroups();
+        updateAdvancedCount();
       }
 
       // The toggle only counts while the server offers storing: a state left
@@ -2637,9 +2704,16 @@
       // opts.nocache: this one request skips the cache.
       async function fetchPost(url, withComments, opts) {
         opts = opts || {};
+        // Feedback first: the wait for the server's capabilities must not look
+        // like a dead button.
+        abandonFileJob();
+        pushOpenState();
+        showLoading();
         // A shared link is handled at load: wait for the server's capabilities
-        // (or their failure) so capability-bound settings are not dropped.
-        await configReady;
+        // (or their failure) so capability-bound settings are not dropped. A
+        // config answer that does not come is not waited for beyond a few
+        // seconds; the pull then goes out with what is known.
+        await configWait(CONFIG_WAIT_MS);
         const params = new URLSearchParams({ url });
         if (!withComments) params.set('comments', 'false');
         applyAdvancedParams(params, opts.reopen ? 'reopen' : 'url', { withComments: withComments });
@@ -2650,10 +2724,6 @@
         if (opts.nocache) params.set('nocache', 'true');
         params.set('lang', getLang());
         if (clientMode) params.set('client_mode', clientMode);
-
-        abandonFileJob();
-        pushOpenState();
-        showLoading();
 
         const statusLine = document.getElementById('status-line');
         if (statusLine) statusLine.textContent = '';
@@ -2767,6 +2837,20 @@
         }
       }
 
+      // One-off: the same pull, skipping the cache. Needs a URL, stores nothing.
+      var freshBtn = document.getElementById('fresh-pull-btn');
+      function syncFreshBtn() {
+        if (!freshBtn) return;
+        freshBtn.disabled = !urlInput.value.trim() || goBtn.disabled;
+      }
+      urlInput.addEventListener('input', syncFreshBtn);
+      freshBtn.addEventListener('click', function () {
+        var url = urlInput.value.trim();
+        if (!url) return;
+        fetchPost(url, commentsToggle.checked, { nocache: true });
+      });
+      syncFreshBtn();
+
       function handleGo() {
         const url = urlInput.value.trim();
         if (!url) { urlInput.focus(); return; }
@@ -2788,6 +2872,12 @@
       var markitdownEnabled = false;
       var markitdownMediaEnabled = false;
       // Settles once the config answer is applied, or has failed.
+      var CONFIG_WAIT_MS = 3000;
+      function configWait(ms) {
+        var timer;
+        var limit = new Promise(function (resolve) { timer = setTimeout(resolve, ms); });
+        return Promise.race([configReady, limit]).then(function () { clearTimeout(timer); });
+      }
       var configReady = fetch('/api/config').then(function (r) {
         if (!r.ok) throw new Error('config ' + r.status);
         return r.json();

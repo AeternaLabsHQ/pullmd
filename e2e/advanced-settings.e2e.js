@@ -537,6 +537,7 @@ describe('advanced settings panel', () => {
       await openPanel(page);
       await pull(page);
       assert.equal(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), null);
+      assert.equal(await page.locator('#pdf-figures-select').inputValue(), 'strip');
     });
 
     it('an existing figures choice is kept', async (t) => {
@@ -544,6 +545,169 @@ describe('advanced settings panel', () => {
       await configApplied(page, '#pdf-figures-select');
       assert.equal(await page.evaluate(() => localStorage.getItem('pullmd-pdf-figures')), 'strip');
       assert.equal(await page.locator('#pdf-figures-select').inputValue(), 'strip');
+    });
+  });
+
+  describe('counter, reset and fresh fetch', () => {
+    const count = (page) => page.locator('#advanced-count');
+    const waitCount = (page, text) => page.waitForFunction(
+      (want) => document.getElementById('advanced-count').textContent === want, text,
+    );
+    const ALL_KEYS = ['pullmd-comment-depth', 'pullmd-comments-all', 'pullmd-comment-limit', 'pullmd-images',
+      'pullmd-yt-timecodes', 'pullmd-yt-chunk', 'pullmd-pdf-figures', 'pullmd-store-images',
+      'pullmd-extractor', 'pullmd-render'];
+
+    it('is empty and hidden while everything is at its default', async (t) => {
+      const { page } = await setup(t);
+      await configApplied(page);
+      await openPanel(page);
+      assert.equal(await count(page).textContent(), '');
+      assert.equal(await count(page).isVisible(), false);
+    });
+
+    it('counts changed settings, also while the panel is closed', async (t) => {
+      const { page } = await setup(t, {
+        storage: { 'pullmd-comment-depth': '5', 'pullmd-extractor': 'trafilatura' },
+      });
+      await waitCount(page, '2 geändert');
+      assert.equal(await panel(page).evaluate((el) => el.open), false);
+      assert.equal(await count(page).isVisible(), true);
+      await page.locator('#lang-toggle').click();
+      assert.equal(await count(page).textContent(), '2 changed');
+    });
+
+    it('follows a change made in the panel and a reset to the default value', async (t) => {
+      const { page } = await setup(t);
+      await configApplied(page);
+      await setField(page, 'depth-input', '5');
+      await waitCount(page, '1 geändert');
+      await setField(page, 'depth-input', '3');
+      await waitCount(page, '');
+    });
+
+    it('does not count what comments off greys out', async (t) => {
+      const { page } = await setup(t, {
+        storage: { 'pullmd-comment-depth': '5', 'pullmd-extractor': 'trafilatura', 'pullmd-comments': 'false' },
+      });
+      await waitCount(page, '1 geändert');
+      await page.locator('#comments-toggle').evaluate((el) => el.click());
+      await waitCount(page, '2 geändert');
+    });
+
+    it('does not count what the server does not offer', async (t) => {
+      const { page } = await setup(t, {
+        config: { trafilatura: false, markitdownYoutube: false },
+        storage: { 'pullmd-comment-depth': '5', 'pullmd-extractor': 'trafilatura', 'pullmd-yt-chunk': '30' },
+      });
+      await configApplied(page);
+      await waitCount(page, '1 geändert');
+    });
+
+    it('is right after the store migration, which fires no change event', async (t) => {
+      const { page } = await setup(t, {
+        storage: { 'pullmd-store-images': 'true', 'pullmd-pdf-ocr': 'true' },
+      });
+      await waitCount(page, '2 geändert');
+      assert.equal(await page.locator('#pdf-figures-select').inputValue(), 'hosted');
+    });
+
+    it('reset restores the defaults and removes the keys, the bar stays', async (t) => {
+      const { page } = await setup(t, {
+        storage: {
+          'pullmd-comment-depth': '5', 'pullmd-comments-all': 'true', 'pullmd-comment-limit': '25',
+          'pullmd-images': 'on', 'pullmd-yt-timecodes': 'plain', 'pullmd-yt-chunk': '60',
+          'pullmd-pdf-figures': 'caption', 'pullmd-store-images': 'true',
+          'pullmd-extractor': 'trafilatura', 'pullmd-render': 'force',
+          'pullmd-comments': 'true', 'pullmd-frontmatter': 'false', 'pullmd-pdf-ocr': 'true',
+        },
+      });
+      await openPanel(page);
+      await waitCount(page, '9 geändert');
+      const barState = () => page.evaluate(() => ({
+        bar: ['pullmd-comments', 'pullmd-frontmatter', 'pullmd-pdf-ocr'].map((k) => localStorage.getItem(k)),
+        open: localStorage.getItem('pullmd-advanced-open'),
+      }));
+      await page.waitForFunction(() => localStorage.getItem('pullmd-advanced-open') === 'true');
+      const before = await barState();
+      await page.locator('#advanced-reset-btn').click();
+      await waitCount(page, '');
+      const want = { 'depth-input': '3', 'comment-limit-input': '', 'images-select': '', 'yt-timecodes-select': '',
+        'yt-chunk-input': '', 'pdf-figures-select': 'strip', 'extractor-select': '', 'render-select': '' };
+      for (const [id, v] of Object.entries(want)) {
+        assert.equal(await page.locator(`#${id}`).inputValue(), v, id);
+      }
+      assert.equal(await page.locator('#all-comments-toggle').isChecked(), false);
+      assert.equal(await page.locator('#store-images-toggle').isChecked(), false);
+      assert.equal(await page.locator('#depth-input').isDisabled(), false);
+      const gone = await page.evaluate((keys) => keys.map((k) => localStorage.getItem(k)), ALL_KEYS);
+      assert.deepEqual(gone, ALL_KEYS.map(() => null));
+      assert.deepEqual(await barState(), before);
+      assert.deepEqual(before.bar, ['true', 'false', 'true']);
+      // Nothing comes back after a reload either.
+      await page.reload();
+      await configApplied(page);
+      assert.equal(await count(page).textContent(), '');
+    });
+
+    it('fetch fresh needs a URL and sends nocache once per click, storing nothing', async (t) => {
+      const { page } = await setup(t);
+      await openPanel(page);
+      const fresh = page.locator('#fresh-pull-btn');
+      assert.equal(await fresh.isDisabled(), true);
+      await page.locator('#url-input').fill('https://example.test/page');
+      assert.equal(await fresh.isDisabled(), false);
+      for (let i = 0; i < 2; i++) {
+        const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/stream');
+        await fresh.click();
+        assert.equal(new URL((await request).url()).searchParams.get('nocache'), 'true', `click ${i}`);
+        await waitForResult(page);
+      }
+      const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/stream');
+      await page.locator('#go-btn').click();
+      assert.equal(new URL((await request).url()).searchParams.has('nocache'), false);
+      await waitForResult(page);
+      const keys = await page.evaluate(() => Object.keys(localStorage).concat(Object.values(localStorage)));
+      assert.equal(keys.some((k) => /nocache/i.test(k)), false);
+      await page.locator('#url-input').fill('');
+      assert.equal(await fresh.isDisabled(), true);
+    });
+
+    it('fetch fresh keeps the panel settings in the request', async (t) => {
+      const { page } = await setup(t, { storage: { 'pullmd-extractor': 'readability' } });
+      await configApplied(page);
+      await page.locator('#url-input').fill('https://example.test/page');
+      const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/stream');
+      await page.locator('#fresh-pull-btn').click();
+      const params = new URL((await request).url()).searchParams;
+      assert.equal(params.get('extractor'), 'readability');
+      assert.equal(params.get('nocache'), 'true');
+    });
+
+    it('texts in both languages', async (t) => {
+      const { page } = await setup(t);
+      await openPanel(page);
+      assert.equal(await page.locator('#advanced-reset-btn').innerText(), 'Zurücksetzen');
+      assert.equal(await page.locator('#fresh-pull-btn').innerText(), 'Frisch abrufen');
+      assert.equal(await page.locator('#fresh-pull-hint').innerText(), 'Ruft die Seite einmal am Cache vorbei neu ab.');
+      await page.locator('#lang-toggle').click();
+      assert.equal(await page.locator('#advanced-reset-btn').innerText(), 'Reset');
+      assert.equal(await page.locator('#fresh-pull-btn').innerText(), 'Fetch fresh');
+      assert.equal(await page.locator('#fresh-pull-hint').innerText(), 'Fetches the page once, skipping the cache.');
+    });
+  });
+
+  describe('a config answer that does not come', () => {
+    it('shows the loading state at once and pulls after a short wait', async (t) => {
+      const { page } = await setup(t, {
+        mock: (context) => context.route('**/api/config', () => {}),
+      });
+      const request = page.waitForRequest((r) => new URL(r.url()).pathname === '/api/stream');
+      await page.locator('#url-input').fill('https://example.test/page');
+      await page.locator('#url-input').press('Enter');
+      await page.locator('#loading.visible').waitFor({ timeout: 1000 });
+      const params = new URL((await request).url()).searchParams;
+      assert.equal(params.get('url'), 'https://example.test/page');
+      await waitForResult(page);
     });
   });
 
