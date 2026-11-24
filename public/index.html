@@ -1421,35 +1421,35 @@
                 <div class="adv-row">
                   <label class="toggle-label" id="depth-label">
                     <span data-i18n="toggle.depth">Tiefe</span>
-                    <input type="number" id="depth-input" value="3" min="1" max="10">
+                    <input type="number" id="depth-input" value="3" min="1" max="10" aria-describedby="adv-depth-hint">
                   </label>
-                  <span class="adv-hint" data-i18n="adv.depth.hint">Wie viele Antwortebenen mitkommen.</span>
+                  <span class="adv-hint" id="adv-depth-hint" data-i18n="adv.depth.hint">Wie viele Antwortebenen mitkommen.</span>
                 </div>
                 <div class="adv-row">
                   <label class="toggle-label" id="all-comments-label">
-                    <input type="checkbox" id="all-comments-toggle">
+                    <input type="checkbox" id="all-comments-toggle" aria-describedby="adv-all-hint">
                     <span class="toggle-track"></span>
                     <span data-i18n="toggle.allComments">Alle</span>
                   </label>
-                  <span class="adv-hint" data-i18n="toggle.allComments.title">Alle Kommentare ohne Tiefengrenze.</span>
+                  <span class="adv-hint" id="adv-all-hint" data-i18n="toggle.allComments.title">Alle Kommentare ohne Tiefengrenze.</span>
                 </div>
                 <div class="adv-row" id="adv-row-limit">
                   <label class="toggle-label adv-field">
                     <span data-i18n="adv.limit">Max. Anzahl</span>
-                    <input type="number" class="adv-num" id="comment-limit-input" min="1" step="1" inputmode="numeric">
+                    <input type="number" class="adv-num" id="comment-limit-input" min="1" step="1" inputmode="numeric" aria-describedby="adv-limit-hint">
                   </label>
-                  <span class="adv-hint" data-i18n="adv.limit.hint">Höchstzahl der Kommentare auf oberster Ebene. Leer heißt ohne Grenze.</span>
+                  <span class="adv-hint" id="adv-limit-hint" data-i18n="adv.limit.hint">Höchstzahl der Kommentare auf oberster Ebene. Leer heißt ohne Grenze.</span>
                 </div>
                 <div class="adv-row" id="adv-row-images" hidden>
                   <label class="toggle-label adv-field">
                     <span data-i18n="adv.images">Bilder in Beiträgen beschreiben</span>
-                    <select class="adv-select" id="images-select">
+                    <select class="adv-select" id="images-select" aria-describedby="adv-images-hint">
                       <option value="" data-i18n="adv.opt.serverDefault">Server-Standard</option>
                       <option value="on" data-i18n="adv.opt.on">an</option>
                       <option value="off" data-i18n="adv.opt.off">aus</option>
                     </select>
                   </label>
-                  <span class="adv-hint" data-i18n="adv.images.hint">Nur Reddit. Ein KI-Modell beschreibt eingebettete Bilder. "aus" wirkt nur auf frische Abrufe.</span>
+                  <span class="adv-hint" id="adv-images-hint" data-i18n="adv.images.hint">Nur Reddit. Ein KI-Modell beschreibt eingebettete Bilder. "aus" wirkt nur auf frische Abrufe.</span>
                 </div>
               </div>
             </section>
@@ -1459,7 +1459,7 @@
                 <div class="adv-row" id="adv-row-yt-timecodes" hidden>
                   <label class="toggle-label adv-field">
                     <span data-i18n="adv.yt.timecodes">Zeitmarken</span>
-                    <select class="adv-select" id="yt-timecodes-select">
+                    <select class="adv-select" id="yt-timecodes-select" aria-describedby="adv-yt-hint">
                       <option value="" data-i18n="adv.opt.serverDefault">Server-Standard</option>
                       <option value="links" data-i18n="adv.opt.links">Links</option>
                       <option value="plain" data-i18n="adv.opt.plain">Text</option>
@@ -1470,11 +1470,11 @@
                 <div class="adv-row" id="adv-row-yt-chunk" hidden>
                   <label class="toggle-label adv-field">
                     <span data-i18n="adv.yt.chunk">Blocklänge (s)</span>
-                    <input type="number" class="adv-num" id="yt-chunk-input" min="0" step="1" inputmode="numeric">
+                    <input type="number" class="adv-num" id="yt-chunk-input" min="0" step="1" inputmode="numeric" aria-describedby="adv-yt-hint">
                   </label>
                 </div>
               </div>
-              <p class="adv-hint adv-group-hint" data-i18n="adv.yt.hint">Abweichende Werte umgehen den Cache und dauern länger.</p>
+              <p class="adv-hint adv-group-hint" id="adv-yt-hint" data-i18n="adv.yt.hint">Abweichende Werte umgehen den Cache und dauern länger.</p>
             </section>
             <section class="adv-group" id="adv-group-docs" hidden>
               <h3 class="adv-group-title" data-i18n="adv.group.docs">PDF und Dokumente</h3>
@@ -1482,21 +1482,21 @@
                 <div class="adv-row" id="adv-row-figures" hidden>
                   <label class="toggle-label adv-field">
                     <span data-i18n="adv.figures">Abbildungen</span>
-                    <select class="adv-select" id="pdf-figures-select">
+                    <select class="adv-select" id="pdf-figures-select" aria-describedby="adv-figures-hint">
                       <option value="strip" data-i18n="adv.opt.strip">weglassen</option>
                       <option value="caption" data-i18n="adv.opt.caption">beschreiben</option>
                       <option value="hosted" data-needs="imageHosting" data-i18n="adv.opt.hosted">mitliefern</option>
                     </select>
                   </label>
-                  <span class="adv-hint" data-i18n="adv.figures.hint">Wirkt nur mit PDF-OCR. Beschreiben und Mitliefern lassen ein KI-Modell jede Abbildung beschreiben. Bei Uploads braucht Mitliefern "Uploads speichern", sonst wird beschrieben.</span>
+                  <span class="adv-hint" id="adv-figures-hint" data-i18n="adv.figures.hint">Wirkt nur mit PDF-OCR. Beschreiben und Mitliefern lassen ein KI-Modell jede Abbildung beschreiben. Bei Uploads braucht Mitliefern "Uploads speichern", sonst wird beschrieben.</span>
                 </div>
                 <div class="adv-row" id="adv-row-store" hidden>
                   <label class="toggle-label" id="store-images-label">
-                    <input type="checkbox" id="store-images-toggle">
+                    <input type="checkbox" id="store-images-toggle" aria-describedby="adv-store-hint">
                     <span class="toggle-track"></span>
                     <span data-i18n="toggle.store">Uploads speichern</span>
                   </label>
-                  <span class="adv-hint" data-i18n="toggle.store.title">Ergebnis bekommt einen Share-Link und erscheint im Verlauf.</span>
+                  <span class="adv-hint" id="adv-store-hint" data-i18n="toggle.store.title">Ergebnis bekommt einen Share-Link und erscheint im Verlauf.</span>
                 </div>
               </div>
             </section>
@@ -1506,7 +1506,7 @@
                 <div class="adv-row" id="adv-row-extractor" hidden>
                   <label class="toggle-label adv-field">
                     <span data-i18n="adv.extractor">Extraktor</span>
-                    <select class="adv-select" id="extractor-select">
+                    <select class="adv-select" id="extractor-select" aria-describedby="adv-web-hint">
                       <option value="" data-i18n="adv.opt.auto">automatisch</option>
                       <option value="readability">Readability</option>
                       <option value="trafilatura" data-needs="trafilatura">Trafilatura</option>
@@ -1517,7 +1517,7 @@
                 <div class="adv-row" id="adv-row-render" hidden>
                   <label class="toggle-label adv-field">
                     <span data-i18n="adv.render">Browser-Rendering</span>
-                    <select class="adv-select" id="render-select">
+                    <select class="adv-select" id="render-select" aria-describedby="adv-web-hint">
                       <option value="" data-i18n="adv.opt.auto">automatisch</option>
                       <option value="force" data-i18n="adv.opt.force">erzwingen</option>
                       <option value="skip" data-i18n="adv.opt.skip">überspringen</option>
@@ -1525,7 +1525,7 @@
                   </label>
                 </div>
               </div>
-              <p class="adv-hint adv-group-hint" data-i18n="adv.web.hint">Abweichende Werte umgehen den Cache und dauern länger.</p>
+              <p class="adv-hint adv-group-hint" id="adv-web-hint" data-i18n="adv.web.hint">Abweichende Werte umgehen den Cache und dauern länger.</p>
             </section>
             <div id="advanced-actions">
               <div class="adv-action">

@@ -1221,7 +1221,10 @@ paths:
                   imageHosting: { type: boolean, description: '`PULLMD_IMAGE_HOSTING` is on and `PUBLIC_URL` is set: `pdf_images=hosted` stores figures. `/img/{file}` serves stored figures whenever `PULLMD_IMAGE_HOSTING` is on.' }
                   uploadStore: { type: boolean, description: '`PULLMD_UPLOAD_STORE` is on: `POST /api/file` accepts `store=true`.' }
                   markitdownYoutube: { type: boolean, description: YouTube transcripts are on. }
-              example: { disablePublicHistory: false, authMode: disabled, authMisconfigured: false, signupOpen: false, markitdown: true, vision: false, stt: false, pdfOcr: false, imageHosting: false, uploadStore: true, markitdownYoutube: false }
+                  trafilatura: { type: boolean, description: '`TRAFILATURA_URL` is set: the Trafilatura sidecar is configured.' }
+                  playwright: { type: boolean, description: '`PLAYWRIGHT_URL` is set: the browser sidecar is configured.' }
+                  embeddedImages: { type: boolean, description: 'The instance can describe embedded images: a vision provider is configured and `PULLMD_EMBEDDED_IMAGES` is not `off`.' }
+              example: { disablePublicHistory: false, authMode: disabled, authMisconfigured: false, signupOpen: false, markitdown: true, vision: false, stt: false, pdfOcr: false, imageHosting: false, uploadStore: true, markitdownYoutube: false, trafilatura: true, playwright: true, embeddedImages: false }
   /api/recipes/status:
     get:
       tags: [Instance]
