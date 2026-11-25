@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Documentation
+
+- **The help page's "Added since" list covers 3.14 to 3.22.** It stopped at 3.13.
+
 ## [3.22.0] - 2026-11-25
 
 ### Added
