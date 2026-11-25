@@ -40,6 +40,9 @@ describe('store uploads', () => {
     await page.goto(app.baseUrl + '/');
     // The toggle lives in the collapsed advanced panel.
     await page.locator('#advanced-panel > summary').click();
+    // The open state is saved on the async toggle event. Wait for it, so a
+    // later reload cannot come back with a closed panel.
+    await page.waitForFunction(() => localStorage.getItem('pullmd-advanced-open') === 'true');
     return { page, seen };
   }
 
