@@ -1,6 +1,6 @@
 ---
 title: Upgrading
-description: Update PullMD, what to check when upgrading across 3.20, 3.19.2, 3.18, 3.17, 3.16, 3.15.2, 3.13 and 3.0, and how to roll back.
+description: Update PullMD, what to check when upgrading across 3.22, 3.20, 3.19.2, 3.18, 3.17, 3.16, 3.15.2, 3.13 and 3.0, and how to roll back.
 ---
 
 # Upgrading
@@ -14,7 +14,7 @@ docker compose up -d
 
 This updates all four containers to the version your compose file names (`:latest` by default). The database upgrades itself on start. Read the [changelog](/changelog) first, and the notes below if you're crossing one of these versions.
 
-## To the next release (unreleased): PDF figures, stored uploads and OCR share links
+## To 3.22 or later: PDF figures, stored uploads and OCR share links
 
 - **Compose file:** the compose files pass two new variables through, `PULLMD_IMAGE_HOSTING` (off by default) and `PULLMD_UPLOAD_STORE` (on by default). A compose file you downloaded or edited earlier doesn't. To turn [hosted figures](/guides/documents#hosted-figures) on, or [stored uploads](/guides/documents#keep-an-upload) off, add the line to the `pullmd` service's `environment:`, for example `- PULLMD_IMAGE_HOSTING=${PULLMD_IMAGE_HOSTING:-}`, and run `docker compose up -d`.
 - **`PUBLIC_URL`:** hosted figure links start with `PUBLIC_URL`. Without it, `pdf_images=hosted` works as `caption` and PullMD logs a warning at startup. The compose files set it; check it if you run PullMD without them.
@@ -138,7 +138,7 @@ The Claude Code skill was renamed from `web-reader` to `pullmd` in 3.0. Remove t
 Pin an exact version on every image to control when you upgrade:
 
 ```yaml
-image: aeternalabshq/pullmd:3.21.0
+image: aeternalabshq/pullmd:3.22.0
 ```
 
 Before a big upgrade, copy the `./data` folder. To roll back, pin the previous version and run `docker compose up -d`. 3.13 doesn't change the database schema, and 3.0 only adds a `metadata` column to the `conversions` table, which older versions ignore. Rolling back across them needs no restore. For other versions, check the changelog for schema changes first. To stay on the 2.x output format, use `aeternalabshq/pullmd:2`.
