@@ -11,6 +11,8 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+## [3.22.0] - 2026-11-25
+
 ### Added
 
 - **`pdf_images` decides what happens to the figures of an OCR-converted PDF.** On `GET /api`, `/api/stream`, `POST /api/file` and MCP `read_url` (`pdf_images`), whenever OCR runs: `strip` (the default) puts a text line with the figure's id and size in its place, such as `*[Abbildung: img-0.jpeg, 648×523 px]*`; `caption` a short description the OCR provider writes in the same request, such as `> **Abbildung** (img-0.jpeg, 648×523): …`; `hosted` the figure itself as an image link. With `lang=en` the label is `Figure` and descriptions are asked for in English (on the REST endpoints; MCP writes `Abbildung` and German descriptions); otherwise descriptions are asked for in German. `hosted` falls back to `caption` when the instance doesn't host figures or a figure can't be stored, and a figure without a description gets the `strip` line; figures never make a conversion fail. PullMD asks for at most 40 figures per document and skips images smaller than 50 px; figures after the 40th are left out without a marker. `pdf_images` on its own doesn't bypass the cache.
