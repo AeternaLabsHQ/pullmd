@@ -20,7 +20,7 @@ import { BotChallengeError } from './lib/challenge.js';
 import { createRateLimiter } from './lib/oauth/rate-limit.js';
 import { ignoredModelEnvWarning } from './lib/llm/providers.js';
 import { createLlmBudget } from './lib/llm/budget.js';
-import { parseImagesParam, resolveEmbeddedImages, cachedImagesIncomplete, embeddedImagesModeWarning, redditImageOptions, imageStoreFrom } from './lib/embedded-images.js';
+import { parseImagesParam, resolveEmbeddedImages, cachedImagesIncomplete, embeddedImagesModeWarning, readEmbeddedImagesMode, visionConfigured, redditImageOptions, imageStoreFrom } from './lib/embedded-images.js';
 import { createStatusChecker } from './lib/status.js';
 import { createForwardedHeaderNotice } from './lib/proxy-notice.js';
 import { stripMarkdown } from './lib/strip-markdown.js';
@@ -1526,6 +1526,10 @@ export function createApp(overrides = {}) {
       imageHosting: imageHostingOn,
       uploadStore,
       markitdownYoutube: isYoutubeEnabled(),
+      // Read per request like lib/status.js, so the flags track the live env.
+      trafilatura: !!process.env.TRAFILATURA_URL,
+      playwright: !!process.env.PLAYWRIGHT_URL,
+      embeddedImages: visionConfigured() && readEmbeddedImagesMode() !== 'off',
     });
   });
 

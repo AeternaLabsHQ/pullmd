@@ -293,17 +293,6 @@
       gap: 0.625rem 1rem;
     }
 
-    /* Comments, depth and "All" belong together: one group, set off from
-       the other switches by a thin vertical rule. */
-    .control-group {
-      display: inline-flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 0.625rem 1rem;
-      padding-right: 1rem;
-      border-right: 1px solid var(--border-strong);
-    }
-
     /* Toggle switch */
     .toggle-label {
       display: inline-flex;
@@ -339,9 +328,9 @@
       background: var(--accent-fg);
     }
 
-    /* depth input */
+    /* depth input and the other number fields of the advanced panel */
     #depth-label { gap: 0.5rem; }
-    #depth-input {
+    #depth-input, .adv-num {
       width: 3rem;
       padding: 0.25rem 0.375rem;
       font-size: 0.8125rem;
@@ -354,8 +343,130 @@
       -moz-appearance: textfield;
       outline: none;
     }
-    #depth-input:focus { border-color: var(--accent); }
-    #depth-input:disabled { opacity: 0.4; cursor: not-allowed; }
+    #depth-input:focus, .adv-num:focus { border-color: var(--accent); }
+    .adv-num { width: 4.5rem; }
+    /* Selects share the look of the number fields; the arrow is drawn with
+       theme colours so it works in dark and paper. */
+    .adv-select {
+      max-width: 100%;
+      padding: 0.25rem 1.625rem 0.25rem 0.5rem;
+      font-size: 0.8125rem;
+      font-family: inherit;
+      color: var(--fg);
+      background-color: var(--bg-input);
+      background-image:
+        linear-gradient(45deg, transparent 50%, var(--fg-muted) 50%),
+        linear-gradient(135deg, var(--fg-muted) 50%, transparent 50%);
+      background-position: calc(100% - 0.8125rem) 55%, calc(100% - 0.5rem) 55%;
+      background-size: 0.3125rem 0.3125rem;
+      background-repeat: no-repeat;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+      cursor: pointer;
+    }
+    .adv-select:focus { border-color: var(--accent); }
+    .adv-select option { background: var(--bg-elev); color: var(--fg); }
+    #depth-input:disabled, .adv-num:disabled, .adv-select:disabled { cursor: not-allowed; }
+
+    /* Advanced settings: a native <details> under the toggle bar, groups by
+       kind of content, every setting with a one-line hint underneath. */
+    #advanced-panel {
+      border-top: 1px solid var(--border);
+      padding-top: 0.625rem;
+    }
+    #advanced-panel > summary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      font-size: 0.8125rem;
+      color: var(--fg-muted);
+      border-radius: 6px;
+    }
+    #advanced-panel > summary::-webkit-details-marker { display: none; }
+    #advanced-panel > summary::before {
+      content: '';
+      width: 0.4375rem; height: 0.4375rem;
+      border-right: 1.5px solid currentColor;
+      border-bottom: 1.5px solid currentColor;
+      transform: rotate(-45deg);
+      transition: transform 0.15s;
+    }
+    #advanced-panel[open] > summary::before { transform: rotate(45deg); }
+    #advanced-panel > summary:hover { color: var(--fg); }
+    #advanced-panel > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    #advanced-count:empty { display: none; }
+    #advanced-count { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; color: var(--accent); }
+    #advanced-count::before { content: ''; width: 0.375rem; height: 0.375rem; border-radius: 50%; background: var(--accent); }
+    .adv-body { display: flex; flex-direction: column; gap: 0.625rem; padding-top: 0.875rem; }
+    /* Each group is a quiet card: a hairline frame and a slightly different
+       ground, so the eye finds the four blocks without a heavy box. */
+    .adv-group {
+      padding: 0.75rem 0.875rem 0.875rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-input);
+    }
+    [data-theme="paper"] .adv-group { background: var(--bg-result); }
+    .adv-group[hidden], .adv-row[hidden] { display: none; }
+    .adv-group-title {
+      margin: 0 0 0.625rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.6875rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--fg-dim);
+    }
+    .adv-rows {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem 1.5rem;
+    }
+    .adv-row { display: flex; flex-direction: column; gap: 0.25rem; }
+    .adv-row > .toggle-label { min-height: 1.75rem; }
+    .adv-field { gap: 0.5rem; flex-wrap: wrap; white-space: normal; }
+    .adv-hint { font-size: 0.75rem; line-height: 1.4; color: var(--fg-dim); }
+    .adv-group-hint { margin: 0.5rem 0 0; }
+    /* Greyed out: the control and its label dim, the hint stays readable
+       because it says why. */
+    .adv-row > * { transition: opacity 0.15s; }
+    .adv-row.adv-disabled > :not(.adv-hint) { opacity: 0.4; }
+    .adv-row.adv-disabled .toggle-label { cursor: not-allowed; }
+    #advanced-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.75rem 1rem;
+      padding-top: 0.875rem;
+      border-top: 1px solid var(--border);
+    }
+    .adv-action { display: flex; flex-direction: column; align-items: flex-start; gap: 0.375rem; max-width: 100%; }
+    .adv-action:last-child { align-items: flex-end; text-align: right; margin-left: auto; }
+    @media (max-width: 600px) {
+      .adv-action:last-child { align-items: flex-start; text-align: left; margin-left: 0; }
+    }
+    .adv-action-btn {
+      font: inherit;
+      font-size: 0.8125rem;
+      padding: 0.4375rem 0.875rem;
+      color: var(--fg);
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s, opacity 0.15s;
+    }
+    .adv-action-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .adv-action-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .adv-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
     /* Go button */
     #go-btn {
@@ -1108,8 +1219,7 @@
     @media (max-width: 480px) {
       .container { padding: 1.5rem 1rem 4rem; }
       .controls { gap: 0.5rem 0.875rem; }
-      /* On a phone the group gets its own row; the rule would dangle at the line end. */
-      .control-group { gap: 0.5rem 0.875rem; padding-right: 0; border-right: 0; flex-basis: 100%; }
+      .adv-rows { grid-template-columns: minmax(0, 1fr); }
       #go-btn { width: 100%; margin-left: 0; justify-content: center; }
       /* Three action buttons plus the badges and the Raw|Rendered toggle do not
          fit on a phone - collapse the buttons to their icons. The accessible
@@ -1289,22 +1399,11 @@
         </div>
 
         <div class="controls">
-          <div class="control-group" id="comments-group">
           <label class="toggle-label">
             <input type="checkbox" id="comments-toggle" checked>
             <span class="toggle-track"></span>
             <span data-i18n="toggle.comments">Kommentare</span>
           </label>
-          <label class="toggle-label" id="depth-label">
-            <span data-i18n="toggle.depth">Tiefe</span>
-            <input type="number" id="depth-input" value="3" min="1" max="10">
-          </label>
-          <label class="toggle-label" id="all-comments-label" data-i18n-attr="title" data-i18n-attr-key="toggle.allComments.title">
-            <input type="checkbox" id="all-comments-toggle">
-            <span class="toggle-track"></span>
-            <span data-i18n="toggle.allComments">Alle</span>
-          </label>
-          </div>
           <label class="toggle-label">
             <input type="checkbox" id="frontmatter-toggle">
             <span class="toggle-track"></span>
@@ -1315,16 +1414,141 @@
             <span class="toggle-track"></span>
             <span data-i18n="toggle.ocr">PDF-OCR</span>
           </label>
-          <label class="toggle-label" id="store-images-label" style="display:none;" data-i18n-attr="title" data-i18n-attr-key="toggle.storeImages.title">
-            <input type="checkbox" id="store-images-toggle">
-            <span class="toggle-track"></span>
-            <span data-i18n="toggle.storeImages">Speichern + Bilder</span>
-          </label>
           <button id="go-btn">
             <span data-i18n="btn.pull">Pull</span>
             <span class="arrow" aria-hidden="true">→</span>
           </button>
         </div>
+
+        <details id="advanced-panel">
+          <summary>
+            <span data-i18n="adv.title">Erweitert</span>
+            <span id="advanced-count"></span>
+          </summary>
+          <div class="adv-body">
+            <section class="adv-group" id="adv-group-comments">
+              <h3 class="adv-group-title" data-i18n="adv.group.comments">Reddit und Hacker News</h3>
+              <div class="adv-rows">
+                <div class="adv-row">
+                  <label class="toggle-label" id="depth-label">
+                    <span data-i18n="toggle.depth">Tiefe</span>
+                    <input type="number" id="depth-input" value="3" min="1" max="10" aria-describedby="adv-depth-hint">
+                  </label>
+                  <span class="adv-hint" id="adv-depth-hint" data-i18n="adv.depth.hint">Wie viele Antwortebenen mitkommen.</span>
+                </div>
+                <div class="adv-row">
+                  <label class="toggle-label" id="all-comments-label">
+                    <input type="checkbox" id="all-comments-toggle" aria-describedby="adv-all-hint">
+                    <span class="toggle-track"></span>
+                    <span data-i18n="toggle.allComments">Alle</span>
+                  </label>
+                  <span class="adv-hint" id="adv-all-hint" data-i18n="toggle.allComments.title">Alle Kommentare ohne Tiefengrenze.</span>
+                </div>
+                <div class="adv-row" id="adv-row-limit">
+                  <label class="toggle-label adv-field">
+                    <span data-i18n="adv.limit">Max. Anzahl</span>
+                    <input type="number" class="adv-num" id="comment-limit-input" min="1" step="1" inputmode="numeric" aria-describedby="adv-limit-hint">
+                  </label>
+                  <span class="adv-hint" id="adv-limit-hint" data-i18n="adv.limit.hint">Höchstzahl der Kommentare auf oberster Ebene. Leer heißt ohne Grenze.</span>
+                </div>
+                <div class="adv-row" id="adv-row-images" hidden>
+                  <label class="toggle-label adv-field">
+                    <span data-i18n="adv.images">Bilder in Beiträgen beschreiben</span>
+                    <select class="adv-select" id="images-select" aria-describedby="adv-images-hint">
+                      <option value="" data-i18n="adv.opt.serverDefault">Server-Standard</option>
+                      <option value="on" data-i18n="adv.opt.on">an</option>
+                      <option value="off" data-i18n="adv.opt.off">aus</option>
+                    </select>
+                  </label>
+                  <span class="adv-hint" id="adv-images-hint" data-i18n="adv.images.hint">Nur Reddit. Ein KI-Modell beschreibt eingebettete Bilder. "aus" wirkt nur auf frische Abrufe.</span>
+                </div>
+              </div>
+            </section>
+            <section class="adv-group" id="adv-group-youtube" hidden>
+              <h3 class="adv-group-title" data-i18n="adv.group.youtube">YouTube</h3>
+              <div class="adv-rows">
+                <div class="adv-row" id="adv-row-yt-timecodes" hidden>
+                  <label class="toggle-label adv-field">
+                    <span data-i18n="adv.yt.timecodes">Zeitmarken</span>
+                    <select class="adv-select" id="yt-timecodes-select" aria-describedby="adv-yt-hint">
+                      <option value="" data-i18n="adv.opt.serverDefault">Server-Standard</option>
+                      <option value="links" data-i18n="adv.opt.links">Links</option>
+                      <option value="plain" data-i18n="adv.opt.plain">Text</option>
+                      <option value="none" data-i18n="adv.opt.none">keine</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="adv-row" id="adv-row-yt-chunk" hidden>
+                  <label class="toggle-label adv-field">
+                    <span data-i18n="adv.yt.chunk">Blocklänge (s)</span>
+                    <input type="number" class="adv-num" id="yt-chunk-input" min="0" step="1" inputmode="numeric" aria-describedby="adv-yt-hint">
+                  </label>
+                </div>
+              </div>
+              <p class="adv-hint adv-group-hint" id="adv-yt-hint" data-i18n="adv.yt.hint">Abweichende Werte umgehen den Cache und dauern länger.</p>
+            </section>
+            <section class="adv-group" id="adv-group-docs" hidden>
+              <h3 class="adv-group-title" data-i18n="adv.group.docs">PDF und Dokumente</h3>
+              <div class="adv-rows">
+                <div class="adv-row" id="adv-row-figures" hidden>
+                  <label class="toggle-label adv-field">
+                    <span data-i18n="adv.figures">Abbildungen</span>
+                    <select class="adv-select" id="pdf-figures-select" aria-describedby="adv-figures-hint">
+                      <option value="strip" data-i18n="adv.opt.strip">weglassen</option>
+                      <option value="caption" data-i18n="adv.opt.caption">beschreiben</option>
+                      <option value="hosted" data-needs="imageHosting" data-i18n="adv.opt.hosted">mitliefern</option>
+                    </select>
+                  </label>
+                  <span class="adv-hint" id="adv-figures-hint" data-i18n="adv.figures.hint">Wirkt nur mit PDF-OCR. Beschreiben und Mitliefern lassen ein KI-Modell jede Abbildung beschreiben. Bei Uploads braucht Mitliefern "Uploads speichern", sonst wird beschrieben.</span>
+                </div>
+                <div class="adv-row" id="adv-row-store" hidden>
+                  <label class="toggle-label" id="store-images-label">
+                    <input type="checkbox" id="store-images-toggle" aria-describedby="adv-store-hint">
+                    <span class="toggle-track"></span>
+                    <span data-i18n="toggle.store">Uploads speichern</span>
+                  </label>
+                  <span class="adv-hint" id="adv-store-hint" data-i18n="toggle.store.title">Ergebnis bekommt einen Share-Link und erscheint im Verlauf.</span>
+                </div>
+              </div>
+            </section>
+            <section class="adv-group" id="adv-group-web" hidden>
+              <h3 class="adv-group-title" data-i18n="adv.group.web">Webseiten</h3>
+              <div class="adv-rows">
+                <div class="adv-row" id="adv-row-extractor" hidden>
+                  <label class="toggle-label adv-field">
+                    <span data-i18n="adv.extractor">Extraktor</span>
+                    <select class="adv-select" id="extractor-select" aria-describedby="adv-web-hint">
+                      <option value="" data-i18n="adv.opt.auto">automatisch</option>
+                      <option value="readability">Readability</option>
+                      <option value="trafilatura" data-needs="trafilatura">Trafilatura</option>
+                      <option value="playwright" data-needs="playwright" data-i18n="adv.opt.browser">Browser</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="adv-row" id="adv-row-render" hidden>
+                  <label class="toggle-label adv-field">
+                    <span data-i18n="adv.render">Browser-Rendering</span>
+                    <select class="adv-select" id="render-select" aria-describedby="adv-web-hint">
+                      <option value="" data-i18n="adv.opt.auto">automatisch</option>
+                      <option value="force" data-i18n="adv.opt.force">erzwingen</option>
+                      <option value="skip" data-i18n="adv.opt.skip">überspringen</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <p class="adv-hint adv-group-hint" id="adv-web-hint" data-i18n="adv.web.hint">Abweichende Werte umgehen den Cache und dauern länger.</p>
+            </section>
+            <div id="advanced-actions">
+              <div class="adv-action">
+                <button type="button" class="adv-action-btn" id="advanced-reset-btn" data-i18n="adv.reset">Zurücksetzen</button>
+              </div>
+              <div class="adv-action">
+                <button type="button" class="adv-action-btn" id="fresh-pull-btn" aria-describedby="fresh-pull-hint" disabled data-i18n="adv.fresh">Frisch abrufen</button>
+                <span class="adv-hint" id="fresh-pull-hint" data-i18n="adv.fresh.hint">Ruft die Seite einmal am Cache vorbei neu ab.</span>
+              </div>
+            </div>
+          </div>
+        </details>
 
       </div>
     </div>
@@ -1505,9 +1729,42 @@
           'toggle.comments':   'Kommentare',
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF-OCR',
-          'toggle.storeImages': 'Speichern + Bilder',
-          'toggle.storeImages.title': 'Ergebnis bekommt einen Share-Link und erscheint im Verlauf. Abbildungen aus OCR-PDFs werden mitgespeichert.',
-          'toggle.store':       'Speichern',
+          'adv.title':          'Erweitert',
+          'adv.changed':        '{n} geändert',
+          'adv.reset':          'Zurücksetzen',
+          'adv.fresh':          'Frisch abrufen',
+          'adv.fresh.hint':     'Ruft die Seite einmal am Cache vorbei neu ab.',
+          'adv.group.comments': 'Reddit und Hacker News',
+          'adv.group.youtube':  'YouTube',
+          'adv.group.docs':     'PDF und Dokumente',
+          'adv.group.web':      'Webseiten',
+          'adv.depth.hint':     'Wie viele Antwortebenen mitkommen.',
+          'adv.limit':          'Max. Anzahl',
+          'adv.limit.hint':     'Höchstzahl der Kommentare auf oberster Ebene. Leer heißt ohne Grenze.',
+          'adv.images':         'Bilder in Beiträgen beschreiben',
+          'adv.images.hint':    'Nur Reddit. Ein KI-Modell beschreibt eingebettete Bilder. "aus" wirkt nur auf frische Abrufe.',
+          'adv.yt.timecodes':   'Zeitmarken',
+          'adv.yt.chunk':       'Blocklänge (s)',
+          'adv.yt.hint':        'Abweichende Werte umgehen den Cache und dauern länger.',
+          'adv.figures':        'Abbildungen',
+          'adv.figures.hint':   'Wirkt nur mit PDF-OCR. Beschreiben und Mitliefern lassen ein KI-Modell jede Abbildung beschreiben. Bei Uploads braucht Mitliefern "Uploads speichern", sonst wird beschrieben.',
+          'adv.extractor':      'Extraktor',
+          'adv.render':         'Browser-Rendering',
+          'adv.web.hint':       'Abweichende Werte umgehen den Cache und dauern länger.',
+          'adv.opt.serverDefault': 'Server-Standard',
+          'adv.opt.on':         'an',
+          'adv.opt.off':        'aus',
+          'adv.opt.links':      'Links',
+          'adv.opt.plain':      'Text',
+          'adv.opt.none':       'keine',
+          'adv.opt.strip':      'weglassen',
+          'adv.opt.caption':    'beschreiben',
+          'adv.opt.hosted':     'mitliefern',
+          'adv.opt.auto':       'automatisch',
+          'adv.opt.browser':    'Browser',
+          'adv.opt.force':      'erzwingen',
+          'adv.opt.skip':       'überspringen',
+          'toggle.store':       'Uploads speichern',
           'toggle.store.title': 'Ergebnis bekommt einen Share-Link und erscheint im Verlauf.',
           'history.stored':     'Datei',
           'toggle.depth':      'Tiefe',
@@ -1580,9 +1837,42 @@
           'toggle.comments':   'Comments',
           'toggle.frontmatter':'Frontmatter',
           'toggle.ocr':         'PDF OCR',
-          'toggle.storeImages': 'Store + images',
-          'toggle.storeImages.title': 'The result gets a share link and shows up in the history. Figures from OCR PDFs are stored with it.',
-          'toggle.store':       'Store',
+          'adv.title':          'Advanced',
+          'adv.changed':        '{n} changed',
+          'adv.reset':          'Reset',
+          'adv.fresh':          'Fetch fresh',
+          'adv.fresh.hint':     'Fetches the page once, skipping the cache.',
+          'adv.group.comments': 'Reddit and Hacker News',
+          'adv.group.youtube':  'YouTube',
+          'adv.group.docs':     'PDFs and documents',
+          'adv.group.web':      'Web pages',
+          'adv.depth.hint':     'How many reply levels are included.',
+          'adv.limit':          'Max. count',
+          'adv.limit.hint':     'Maximum number of top-level comments. Empty means no cap.',
+          'adv.images':         'Describe images in posts',
+          'adv.images.hint':    'Reddit only. An AI model describes embedded images. "off" only affects fresh fetches.',
+          'adv.yt.timecodes':   'Timecodes',
+          'adv.yt.chunk':       'Block length (s)',
+          'adv.yt.hint':        'Non-default values skip the cache and take longer.',
+          'adv.figures':        'Figures',
+          'adv.figures.hint':   'Only works with PDF OCR. Describe and Include have an AI model describe every figure. For uploads, Include needs "Store uploads", otherwise figures are described.',
+          'adv.extractor':      'Extractor',
+          'adv.render':         'Browser rendering',
+          'adv.web.hint':       'Non-default values skip the cache and take longer.',
+          'adv.opt.serverDefault': 'Server default',
+          'adv.opt.on':         'On',
+          'adv.opt.off':        'Off',
+          'adv.opt.links':      'Links',
+          'adv.opt.plain':      'Text',
+          'adv.opt.none':       'None',
+          'adv.opt.strip':      'Omit',
+          'adv.opt.caption':    'Describe',
+          'adv.opt.hosted':     'Include',
+          'adv.opt.auto':       'Automatic',
+          'adv.opt.browser':    'Browser',
+          'adv.opt.force':      'Force',
+          'adv.opt.skip':       'Skip',
+          'toggle.store':       'Store uploads',
           'toggle.store.title': 'The result gets a share link and shows up in the history.',
           'history.stored':     'File',
           'toggle.depth':      'Depth',
@@ -1777,9 +2067,8 @@
       const ocrToggle = document.getElementById('ocr-toggle');
       const storeToggle = document.getElementById('store-images-toggle');
       const depthInput = document.getElementById('depth-input');
-      const depthLabel = document.getElementById('depth-label');
+      const advancedPanel = document.getElementById('advanced-panel');
       const allCommentsToggle = document.getElementById('all-comments-toggle');
-      const allCommentsLabel = document.getElementById('all-comments-label');
       const goBtn = document.getElementById('go-btn');
       const loadingEl = document.getElementById('loading');
       const errorEl = document.getElementById('error');
@@ -1990,10 +2279,12 @@
         resultContainer.classList.remove('visible');
         permalinkBar.style.display = 'none';
         goBtn.disabled = true;
+        syncFreshBtn();
       }
       function hideLoading() {
         loadingEl.classList.remove('visible');
         goBtn.disabled = false;
+        syncFreshBtn();
       }
       // Mirrors isGlobalScope on the server: no auth configured or auth
       // disabled means every caller deletes globally, otherwise only an admin
@@ -2192,15 +2483,6 @@
           if (v !== null) frontmatterToggle.checked = v === 'true';
           v = localStorage.getItem('pullmd-pdf-ocr');
           if (v !== null) ocrToggle.checked = v === 'true';
-          v = localStorage.getItem('pullmd-store-images');
-          if (v !== null) storeToggle.checked = v === 'true';
-          v = localStorage.getItem('pullmd-comment-depth');
-          if (v !== null) {
-            var n = parseInt(v, 10);
-            if (n >= 1 && n <= 10) depthInput.value = String(n);
-          }
-          v = localStorage.getItem('pullmd-comments-all');
-          if (v !== null) allCommentsToggle.checked = v === 'true';
         } catch (e) {}
       })();
       commentsToggle.addEventListener('change', function () {
@@ -2217,52 +2499,242 @@
       ocrToggle.addEventListener('change', function () {
         try { localStorage.setItem('pullmd-pdf-ocr', String(ocrToggle.checked)); } catch (e) {}
       });
-      storeToggle.addEventListener('change', function () {
-        try { localStorage.setItem('pullmd-store-images', String(storeToggle.checked)); } catch (e) {}
-      });
-      depthInput.addEventListener('change', function () {
-        const n = parseInt(depthInput.value, 10);
-        if (!(n >= 1)) depthInput.value = '3';
-        else if (n > 10) depthInput.value = '10';
-        try { localStorage.setItem('pullmd-comment-depth', depthInput.value); } catch (e) {}
-      });
 
-      allCommentsToggle.addEventListener('change', function () {
-        try { localStorage.setItem('pullmd-comments-all', String(allCommentsToggle.checked)); } catch (e) {}
-        updateDepthVisibility();
-      });
-
-      function updateDepthVisibility() {
-        const display = commentsToggle.checked ? '' : 'none';
-        depthLabel.style.display = display;
-        allCommentsLabel.style.display = display;
-        depthInput.disabled = allCommentsToggle.checked;
+      // ---- Advanced settings ----
+      // One table drives restoring, saving, greying out, the request
+      // parameters on every route and the "n changed" count. A value equal to
+      // `def` is never sent. Rows bound to a server capability stay hidden and
+      // unsent until /api/config says the server has it (`caps`, filled below).
+      var caps = {
+        loaded: false, pdfOcr: false, imageHosting: false, uploadStore: false,
+        trafilatura: false, playwright: false, embeddedImages: false, markitdownYoutube: false,
+      };
+      function always() { return true; }
+      function needs(cap) { return function () { return caps[cap]; }; }
+      // Comment settings follow the comments toggle, or the request's own choice.
+      function commentsOn(ctx) {
+        return ctx && ctx.withComments !== undefined ? !!ctx.withComments : commentsToggle.checked;
       }
-      commentsToggle.addEventListener('change', updateDepthVisibility);
-      updateDepthVisibility();
+      // parse() helpers: the first value is the default.
+      function choice(values) {
+        return function (raw) { return values.indexOf(raw) > 0 ? raw : values[0]; };
+      }
+      function wholeNumber(min) {
+        return function (raw) { return /^\d+$/.test(raw) && Number(raw) >= min ? String(Number(raw)) : ''; };
+      }
+      var flag = choice(['false', 'true']);
+
+      const ADV_SETTINGS = [
+        { el: depthInput, key: 'pullmd-comment-depth', def: '3', param: 'comment_depth', routes: ['url', 'reopen'],
+          available: always,
+          enabled: function (ctx) { return commentsOn(ctx) && !allCommentsToggle.checked; },
+          parse: function (raw) { var n = parseInt(raw, 10); return n >= 1 ? String(Math.min(n, 10)) : '3'; } },
+        { el: allCommentsToggle, key: 'pullmd-comments-all', def: 'false', param: 'comment_depth', routes: ['url', 'reopen'],
+          available: always, enabled: commentsOn, parse: flag,
+          send: function () { return 'all'; } },
+        { el: document.getElementById('comment-limit-input'), key: 'pullmd-comment-limit', def: '',
+          param: 'comment_limit', routes: ['url'],
+          available: always, enabled: commentsOn, parse: wholeNumber(1) },
+        { el: document.getElementById('images-select'), key: 'pullmd-images', def: '', param: 'images', routes: ['url'],
+          available: needs('embeddedImages'), enabled: always, parse: choice(['', 'on', 'off']) },
+        { el: document.getElementById('yt-timecodes-select'), key: 'pullmd-yt-timecodes', def: '',
+          param: 'yt_timecodes', routes: ['url'],
+          available: needs('markitdownYoutube'), enabled: always, parse: choice(['', 'links', 'plain', 'none']) },
+        { el: document.getElementById('yt-chunk-input'), key: 'pullmd-yt-chunk', def: '', param: 'yt_chunk', routes: ['url'],
+          available: needs('markitdownYoutube'), enabled: always, parse: wholeNumber(0) },
+        // Figures need OCR (and on an upload, a PDF). "Include" falls back to
+        // "describe" without hosting, and on an upload without storing, since
+        // the server hosts upload figures only for stored uploads.
+        { el: document.getElementById('pdf-figures-select'), key: 'pullmd-pdf-figures', def: 'strip',
+          param: 'pdf_images', routes: ['url', 'reopen', 'file'], fallback: 'caption',
+          available: needs('pdfOcr'),
+          enabled: function (ctx) { return ocrToggle.checked && !(ctx && ctx.isPdf === false); },
+          parse: choice(['strip', 'caption', 'hosted']),
+          send: function (v, route) { return v === 'hosted' && route === 'file' && !storeIsOn() ? 'caption' : v; } },
+        { el: storeToggle, key: 'pullmd-store-images', def: 'false', param: 'store', routes: ['file'],
+          available: needs('uploadStore'), enabled: always, parse: flag },
+        // An HTML upload has no page to render, so the browser extractor stays home.
+        { el: document.getElementById('extractor-select'), key: 'pullmd-extractor', def: '',
+          param: 'extractor', routes: ['url', 'html'],
+          available: needs('loaded'), enabled: always,
+          parse: choice(['', 'readability', 'trafilatura', 'playwright']),
+          send: function (v, route) { return route === 'html' && v === 'playwright' ? null : v; } },
+        { el: document.getElementById('render-select'), key: 'pullmd-render', def: '', param: 'render', routes: ['url'],
+          available: needs('playwright'), enabled: always, parse: choice(['', 'force', 'skip']) },
+      ];
+
+      function fieldValue(el) { return el.type === 'checkbox' ? String(el.checked) : el.value; }
+      function setFieldValue(el, v) {
+        if (el.type === 'checkbox') el.checked = v === 'true';
+        else el.value = v;
+      }
+      // The value a setting stands for right now: valid, and an option the
+      // server offers (an <option data-needs="cap"> needs that capability).
+      function advancedValue(s) {
+        var v = s.parse(fieldValue(s.el));
+        if (s.el.tagName === 'SELECT') {
+          var opt = s.el.querySelector('option[value="' + v + '"]');
+          if (opt && opt.dataset.needs && !caps[opt.dataset.needs]) v = s.fallback || s.def;
+        }
+        return v;
+      }
+
+      function applyAdvancedParams(params, route, ctx) {
+        ADV_SETTINGS.forEach(function (s) {
+          if (s.routes.indexOf(route) === -1 || !s.available() || !s.enabled(ctx)) return;
+          var v = advancedValue(s);
+          if (v === s.def) return;
+          var out = s.send ? s.send(v, route, ctx) : v;
+          if (out !== null) params.set(s.param, out);
+        });
+      }
+
+      function advancedChangedCount() {
+        return ADV_SETTINGS.filter(function (s) {
+          return s.available() && s.enabled() && advancedValue(s) !== s.def;
+        }).length;
+      }
+
+      // The summary line shows how many settings differ from the default.
+      // Runs after every change, toggle, config answer and language switch.
+      var advancedCountEl = document.getElementById('advanced-count');
+      function updateAdvancedCount() {
+        var n = advancedChangedCount();
+        advancedCountEl.textContent = n ? t('adv.changed', { n: n }) : '';
+      }
+      window.addEventListener('langchange', updateAdvancedCount);
+
+      // Back to the defaults: panel settings only, so not the bar toggles
+      // and not open/closed. The stored keys go too.
+      function resetAdvanced() {
+        ADV_SETTINGS.forEach(function (s) {
+          setFieldValue(s.el, s.def);
+          try { localStorage.removeItem(s.key); } catch (e) {}
+        });
+        syncAdvancedRows();
+      }
+      document.getElementById('advanced-reset-btn').addEventListener('click', resetAdvanced);
+
+      // Once: the old "Store + images" toggle also meant hosted figures, but
+      // only on a server that hosts them; elsewhere it sent no figures at all,
+      // so nothing is migrated there and the choice stays at "omit". Runs
+      // when /api/config has confirmed hosting. The new store toggle pins the
+      // figures choice when it is first switched (below), so this only ever
+      // catches the old toggle.
+      function migrateStoreToggle() {
+        try {
+          if (localStorage.getItem('pullmd-store-images') === 'true' && localStorage.getItem('pullmd-pdf-figures') === null) {
+            localStorage.setItem('pullmd-pdf-figures', 'hosted');
+            document.getElementById('pdf-figures-select').value = 'hosted';
+          }
+        } catch (e) {}
+      }
+
+      (function restoreAdvancedSettings() {
+        ADV_SETTINGS.forEach(function (s) {
+          try {
+            var raw = localStorage.getItem(s.key);
+            if (raw !== null) setFieldValue(s.el, s.parse(raw));
+          } catch (e) {}
+        });
+      })();
+      ADV_SETTINGS.forEach(function (s) {
+        s.el.addEventListener('change', function () {
+          var v = s.parse(fieldValue(s.el));
+          setFieldValue(s.el, v);
+          try { localStorage.setItem(s.key, v); } catch (e) {}
+          syncAdvancedRows();
+        });
+      });
+      storeToggle.addEventListener('change', function () {
+        try {
+          if (localStorage.getItem('pullmd-pdf-figures') === null) {
+            localStorage.setItem('pullmd-pdf-figures', document.getElementById('pdf-figures-select').value);
+          }
+        } catch (e) {}
+      });
+
+      // A group without a visible setting does not show up (a group is hidden
+      // by default and appears once a row in it is shown).
+      function syncAdvancedGroups() {
+        document.querySelectorAll('#advanced-panel .adv-group').forEach(function (g) {
+          g.hidden = !g.querySelector('.adv-row:not([hidden])');
+        });
+      }
+      syncAdvancedGroups();
+
+      // Open or closed is remembered; the default is closed.
+      (function restoreAdvancedPanel() {
+        try {
+          if (localStorage.getItem('pullmd-advanced-open') === 'true') advancedPanel.open = true;
+        } catch (e) {}
+      })();
+      advancedPanel.addEventListener('toggle', function () {
+        try { localStorage.setItem('pullmd-advanced-open', String(advancedPanel.open)); } catch (e) {}
+      });
+
+      // A setting that does not apply right now is greyed out and disabled; it
+      // stays in the panel and keeps its value. Comments off takes the comment
+      // settings, "All" the depth field, OCR off the figures.
+      function syncAdvancedRows() {
+        ADV_SETTINGS.forEach(function (s) {
+          var on = s.enabled();
+          s.el.closest('.adv-row').classList.toggle('adv-disabled', !on);
+          s.el.disabled = !on;
+        });
+        updateAdvancedCount();
+      }
+      commentsToggle.addEventListener('change', syncAdvancedRows);
+      ocrToggle.addEventListener('change', syncAdvancedRows);
+      syncAdvancedRows();
+
+      // Called once /api/config has answered: show what the server offers,
+      // hide the rest, and show a select's effective value (storage keeps
+      // the stored one for a server that offers it).
+      function applyAdvancedCapabilities() {
+        document.querySelectorAll('#advanced-panel option[data-needs]').forEach(function (o) {
+          var off = !caps[o.dataset.needs];
+          o.hidden = off;
+          o.disabled = off;
+        });
+        ADV_SETTINGS.forEach(function (s) {
+          s.el.closest('.adv-row').hidden = !s.available();
+          if (s.el.tagName === 'SELECT') s.el.value = advancedValue(s);
+        });
+        syncAdvancedGroups();
+        updateAdvancedCount();
+      }
 
       // The toggle only counts while the server offers storing: a state left
       // in localStorage must not reach a server that would ignore it.
-      function storeIsOn() { return uploadStoreEnabled && storeToggle.checked; }
+      function storeIsOn() { return caps.uploadStore && storeToggle.checked; }
 
-      async function fetchPost(url, withComments) {
+      // opts.reopen: a history entry is opened again. It sends only what
+      // reopening always sent (comments, depth, OCR, figures), so it does not
+      // silently re-extract and overwrite the cached copy.
+      // opts.nocache: this one request skips the cache.
+      async function fetchPost(url, withComments, opts) {
+        opts = opts || {};
+        // Feedback first: the wait for the server's capabilities must not look
+        // like a dead button.
+        abandonFileJob();
+        pushOpenState();
+        showLoading();
+        // A shared link is handled at load: wait for the server's capabilities
+        // (or their failure) so capability-bound settings are not dropped. A
+        // config answer that does not come is not waited for beyond a few
+        // seconds; the pull then goes out with what is known.
+        await configWait(CONFIG_WAIT_MS);
         const params = new URLSearchParams({ url });
         if (!withComments) params.set('comments', 'false');
-        const depth = parseInt(depthInput.value, 10);
-        if (withComments && allCommentsToggle.checked) params.set('comment_depth', 'all');
-        else if (withComments && depth && depth !== 3) params.set('comment_depth', String(depth));
+        applyAdvancedParams(params, opts.reopen ? 'reopen' : 'url', { withComments: withComments });
         // Always fetch WITH frontmatter; the toggle only controls client-side
         // display (applyFrontmatterView), so flipping it needs no re-pull.
         params.set('frontmatter', 'true');
         if (ocrToggle.checked) params.set('pdf', 'ocr');
-        // Hosted figures need the toggle and a server that hosts them.
-        if (ocrToggle.checked && storeIsOn() && imageHostingEnabled) params.set('pdf_images', 'hosted');
+        if (opts.nocache) params.set('nocache', 'true');
         params.set('lang', getLang());
         if (clientMode) params.set('client_mode', clientMode);
-
-        abandonFileJob();
-        pushOpenState();
-        showLoading();
 
         const statusLine = document.getElementById('status-line');
         if (statusLine) statusLine.textContent = '';
@@ -2376,6 +2848,20 @@
         }
       }
 
+      // One-off: the same pull, skipping the cache. Needs a URL, stores nothing.
+      var freshBtn = document.getElementById('fresh-pull-btn');
+      function syncFreshBtn() {
+        if (!freshBtn) return;
+        freshBtn.disabled = !urlInput.value.trim() || goBtn.disabled;
+      }
+      urlInput.addEventListener('input', syncFreshBtn);
+      freshBtn.addEventListener('click', function () {
+        var url = urlInput.value.trim();
+        if (!url) return;
+        fetchPost(url, commentsToggle.checked, { nocache: true });
+      });
+      syncFreshBtn();
+
       function handleGo() {
         const url = urlInput.value.trim();
         if (!url) { urlInput.focus(); return; }
@@ -2396,9 +2882,17 @@
       var MEDIA_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|tiff?|mp3|wav|m4a|ogg|flac|aac)$/i;
       var markitdownEnabled = false;
       var markitdownMediaEnabled = false;
-      var uploadStoreEnabled = false;
-      var imageHostingEnabled = false;
-      fetch('/api/config').then(function (r) { return r.json(); })
+      // Settles once the config answer is applied, or has failed.
+      var CONFIG_WAIT_MS = 3000;
+      function configWait(ms) {
+        var timer;
+        var limit = new Promise(function (resolve) { timer = setTimeout(resolve, ms); });
+        return Promise.race([configReady, limit]).then(function () { clearTimeout(timer); });
+      }
+      var configReady = fetch('/api/config').then(function (r) {
+        if (!r.ok) throw new Error('config ' + r.status);
+        return r.json();
+      })
         .then(function (c) {
           markitdownEnabled = !!c.markitdown;
           markitdownMediaEnabled = !!(c.vision || c.stt);
@@ -2406,20 +2900,10 @@
             var ocrLabel = document.getElementById('ocr-label');
             if (ocrLabel) ocrLabel.style.display = '';
           }
-          uploadStoreEnabled = !!c.uploadStore;
-          imageHostingEnabled = !!c.imageHosting;
-          if (uploadStoreEnabled) {
-            var storeLabel = document.getElementById('store-images-label');
-            if (storeLabel) {
-              // Without hosting there are no figures to store: plain "Store".
-              if (!imageHostingEnabled) {
-                storeLabel.setAttribute('data-i18n-attr-key', 'toggle.store.title');
-                storeLabel.querySelector('[data-i18n]').setAttribute('data-i18n', 'toggle.store');
-              }
-              storeLabel.style.display = '';
-              window.PullMD.setLang(window.PullMD.getLang());
-            }
-          }
+          Object.keys(caps).forEach(function (k) { caps[k] = !!c[k]; });
+          caps.loaded = true;
+          if (caps.imageHosting) migrateStoreToggle();
+          applyAdvancedCapabilities();
           if (markitdownEnabled) {
             var hint = document.querySelector('#drop-overlay .drop-box');
             if (hint) hint.setAttribute('data-i18n', 'drop.hintDoc');
@@ -2529,6 +3013,7 @@
             var params = new URLSearchParams({ format: 'json' });
             // Always fetch WITH frontmatter; the toggle swaps the view client-side.
             params.set('frontmatter', 'true');
+            applyAdvancedParams(params, 'html', {});
             var res = await fetch('/api/html?' + params.toString(), {
               method: 'POST',
               headers: { 'Content-Type': 'text/html', 'X-Client-Mode': clientMode, 'X-Filename': encodeURIComponent(file.name) },
@@ -2692,10 +3177,7 @@
         params.set('frontmatter', 'true');
         var isPdf = /\.pdf$/i.test(file.name || '');
         if (ocrToggle.checked && isPdf) params.set('pdf', 'ocr');
-        if (storeIsOn()) {
-          params.set('store', 'true');
-          if (ocrToggle.checked && isPdf && imageHostingEnabled) params.set('pdf_images', 'hosted');
-        }
+        applyAdvancedParams(params, 'file', { isPdf: isPdf });
         params.set('lang', window.PullMD.getLang());
         // 202 + job id, or a plain 200 with the full result when the server
         // runs the conversion synchronously after all.
@@ -3045,7 +3527,7 @@
                 e.preventDefault();
                 if (!itm.url) { openStoredShare(itm); return; }
                 urlInput.value = itm.url;
-                fetchPost(itm.url, commentsToggle.checked);
+                fetchPost(itm.url, commentsToggle.checked, { reopen: true });
               };
             }(item));
             historyList.appendChild(el);
@@ -3181,7 +3663,7 @@
           hideArchive();
           if (!item.url) { openStoredShare(item); return; }
           urlInput.value = item.url;
-          fetchPost(item.url, commentsToggle.checked);
+          fetchPost(item.url, commentsToggle.checked, { reopen: true });
         });
         var title = document.createElement('div');
         title.className = 'archive-item-title';

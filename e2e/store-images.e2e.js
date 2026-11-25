@@ -1,4 +1,4 @@
-// "Store + images" toggle, hosted OCR figures and stored uploads in the PWA.
+// "Store uploads" toggle, hosted OCR figures and stored uploads in the PWA.
 // The API answers are mocked with page.route: these tests are about what the
 // page sends, shows and refuses to load, not about the server.
 import { describe, it, before, after } from 'node:test';
@@ -14,7 +14,7 @@ const KEY = 'pullmd-store-images';
 const json = (route, body, status = 200) =>
   route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
-describe('store + images', () => {
+describe('store uploads', () => {
   let browser;
   let app;
   before(async () => {
@@ -38,6 +38,11 @@ describe('store + images', () => {
     await context.route('**/api/history*', (route) => json(route, history));
     if (mock) await mock(context);
     await page.goto(app.baseUrl + '/');
+    // The toggle lives in the collapsed advanced panel.
+    await page.locator('#advanced-panel > summary').click();
+    // The open state is saved on the async toggle event. Wait for it, so a
+    // later reload cannot come back with a closed panel.
+    await page.waitForFunction(() => localStorage.getItem('pullmd-advanced-open') === 'true');
     return { page, seen };
   }
 
@@ -60,37 +65,32 @@ describe('store + images', () => {
   describe('the toggle', () => {
     it('is hidden when the server does not store uploads', async (t) => {
       const { page } = await setup(t, { config: { uploadStore: false } });
-      await page.locator('#ocr-toggle').waitFor({ state: 'attached' });
-      await page.waitForTimeout(300);
+      // The same config answer shows the figures row: it has been applied.
+      await page.locator('#pdf-figures-select').waitFor({ state: 'visible' });
       assert.equal(await page.locator('#store-images-label').isVisible(), false);
     });
 
-    it('reads "Speichern + Bilder" with the full hint when hosting is on', async (t) => {
+    it('reads "Uploads speichern" with the hint underneath', async (t) => {
       const { page } = await setup(t);
       const label = page.locator('#store-images-label');
       await label.waitFor();
-      assert.equal(await label.innerText(), 'Speichern + Bilder');
-      assert.equal(await label.getAttribute('title'),
-        'Ergebnis bekommt einen Share-Link und erscheint im Verlauf. Abbildungen aus OCR-PDFs werden mitgespeichert.');
+      assert.equal(await label.innerText(), 'Uploads speichern');
+      assert.equal(await label.getAttribute('title'), null);
+      const hint = page.locator('#adv-row-store .adv-hint');
+      assert.equal(await hint.innerText(), 'Ergebnis bekommt einen Share-Link und erscheint im Verlauf.');
 
       await page.locator('#lang-toggle').click();
-      assert.equal(await label.innerText(), 'Store + images');
-      assert.equal(await label.getAttribute('title'),
-        'The result gets a share link and shows up in the history. Figures from OCR PDFs are stored with it.');
+      assert.equal(await label.innerText(), 'Store uploads');
+      assert.equal(await hint.innerText(), 'The result gets a share link and shows up in the history.');
     });
 
-    it('reads "Speichern" without the figures sentence when hosting is off', async (t) => {
+    it('reads the same when hosting is off', async (t) => {
       const { page } = await setup(t, { config: { imageHosting: false } });
       const label = page.locator('#store-images-label');
       await label.waitFor();
-      assert.equal(await label.innerText(), 'Speichern');
-      assert.equal(await label.getAttribute('title'),
+      assert.equal(await label.innerText(), 'Uploads speichern');
+      assert.equal(await page.locator('#adv-row-store .adv-hint').innerText(),
         'Ergebnis bekommt einen Share-Link und erscheint im Verlauf.');
-
-      await page.locator('#lang-toggle').click();
-      assert.equal(await label.innerText(), 'Store');
-      assert.equal(await label.getAttribute('title'),
-        'The result gets a share link and shows up in the history.');
     });
 
     it('remembers its state', async (t) => {
@@ -105,11 +105,12 @@ describe('store + images', () => {
   });
 
   describe('what is sent', () => {
-    it('a PDF upload with OCR and the toggle on asks for store=true and hosted figures', async (t) => {
+    it('a PDF upload with OCR, "include" figures and the toggle on asks for store=true and hosted figures', async (t) => {
       const uploads = [];
       const { page } = await setup(t, { mock: mockFileJob(uploads, { markdown: '# Paper\n\nBody\n', source: 'markitdown', shareId: SHARE_ID }) });
       await page.locator('#store-images-label').waitFor();
       await page.locator('#ocr-label').click();
+      await page.locator('#pdf-figures-select').selectOption('hosted');
       await page.locator('#store-images-label').click();
 
       await pick(page, 'paper.pdf', 'application/pdf');
@@ -164,7 +165,7 @@ describe('store + images', () => {
       assert.equal(uploads[0].searchParams.get('pdf_images'), null);
     });
 
-    it('with the toggle off (or hosting off) neither parameter is sent', async (t) => {
+    it('with the toggle off and default figures neither parameter is sent; without hosting "include" goes out as caption', async (t) => {
       const uploads = [];
       const { page } = await setup(t, { mock: mockFileJob(uploads, { markdown: '# Paper\n', source: 'markitdown' }) });
       await page.locator('#ocr-label').click();
@@ -178,12 +179,16 @@ describe('store + images', () => {
         config: { imageHosting: false },
         mock: mockFileJob(uploads2, { markdown: '# Paper\n', source: 'markitdown', shareId: SHARE_ID }),
       });
+      // A stored "include" from a hosting server goes out as "describe" here.
+      await second.page.evaluate(() => localStorage.setItem('pullmd-pdf-figures', 'hosted'));
+      await second.page.reload();
+      await second.page.locator('#pdf-figures-select').waitFor({ state: 'visible' });
       await second.page.locator('#ocr-label').click();
       await second.page.locator('#store-images-label').click();
       await pick(second.page, 'paper.pdf', 'application/pdf');
       await waitForResult(second.page);
       assert.equal(uploads2[0].searchParams.get('store'), 'true');
-      assert.equal(uploads2[0].searchParams.get('pdf_images'), null);
+      assert.equal(uploads2[0].searchParams.get('pdf_images'), 'caption');
     });
 
     it('a stored toggle state is ignored when the server does not store uploads', async (t) => {
@@ -199,7 +204,7 @@ describe('store + images', () => {
       assert.equal(uploads[0].searchParams.get('store'), null);
     });
 
-    it('a URL conversion with OCR and the toggle on asks for hosted figures', async (t) => {
+    it('a URL conversion with OCR and "include" figures asks for hosted figures, without the store toggle', async (t) => {
       const { page, seen } = await setup(t, {
         mock: async (context) => {
           await context.route('**/api/stream*', (route) => route.abort());
@@ -209,7 +214,7 @@ describe('store + images', () => {
         },
       });
       await page.locator('#ocr-label').click();
-      await page.locator('#store-images-label').click();
+      await page.locator('#pdf-figures-select').selectOption('hosted');
       await page.locator('#url-input').fill('https://example.test/paper.pdf');
       await page.locator('#url-input').press('Enter');
       await waitForResult(page);
@@ -221,7 +226,7 @@ describe('store + images', () => {
       }
     });
 
-    it('a URL conversion without the toggle does not ask for hosted figures', async (t) => {
+    it('a URL conversion with default figures does not ask for hosted figures', async (t) => {
       const { page, seen } = await setup(t, {
         mock: async (context) => {
           await context.route('**/api/stream*', (route) => route.abort());
