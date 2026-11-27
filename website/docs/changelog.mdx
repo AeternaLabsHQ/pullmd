@@ -7,9 +7,16 @@ description: Highlights of recent PullMD releases. The full history is in CHANGE
 
 Highlights of recent releases. Every change, with issue links, is in [CHANGELOG.md](https://github.com/AeternaLabsHQ/pullmd/blob/main/CHANGELOG.md). Before upgrading across 3.0, 3.13, 3.20 or 3.22, read [Upgrading](/self-hosting/upgrading).
 
+## 3.22.1
+
+November 27, 2026 · <Badge tone="brand">Latest</Badge>
+
+- Code in a `<pre>` without `<code>`, as on Sphinx documentation and rendered GitHub READMEs, converts to a fenced code block instead of loose lines. Code blocks keep their language from the page markup.
+- Page sections that a page builder wraps in `<header>` inside `<main>` or `<section>` are kept. The site banner and article headers are still removed.
+
 ## 3.22.0
 
-November 25, 2026 · <Badge tone="brand">Latest</Badge> <Badge tone="warning">Check your compose file</Badge>
+November 25, 2026 · <Badge tone="warning">Check your compose file</Badge>
 
 Read [Upgrading](/self-hosting/upgrading) first: a compose file you downloaded earlier needs two new variables, and a custom OCR endpoint receives new fields.
 
