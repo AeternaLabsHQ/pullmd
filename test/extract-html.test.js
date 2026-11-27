@@ -111,3 +111,53 @@ describe('extractHtml - data: URI images (SingleFile exports)', () => {
     assert.ok(result.markdown.includes('Chart of results'), 'alt text survives');
   });
 });
+
+describe('extractHtml - <header> elements', () => {
+  const block = (n) => `
+    <header class="content-section">
+      <h2>Integration ${n}</h2>
+      <p>Integration ${n} description. ${LONG_PARAGRAPH}</p>
+    </header>`;
+
+  it('keeps headers inside <main> (page builders wrap content sections in them)', async () => {
+    const html = `
+      <html><head><title>Integrations</title></head>
+      <body>
+        <header>Site banner text</header>
+        <main>
+          <section><h1>Integrations</h1><p>Short intro.</p></section>
+          ${[1, 2, 3, 4, 5, 6].map(block).join('')}
+        </main>
+      </body></html>`;
+    const result = await extractHtml(html, { filename: 'x.html' });
+    for (const n of [1, 2, 3, 4, 5, 6]) {
+      assert.ok(result.markdown.includes(`Integration ${n} description`), `section ${n} missing`);
+    }
+    assert.ok(!result.markdown.includes('Site banner text'), 'body-level header must still be removed');
+  });
+
+  it('still removes a header directly in <body>', async () => {
+    const html = `
+      <html><head><title>Saved Article</title></head>
+      <body>
+        <header><a href="/">Logo</a> Site banner text</header>
+        <article><h1>Saved Article</h1><p>${LONG_PARAGRAPH}</p></article>
+      </body></html>`;
+    const result = await extractHtml(html, { filename: 'x.html', extractor: 'readability' });
+    assert.ok(!result.markdown.includes('Site banner text'));
+  });
+
+  it('still removes an article header (title, byline, date)', async () => {
+    const html = `
+      <html><head><title>Saved Article</title></head>
+      <body><main>
+        <article>
+          <header><span class="byline">Byline Person</span> <time>1. Januar 2026</time></header>
+          <p>${LONG_PARAGRAPH}</p>
+        </article>
+      </main></body></html>`;
+    const result = await extractHtml(html, { filename: 'x.html' });
+    assert.ok(result.markdown.includes('Main content paragraph'));
+    assert.ok(!result.markdown.includes('Byline Person'));
+  });
+});
