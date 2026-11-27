@@ -14,6 +14,7 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 ### Fixed
 
 - **Content sections wrapped in `<header>` are kept.** Some page builders put whole content sections into `<header>` elements inside `<main>`; PullMD removed every `<header>` before extraction and returned only a fraction of such pages. A header whose nearest sectioning element is `<main>` or `<section>` now stays. The site banner (a header directly in `<body>`, `role="banner"`) and article headers (title, byline, date) are still removed.
+- **Code blocks in `<pre>` without `<code>` are fenced** ([#110](https://github.com/AeternaLabsHQ/pullmd/issues/110)). Sphinx/Pygments documentation and rendered GitHub READMEs put code in a bare `<pre>`, which came out as loose lines: a `# comment` became a heading. Such blocks are now fenced, with the language taken from the markup (`language-x`, `lang-x`, `highlight-x`, `highlight-source-x`). Fenced blocks on the Readability path also keep their language now; it was dropped even for `<pre><code class="language-x">`.
 
 ### Documentation
 
