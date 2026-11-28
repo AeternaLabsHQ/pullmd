@@ -23,6 +23,9 @@ PullMD picks a path for each URL based on what it is, checks the result, and tri
   <Step title="Native Markdown">
     PullMD asks every site for `text/markdown`. A site that answers with Markdown directly is used without further extraction, and `X-Source` is `cloudflare` whichever site it was.
   </Step>
+  <Step title="Text files">
+    A response with `Content-Type: text/plain` that doesn't start with an `<html>` tag or doctype, and whose path doesn't end in `.html`, `.htm` or `.xhtml`, is read like an [upload PullMD reads itself](/guides/documents#upload-formats-pullmd-reads-itself), with the file name from the URL. Raw files on `raw.githubusercontent.com` are served this way. `X-Source` names the reader, such as `markdown`, `text`, `code` or `data`. A file no reader takes, such as `LICENSE` or `.gitignore`, or one its reader refuses, is read as text.
+  </Step>
   <Step title="YouTube">
     With `MARKITDOWN_YOUTUBE=true`, YouTube links return the title, description and transcript. See [YouTube transcripts](/guides/youtube).
   </Step>

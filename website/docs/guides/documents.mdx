@@ -17,6 +17,8 @@ curl "http://localhost:3000/api?url=https://example.com/report.pdf"
 
 PullMD recognizes the document from its content type, or from the file extension when the server sends no content type or `application/octet-stream`, and sends it to MarkItDown. The result is cached and gets a share link like any other conversion. The title is the host name (`# example.com`) unless the document has one.
 
+A file served as `text/plain`, such as a raw file on `raw.githubusercontent.com`, is read like an upload of the same file name: see [Upload formats PullMD reads itself](#upload-formats-pullmd-reads-itself). A Markdown file comes back as it is, a `.py` file in a code block. A file no reader takes, such as `LICENSE` or `Cargo.lock`, or one its reader refuses, is read as text with the file name as title. HTML served as `text/plain` stays a web page.
+
 ## Upload a file
 
 To convert a local file, send its raw bytes to [`POST /api/file`](/reference/api/convert/convert-a-file) with `Content-Type` set to the file's type. PullMD doesn't decode multipart forms, so send the file itself as the body.

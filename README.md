@@ -57,6 +57,7 @@ sections relevant to a question.
 **Reads almost anything**
 
 - **Web pages** through a fallback chain: Cloudflare's native Markdown, then Readability + Trafilatura (best result wins), then headless Chromium for JavaScript-heavy sites
+- **Raw text files** served as `text/plain` (Markdown, code, data) read like an upload of the same file
 - **Reddit and Hacker News** threads with their comment trees (depth and count configurable; Reddit needs [API credentials](#reddit-access))
 - **Documents**: PDF, Word, PowerPoint, Excel, EPUB, by URL or upload, plus an optional OCR tier for table-grade PDFs that can describe their figures or host them as images (`pdf_images`). A long upload can run in the background (`POST /api/file?async=1`), so the web app can be left and the result picked up later. The uploaded file is never stored; the result is held in memory for up to 60 minutes, until you delete it. With `store=true` the result (never the file) is kept like a URL conversion, with a share link and a history entry that, on an instance without sign-in and with public history, everyone who can reach the instance sees
 - **YouTube** title, description and transcript with clickable timecodes, no API key needed
@@ -163,7 +164,7 @@ in [`website/`](./website); pages are Markdown, and pull requests are welcome.
 
 - `server.js` - Express app factory (`createApp`) with dependency injection for tests. Exposes `/api` and `/api/stream` (SSE).
 - `lib/reddit.js` - Reddit URL normalization, redirect resolution, post + comment extraction.
-- `lib/web.js` - Orchestrator: Cloudflare-Markdown short-circuit, then static Readability + Trafilatura with `pickBest`, then optional Playwright re-render + re-extract on body-soup / low-quality output.
+- `lib/web.js` - Orchestrator: Cloudflare-Markdown short-circuit, `text/plain` files to the upload readers, then static Readability + Trafilatura with `pickBest`, then optional Playwright re-render + re-extract on body-soup / low-quality output.
 - `lib/render-decision.js` - Predicate that decides when to fall back to Playwright (readability-fellback + thin, body-soup signature, or quality < 0.5; plus `force` / `skip` overrides).
 - `lib/playwright-client.js` - HTTP client for the Playwright sidecar with `AbortSignal` propagation for SSE-disconnect cancellation.
 - `lib/scoring.js` - Quality scoring used to pick between extractors and as a render-trigger heuristic.

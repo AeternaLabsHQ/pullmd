@@ -16,6 +16,7 @@ PullMD routes each URL through the extraction path that fits it:
 1. **Reddit** — auto-detected URLs go through Reddit's JSON API with full comment trees. Needs API credentials on the server; without them the request fails with `502`.
 2. **Hacker News** — auto-detected item pages, comment permalinks, and listings (`/news`, `/newest`, `/ask`, `/show`, `/jobs`, `/best`) go through the HN API and come back as a clean nested comment tree.
 3. **Cloudflare** — sites that support `Accept: text/markdown` get native Markdown directly.
+   Raw files served as `text/plain` (e.g. `raw.githubusercontent.com`) are read as text: Markdown as it is, code and data in code blocks.
 4. **Static HTML** — Mozilla Readability and Trafilatura run in parallel; the higher-quality output wins.
 5. **Headless Chromium fallback** — when static extraction returns body-soup or low-quality output (typical for Next.js / SPA pages), the page is rendered in a real browser before extracting.
 6. **Documents** — direct links to PDF, Word, PowerPoint, Excel, EPUB, ZIP, CSV, JSON, or XML files are converted to Markdown (requires the markitdown sidecar on the instance).
@@ -62,7 +63,7 @@ The response is `text/markdown` — ready to use as-is.
 
 **Response headers worth checking:**
 
-- `X-Source` — `reddit` · `hackernews` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `article-series` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `media-link` · `pdf-ocr`
+- `X-Source` — `reddit` · `hackernews` · `cloudflare` · `readability` · `readability-fallback` · `trafilatura` · `playwright` · `recipe-content` · `coverage-guard` · `article-series` · `markitdown` · `youtube` · `image-caption` · `audio-transcript` · `media-link` · `pdf-ocr` · for `text/plain` files: `markdown` · `text` · `code` · `data`
 - `X-Quality` — `0.0–1.0` extraction confidence (low values mean the static extraction was thin or noisy)
 - `X-Share-Id` - 32-hex permalink, openable as `__PULLMD_URL__/s/<id>` (absent for `/api/html`, and for `/api/file` without `store=true`: local conversions are not cached or shared otherwise)
 - `X-Suggested-Filename` — a ready-made filename for this conversion (e.g. `YT-some-talk-dQw4w9WgXcQ.md`); use it when you save the output to a file instead of inventing a name.
