@@ -376,6 +376,7 @@
         <li><strong>Reddit</strong> — eigene Pipeline für Posts, Kommentare, Subreddit-Listings (mit Tiefe und Limit konfigurierbar). Braucht auf dem Server Reddit-API-Zugangsdaten; Reddit schließt diesen Zugang bis März 2027.</li>
         <li><strong>Hacker News</strong> — eigene Pipeline für Items, Kommentar-Permalinks und Listings (Front/Newest/Ask/Show/Jobs); verschachtelte Kommentare mit konfigurierbarer Tiefe.</li>
         <li><strong>Cloudflare-Markdown</strong> — wenn die Quelle <code>Accept: text/markdown</code> nativ unterstützt, wird das direkt durchgereicht (sauberster Output).</li>
+        <li><strong>Textdateien</strong> — kommt eine Datei als <code>text/plain</code> (etwa Roh-Dateien von <code>raw.githubusercontent.com</code>), liest PullMD sie wie einen Upload: Markdown unverändert, Code im Codeblock. HTML bleibt Webseite.</li>
         <li><strong>Readability + Trafilatura</strong> — für statisches HTML laufen beide Extraktoren; die Ausgabe mit der besseren Qualitätsbewertung gewinnt. Trafilatura ist ein optionaler Sidecar; ohne ihn bleibt es bei Readability.</li>
         <li><strong>Headless Chromium</strong> — wenn die statische Extraktion dünn oder nach Layout-Soup aussieht (typisch für SPAs), wird die Seite im Playwright-Sidecar gerendert und danach neu extrahiert. Mit <code>?render=force</code> bzw. <code>?render=skip</code> erzwing- oder abschaltbar.</li>
         <li><strong>Dokumente, YouTube, Bilder, Audio</strong> — je nach Instanz-Konfiguration; siehe <a href="#files">Dateien konvertieren</a>.</li>
@@ -384,6 +385,7 @@
         <li><strong>Reddit</strong> — dedicated pipeline for posts, comments, subreddit listings (configurable depth and limit). Needs Reddit API credentials on the server; Reddit closes this access by March 2027.</li>
         <li><strong>Hacker News</strong> — dedicated pipeline for items, comment permalinks, and listings (front/newest/ask/show/jobs); nested comments with configurable depth.</li>
         <li><strong>Cloudflare-Markdown</strong> — when the source supports <code>Accept: text/markdown</code> natively, that's passed through directly (cleanest output).</li>
+        <li><strong>Text files</strong> — a file served as <code>text/plain</code> (such as raw files on <code>raw.githubusercontent.com</code>) is read like an upload: Markdown as it is, code in a code block. HTML stays a web page.</li>
         <li><strong>Readability + Trafilatura</strong> — static HTML runs through both extractors and the one with the better quality score wins. Trafilatura is an optional sidecar; without it, Readability alone is used.</li>
         <li><strong>Headless Chromium</strong> — when static extraction comes out thin or looks like layout soup (typical for SPAs), the page is rendered in the Playwright sidecar and re-extracted. Force or disable it with <code>?render=force</code> / <code>?render=skip</code>.</li>
         <li><strong>Documents, YouTube, images, audio</strong> — depending on how the instance is configured; see <a href="#files">Converting files</a>.</li>

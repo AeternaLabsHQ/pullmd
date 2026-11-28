@@ -11,6 +11,10 @@ Self-hosters should consult [`MIGRATION.md`](./MIGRATION.md) when upgrading acro
 
 ## [Unreleased]
 
+### Fixed
+
+- **Text files served as `text/plain` are read as text** ([#113](https://github.com/AeternaLabsHQ/pullmd/issues/113)). Raw files from code hosts went through the HTML pipeline: line breaks were lost, a placeholder such as `<name` was read as a tag, and a large changelog failed with `422` `document_too_complex`. Such a response is now read like an upload with the URL's file name: Markdown as it is (`X-Source: markdown`), source code in a code block (`code`), JSON and CSV as data (`data`), any other file as text (`text`), also when its reader refuses it. HTML served as `text/plain` stays on the web page path.
+
 ## [3.22.1] - 2026-11-27
 
 ### Fixed
